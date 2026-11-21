@@ -1,5 +1,5 @@
 // Staff incident report: a form (POST /api/v1/reports) and the list of reports (resolve them when fixed).
-import { addRail, api, ago, applyTheme, baseStyle, initTheme, onTheme, CATEGORIES, dateTime, esc, SEVERITY_COLOURS, severityBadge } from "./common.js";
+import { addRail, api, initStaffSession, ago, applyTheme, baseStyle, initTheme, onTheme, CATEGORIES, dateTime, esc, SEVERITY_COLOURS, severityBadge } from "./common.js";
 
 const $ = (id) => document.getElementById(id);
 const form = $("form");
@@ -65,6 +65,7 @@ $("trainSearch").addEventListener("input", (e) => {
 
 // ---------------------------------------------------------------- mini map
 
+initStaffSession();
 initTheme(); // page colours now; the mini map follows once loaded
 const pickMap = new maplibregl.Map({ container: "pickMap", style: await baseStyle(), center: [8.23, 46.82], zoom: 6.6, attributionControl: { compact: true } });
 pickMap.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");

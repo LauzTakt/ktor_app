@@ -19,6 +19,10 @@ tags:
   - name: stations
   - name: incidents
   - name: reports
+  - name: auth
+    description: "Staff login. Click **Authorize** and paste the token from `/auth/login` to call staff-only endpoints. Default user: admin / admin"
+  - name: staff
+    description: Staff-only calls (Bearer token)
     description: Incidents reported by staff through the web UI (stored locally, not published to the twin)
 
 paths:
@@ -200,7 +204,9 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
     post:
       tags: [reports]
-      summary: Report an incident
+      summary: Report an incident (staff only)
+      description: "`reporter` defaults to the logged-in staff username."
+      security: [ { bearerAuth: [] } ]
       operationId: createReport
       requestBody:
         required: true
@@ -236,7 +242,101 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: "`already_resolved`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
 
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Log in as staff, get a Bearer token
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Login" }
+            example: { username: admin, password: admin }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/LoginResult" } } } }
+        "401": { description: "`invalid_credentials`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+  /auth/me:
+    get:
+      tags: [auth]
+      summary: The logged-in staff user
+      operationId: me
+      security: [ { bearerAuth: [] } ]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/User" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Revoke the current token
+      operationId: logout
+      security: [ { bearerAuth: [] } ]
+      responses:
+        "204": { description: Logged out }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /staff/users:
+    get:
+      tags: [staff]
+      summary: List staff users
+      operationId: listUsers
+      security: [ { bearerAuth: [] } ]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/User" } } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [staff]
+      summary: Create a staff user
+      operationId: createUser
+      security: [ { bearerAuth: [] } ]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/Login" } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/User" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409": { description: "`user_exists`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+  /staff/users/{username}:
+    delete:
+      tags: [staff]
+      summary: Delete a staff user (and its tokens)
+      operationId: deleteUser
+      security: [ { bearerAuth: [] } ]
+      parameters: [ { name: username, in: path, required: true, schema: { type: string } } ]
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "`cannot_delete_self`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+  /staff/users/{username}/password:
+    put:
+      tags: [staff]
+      summary: Set a user's password (revokes that user's other sessions)
+      operationId: setPassword
+      security: [ { bearerAuth: [] } ]
+      parameters: [ { name: username, in: path, required: true, schema: { type: string } } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [password], properties: { password: { type: string, minLength: 4 } } }
+      responses:
+        "204": { description: Changed }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Token from `POST /auth/login`
   parameters:
     trainId:
       { name: trainId, in: path, required: true, schema: { type: string }, example: 20261121_ojp-91-1-D.1.TA.2207.j26 }
@@ -254,6 +354,9 @@ components:
       example: "8.4,47.3,8.6,47.45"
 
   responses:
+    Unauthorized:
+      description: "`unauthorized`: missing, invalid or expired staff token"
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
     BadRequest:
       description: "Invalid parameter (`bad_<param>`, e.g. `bad_limit`, `bad_bbox`, `bad_type`)"
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
@@ -262,6 +365,28 @@ components:
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
 
   schemas:
+    Login:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string, example: admin }
+        password: { type: string, example: admin }
+    User:
+      type: object
+      required: [username, role, createdAt, updatedAt]
+      properties:
+        username: { type: string }
+        role: { type: string, enum: [staff] }
+        createdAt: { type: integer, format: int64 }
+        updatedAt: { type: integer, format: int64 }
+    LoginResult:
+      type: object
+      required: [token, tokenType, expiresAt, user]
+      properties:
+        token: { type: string }
+        tokenType: { type: string, enum: [Bearer] }
+        expiresAt: { type: integer, format: int64 }
+        user: { $ref: "#/components/schemas/User" }
     Error:
       type: object
       required: [error]

@@ -55,6 +55,11 @@ a { color: var(--blue); }
 .btn:hover { border-color: var(--ink); }
 .btn.primary { background: var(--red); border-color: var(--red); color: #fff; }
 .btn.primary:hover { background: #c60018; }
+.topbar .who { font-size: 14px; color: var(--muted); }
+.login-main { display: grid; place-items: center; flex: 1; padding: 16px; }
+.login-main .card { width: min(360px, 100%); }
+.login-main label { display: block; margin-bottom: 12px; }
+.login-main input { width: 100%; box-sizing: border-box; }
 .btn.small { padding: 5px 10px; font-size: 13px; }
 
 .badge { display: inline-block; padding: 1px 6px; border-radius: 3px; color: #fff; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; }

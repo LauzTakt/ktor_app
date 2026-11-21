@@ -38,7 +38,7 @@ written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lau
 | `GET /incidents/{id}` | `Incident` with `geometry` (GeoJSON) |
 | `GET /incidents/{id}/history` | `IncidentEvent[]` |
 | `GET /reports` | `Report[]`: staff reports, newest first |
-| `POST /reports` | creates a `Report` from a `CreateReport` body → `201` |
+| `POST /reports` | **staff only** (see "Staff authentication"): creates a `Report` from a `CreateReport` body → `201`; `reporter` defaults to the staff username; `401 unauthorized` without a session |
 | `GET /reports/{id}` | `Report` |
 | `POST /reports/{id}/resolve` | `{ "resolution": "text" \| null }` (optional body) → resolved `Report`; `409 already_resolved` if not open |
 
@@ -222,6 +222,38 @@ the same row layout as the sbb-twin viewer:
 // [trainId, lat, lon, bearing, speedKmh, motion, delaySec, line, category, atStopId, continuity]
 ```
 
+## Staff authentication
+
+The read endpoints, the WebSockets and Swagger are **public**. Staff-only: **the staff web UI** (`/`, `/index.html`,
+`/report.html` redirect to `/login.html` without a session), **`POST /reports`** (create a report) and the calls below. Every account has role `staff`. On first start, when there is no user, the app creates
+**`admin` / `admin`** (password from env `ADMIN_PASSWORD`, default `admin`): change it with
+`PUT /staff/users/admin/password`.
+
+1. `POST /auth/login` `{"username":"admin","password":"admin"}` -> `{"token": "...", "tokenType": "Bearer", "expiresAt": ..., "user": User}`
+2. Send `Authorization: Bearer <token>` on staff-only calls. Browsers: login also sets the `twin_staff` cookie (same token,
+   HttpOnly, SameSite=Strict), which the staff pages and `POST /reports` accept too; logout clears it. Tokens last `AUTH_TOKEN_TTL_HOURS` (12 h), survive restarts
+   (only their SHA-256 is stored) and end with `POST /auth/logout`.
+
+| Endpoint | Auth | Returns |
+|---|---|---|
+| `POST /auth/login` | public | `LoginResult`; `401 invalid_credentials` |
+| `GET /auth/me` | staff | `User` |
+| `POST /auth/logout` | staff | `204` (revokes this token) |
+| `GET /staff/users` | staff | `User[]` |
+| `POST /staff/users` `{"username","password"}` | staff | `201 User`; `409 user_exists`, `400 bad_username` (2-32 of `A-Za-z0-9._-`), `400 bad_password` (4-200 chars) |
+| `PUT /staff/users/{username}/password` `{"password"}` | staff | `204`; revokes that user's other sessions |
+| `DELETE /staff/users/{username}` | staff | `204` (and its tokens); `409 cannot_delete_self` |
+
+`User` = `{"username": "admin", "role": "staff", "createdAt": ..., "updatedAt": ...}`.
+Missing / invalid / expired token on a staff call -> `401 {"error":{"code":"unauthorized",...}}`.
+Passwords: PBKDF2-HMAC-SHA256, 120k iterations, per-user salt.
+
+```sh
+TOKEN=$(curl -s -XPOST localhost:8080/api/v1/auth/login -H 'content-type: application/json' \
+  -d '{"username":"admin","password":"admin"}' | jq -r .token)
+curl -H "Authorization: Bearer $TOKEN" localhost:8080/api/v1/staff/users
+```
+
 ## Staff web UI
 
 Static files in `src/main/resources/static/` (no build step; MapLibre GL from unpkg, swisstopo base map).
@@ -231,6 +263,7 @@ Rail network as in the sbb-twin viewer: `static/data/network-lines.geojson` (Swi
 `twin-theme`, default = system preference); the maps are recoloured in place (`common.js` `applyTheme`).
 Responses are gzip-compressed (Ktor `Compression`).
 
+- `/login.html` (public): staff login; `?next=/report.html` returns there after login. Pages show the user + "Log out".
 - `/`: staff overview map (stripped-down sbb-twin viewer): live trains (`/ws/fleet`), stations, twin incidents,
   open staff reports. Click a train for its stops; click a station for departures; right-click to report at a point.
 - `/report.html`: report form (station / section / train / map point) and the list of reports (resolve them).

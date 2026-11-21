@@ -1,5 +1,7 @@
 package ch.lauzhack.twin.api.v1
 
+import ch.lauzhack.twin.auth.staff
+import ch.lauzhack.twin.auth.staffOnly
 import ch.lauzhack.twin.db.Database
 import ch.lauzhack.twin.db.StaffReportRow
 import ch.lauzhack.twin.state.LiveState
@@ -151,10 +153,14 @@ fun Route.reportsV1(state: LiveState, db: Database) = route("/api/v1/reports") {
         }
         call.respond(db.reports(status).map { it.toDto() })
     }
-    post {
-        val row = buildReport(call.receive<CreateReportDto>(), state)
-        db.insertReport(row)
-        call.respond(HttpStatusCode.Created, row.toDto())
+    // Creating a report is staff-only (Bearer token or the staff session cookie); reading and resolving stay public.
+    staffOnly {
+        post {
+            val req = call.receive<CreateReportDto>()
+            val row = buildReport(req.copy(reporter = req.reporter?.takeIf { it.isNotBlank() } ?: call.staff().username), state)
+            db.insertReport(row)
+            call.respond(HttpStatusCode.Created, row.toDto())
+        }
     }
     get("/{id}") {
         val id = call.parameters["id"]!!

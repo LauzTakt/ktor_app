@@ -27,6 +27,7 @@ The prediction model also reads "modified data" from the broker on its own; it i
 | REST API v1 (read: trains, stations, boards, incidents, status) | **done** — see docs/API.md | `api/v1/` |
 | Staff incident reports (REST + SQLite `staff_report`, local only, not published) | **done** | `api/v1/Reports.kt` |
 | Swagger UI (`/swagger`) | **done** — OpenAPI spec, hand-written: update it with every API change | `resources/openapi/documentation.yaml` |
+| Staff auth: bearer tokens (`POST /api/v1/auth/login`), SQLite `app_user` + `auth_token`, default `admin`/`admin`. Read API/WebSockets/Swagger public; **staff only: web UI pages (`staffPages`, redirect to `/login.html`, session cookie `twin_staff`) and `POST /api/v1/reports`**; new staff-only calls go inside `staffOnly { }` | **done** — first staff calls: `/auth/me`, `/auth/logout`, `/staff/users` | `auth/Auth.kt` |
 | REST API for predictions (model pushes to us) | todo | |
 | WebSocket `/api/v1/ws`: subscribe to trains/stations (`frequencySec` updates + immediate incident pushes) | **done** — see docs/API.md | `api/v1/LiveUpdates.kt` (incident events via `Database.addIncidentListener`) |
 | WebSocket `/ws/fleet`: whole fleet every `fleet` tick (staff map) | **done** | `web/FleetFeed.kt` |
@@ -100,7 +101,8 @@ validation, `StatusPages` errors) -> `TwinQueries.kt` (joins LiveState + active 
 - JVM toolchain **21** (`kotlin { jvmToolchain(21) }`).
 - Package `ch.lauzhack.twin`; entry module `Application.module()` in `src/main/kotlin/ch/lauzhack/twin/Application.kt`, wired in `src/main/resources/application.yaml`.
 - Config: `application.yaml`, every value overridable by env: `PORT` (8080), `MQTT_BROKER_URL`, `MQTT_USERNAME`,
-  `MQTT_PASSWORD`, `MQTT_ENABLED` (true), `DB_PATH` (`data/twin.sqlite`). `./gradlew run` loads `.env` automatically.
+  `MQTT_PASSWORD`, `MQTT_ENABLED` (true), `DB_PATH` (`data/twin.sqlite`), `ADMIN_PASSWORD` (`admin`, only used to seed the
+  first user), `AUTH_TOKEN_TTL_HOURS` (12). `./gradlew run` loads `.env` automatically.
 - **Never commit `.env`** or any broker credential.
 - Tests (`src/test`) run with `mqtt.enabled=false` and a temp SQLite file.
 

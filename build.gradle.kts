@@ -29,6 +29,7 @@ dependencies {
     implementation(libs.ktor.server.status.pages)
     implementation(libs.ktor.server.swagger)
     implementation(libs.ktor.server.websockets)
+    implementation(libs.ktor.server.auth)
     implementation(libs.ktor.server.compression)
     implementation(libs.logback.classic)
     implementation(libs.paho.mqttv3)
