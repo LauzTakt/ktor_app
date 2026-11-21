@@ -2,7 +2,9 @@ package ch.lauzhack.twin
 
 import ch.lauzhack.twin.api.v1.TwinQueries
 import ch.lauzhack.twin.api.v1.apiV1
+import ch.lauzhack.twin.api.v1.LiveUpdates
 import ch.lauzhack.twin.api.v1.installApiErrors
+import ch.lauzhack.twin.api.v1.liveUpdatesWs
 import ch.lauzhack.twin.db.Database
 import ch.lauzhack.twin.mqtt.MqttConfig
 import ch.lauzhack.twin.mqtt.MqttIngestor
@@ -14,8 +16,13 @@ import io.ktor.server.application.install
 import io.ktor.server.plugins.calllogging.CallLogging
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.response.respond
+import io.ktor.server.plugins.swagger.swaggerUI
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
+import io.ktor.server.websocket.WebSockets
+import io.ktor.server.websocket.pingPeriod
+import io.ktor.server.websocket.timeout
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -54,8 +61,17 @@ fun Application.configureHttp(state: LiveState, db: Database, mqttConnected: () 
     install(CallLogging)
     install(ContentNegotiation) { json(Json { explicitNulls = true; encodeDefaults = true }) }
     installApiErrors()
+    install(WebSockets) {
+        pingPeriod = 20.seconds
+        timeout = 60.seconds
+    }
+    val queries = TwinQueries(state) { db.incidents(activeOnly = true) }
+    val live = LiveUpdates(queries, db)
     routing {
         get("/health") { call.respond(Health("ok")) }
-        apiV1(TwinQueries(state) { db.incidents(activeOnly = true) }, db, mqttConnected)
+        // Swagger UI at /swagger, spec at /swagger/documentation.yaml (keep in sync with docs/API.md and api/v1/).
+        swaggerUI(path = "swagger", swaggerFile = "openapi/documentation.yaml")
+        apiV1(queries, db, mqttConnected)
+        liveUpdatesWs(live)
     }
 }

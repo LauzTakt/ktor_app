@@ -22,4 +22,19 @@ class ApplicationTest {
         assertEquals(HttpStatusCode.OK, res.status)
         assertTrue(res.bodyAsText().contains("ok"))
     }
+
+    @Test
+    fun swaggerUiAndSpecAreServed() = testApplication {
+        environment {
+            config = io.ktor.server.config.MapApplicationConfig(
+                "mqtt.enabled" to "false",
+                "db.path" to kotlin.io.path.createTempFile("twin", ".sqlite").toString(),
+            )
+        }
+        application { module() }
+        assertEquals(HttpStatusCode.OK, client.get("/swagger").status)
+        val spec = client.get("/swagger/documentation.yaml")
+        assertEquals(HttpStatusCode.OK, spec.status)
+        assertTrue(spec.bodyAsText().contains("/stations/{stopId}/board"))
+    }
 }
