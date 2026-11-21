@@ -76,6 +76,16 @@ fun Route.apiV1(q: TwinQueries, db: Database, mqttConnected: () -> Boolean) = ro
             )
         }
         get("/{stopId}/incidents") { call.respond(q.stationIncidents(call.path("stopId"))) }
+        get("/{stopId}/screen") {
+            val p = call.request.queryParameters
+            call.respond(
+                q.screen(
+                    stopId = call.path("stopId"),
+                    limit = p.limit(default = 6, max = LiveUpdates.MAX_SCREEN_LIMIT),
+                    windowMin = p.int("windowMin", min = 1, max = 24 * 60) ?: 120,
+                ),
+            )
+        }
     }
 
     route("/incidents") {

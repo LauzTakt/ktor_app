@@ -115,6 +115,35 @@ class WebSocketTest {
     }
 
     @Test
+    fun screenSubscriptionSendsCompactUpdatesAndRefreshesOnIncidents() = ws {
+        req("""{"op":"subscribe","topic":"screen","id":"C","frequencySec":3600,"limit":1}""")
+        val sub = next("subscribed")
+        assertEquals(1, sub["limit"]!!.jsonPrimitive.int)
+
+        val first = next("screen_update")["data"]!!.jsonObject
+        assertEquals("C", first.s("stopId"))
+        assertEquals(1, first["departures"]!!.jsonArray.size)                // limit
+        assertEquals("i-1", first["incidents"]!!.jsonArray.single().jsonObject.s("id"))
+        assertEquals("true", first["incidents"]!!.jsonArray.single().jsonObject.s("atStation")) // C is an end of C-D
+
+        // frequency 3600 s, but an incident change pushes a fresh screen right away
+        upsert("i-train", IncidentScope(kind = "train", trainId = "t-to-c"))
+        val after = next("screen_update")["data"]!!.jsonObject
+        val inc = after["incidents"]!!.jsonArray.map { it.jsonObject }.first { it.s("id") == "i-train" }
+        assertEquals("false", inc.s("atStation"))
+        assertEquals(1, inc["trains"]!!.jsonPrimitive.int)
+
+        db.removeIncident("i-1")
+        val removed = next("screen_update")["data"]!!.jsonObject
+        assertEquals(listOf("i-train"), removed["incidents"]!!.jsonArray.map { it.jsonObject.s("id") })
+
+        req("""{"op":"subscribe","topic":"screen","id":"C","limit":99}""")
+        assertEquals("bad_limit", next("error").s("code"))
+        req("""{"op":"subscribe","topic":"screen","id":"nope"}""")
+        assertEquals("station_not_found", next("error").s("code"))
+    }
+
+    @Test
     fun errorsAndUnsubscribe() = ws {
         req("""{"op":"subscribe","topic":"train","id":"nope"}""")
         assertEquals("train_not_found", next("error").s("code"))

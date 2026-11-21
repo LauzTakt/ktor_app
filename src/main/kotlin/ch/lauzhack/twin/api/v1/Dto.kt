@@ -210,3 +210,50 @@ fun IncidentRow.toDto(match: String? = null) = IncidentDto(
 )
 
 fun IncidentEventRow.toDto() = IncidentEventDto(seq, kind, receivedAt, updatedAt, status, severity)
+
+// ---------------------------------------------------------------- station screen (small displays)
+
+/**
+ * Compact, ready-to-draw view of a station for small displays (e.g. an ESP32 with a 320x240 TFT): only the fields a
+ * departure screen shows, ~1 KB instead of a full [BoardDto]. `GET /stations/{id}/screen` and WebSocket topic `screen`.
+ */
+@Serializable
+data class ScreenDto(
+    val stopId: String,
+    val name: String,
+    /** Twin clock (epoch ms). */
+    val now: Long,
+    /** Next departures (trains standing at the station first, then by expected time); skipped trains excluded. */
+    val departures: List<ScreenDepartureDto>,
+    /** Active incidents concerning the station or its upcoming trains, worst first. */
+    val incidents: List<ScreenIncidentDto>,
+)
+
+@Serializable
+data class ScreenDepartureDto(
+    /** Planned departure (epoch ms); show it with [delaySec]. */
+    val plannedTime: Long?,
+    /** Live delay in seconds (0 if unknown). */
+    val delaySec: Int,
+    /** Line name (e.g. `IC1`), else the category. */
+    val line: String,
+    val category: String?,
+    /** Destination name (else the headsign). */
+    val to: String,
+    val cancelled: Boolean,
+    val atStation: Boolean,
+)
+
+@Serializable
+data class ScreenIncidentDto(
+    val id: String,
+    /** `info` | `minor` | `major` | `critical`. */
+    val severity: String?,
+    val title: String,
+    val where: String?,
+    /** true = at the station itself (section end, station, network); false = only via trains calling here. */
+    val atStation: Boolean,
+    /** Number of upcoming trains at the station affected by it. */
+    val trains: Int,
+    val updatedAt: Long,
+)

@@ -34,6 +34,7 @@ written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lau
 | `GET /stations/{stopId}` | `StationDetail` |
 | `GET /stations/{stopId}/board` | `Board`: trains that will still call at / pass through the station |
 | `GET /stations/{stopId}/incidents` | `Incident[]` (with `match`) |
+| `GET /stations/{stopId}/screen` | `Screen`: compact view for small displays (next departures + related incidents) |
 | `GET /incidents` | `Incident[]` |
 | `GET /incidents/{id}` | `Incident` with `geometry` (GeoJSON) |
 | `GET /incidents/{id}/history` | `IncidentEvent[]` |
@@ -62,6 +63,8 @@ written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lau
 | | `windowMin` | 120 (1…1440) | only entries whose time ≤ now + window (trains standing at the station always included) |
 | | `limit` | 50 (max 500) | |
 | | `includeSkipped` | `true` | include trains that pass through without stopping (`stop.skipped = true`) |
+| `/stations/{id}/screen` | `limit` | 6 (max 20) | number of departures |
+| | `windowMin` | 120 (1…1440) | departures window |
 | `/incidents` | `all` | `false` | `true` = also removed incidents |
 | | `severity` | | `info`, `minor`, `major`, `critical` |
 | | `scopeKind` | | `section`, `station`, `train`, `line`, `network` |
@@ -118,6 +121,14 @@ written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lau
   "match": "route",    // only on /trains/{id}/incidents, /trains/{id}, /stations/{id}[/incidents]
   "geometry": null }   // GeoJSON only on /incidents/{id}
 
+// Screen (GET /stations/{id}/screen and WebSocket topic `screen`): only what a departure screen draws, ~1 KB.
+// Departures = board type=departures without skipped trains; incidents = station-subscription matching, worst first (max 5).
+{ "stopId": "8501120", "name": "Lausanne", "now": 1795294228000,
+  "departures": [ { "plannedTime": 1795294440000, "delaySec": 120, "line": "IC1", "category": "IC",
+                    "to": "St. Gallen", "cancelled": false, "atStation": false } ],
+  "incidents": [ { "id": "i-4d5811f3", "severity": "major", "title": "Overhead line fault: Lausanne – Fribourg",
+                   "where": "Lausanne – Fribourg", "atStation": true, "trains": 3, "updatedAt": 1795294200000 } ] }
+
 // IncidentEvent (history, oldest first)
 { "seq": 1, "kind": "created", "receivedAt": ..., "updatedAt": ..., "status": "active", "severity": "critical" }
 // kind: created | updated | removed (tombstone) | missing (unmarked while we were offline)
@@ -166,6 +177,7 @@ One connection, many subscriptions. Client -> server (JSON text frames):
 ```jsonc
 { "op": "subscribe", "topic": "train",   "id": "<trainId>", "frequencySec": 5 }
 { "op": "subscribe", "topic": "station", "id": "8507000",   "frequencySec": 10, "windowMin": 60 }
+{ "op": "subscribe", "topic": "screen",  "id": "8501120",   "frequencySec": 30, "limit": 6 }
 { "op": "unsubscribe", "topic": "train", "id": "<trainId>" }
 { "op": "ping" }
 ```
@@ -174,6 +186,9 @@ One connection, many subscriptions. Client -> server (JSON text frames):
 - **Incident notifications are pushed immediately**, whatever the frequency.
 - Subscribing again to the same `topic`+`id` replaces the subscription (e.g. to change the frequency). Max 100 per connection.
 - Station only: `windowMin` (1…1440, default 120) = board window, like `/stations/{id}/board?type=all`.
+- Screen only (for small displays such as an ESP32 with a TFT): `limit` (1…20, default 6) departures, `windowMin` as
+  above. The server sends one compact `screen_update` (`Screen`) on subscribe, every `frequencySec`, and **again
+  immediately when an incident is created / updated / removed**; no separate `incident` messages.
 
 Server -> client (every message has `type`):
 
@@ -182,9 +197,10 @@ Server -> client (every message has `type`):
 | `subscribed` / `unsubscribed` | ack | `topic`, `id`, `frequencySec`, `windowMin` |
 | `train_update` | every `frequencySec` | `data`: `{ train: TrainSummary, stops: Stop[] }` |
 | `station_update` | every `frequencySec` | `data`: `Board` (`type = all`, skipped trains included, max 500 entries) |
+| `screen_update` | on subscribe, every `frequencySec` and on every incident change | `data`: `Screen` |
 | `train_ended` | the train left service | subscription closed by the server |
 | `incident` | on subscribe (`event: active`, one per active related incident), then on every change (`created`, `updated`, `removed`, `missing`) | `incident`: `Incident`, `trains`: `[{trainId, match}]` |
-| `error` | bad request | `code` (`bad_request`, `bad_op`, `bad_topic`, `bad_id`, `bad_frequencySec`, `bad_windowMin`, `too_many_subscriptions`, `train_not_found`, `station_not_found`), `message`, `topic`, `id` |
+| `error` | bad request | `code` (`bad_request`, `bad_op`, `bad_topic`, `bad_id`, `bad_frequencySec`, `bad_windowMin`, `bad_limit`, `too_many_subscriptions`, `train_not_found`, `station_not_found`), `message`, `topic`, `id` |
 | `pong` | reply to `ping` | `ts` |
 
 Related incidents (same rules as the table above):
@@ -208,6 +224,7 @@ curl localhost:8080/api/v1/trains?stationId=8503000&minDelaySec=300  # late trai
 curl localhost:8080/api/v1/trains/20261121_ojp-91-1-D.1.TA.2207.j26 # one train, all stops, incidents
 curl "localhost:8080/api/v1/trains?bbox=8.4,47.3,8.6,47.45"          # trains around Zürich
 curl localhost:8080/api/v1/incidents/i-4d5811f3/history
+curl "localhost:8080/api/v1/stations/8501120/screen?limit=6"         # compact view for a small display
 websocat ws://localhost:8080/api/v1/ws   # then: {"op":"subscribe","topic":"station","id":"8507000","frequencySec":5}
 ```
 

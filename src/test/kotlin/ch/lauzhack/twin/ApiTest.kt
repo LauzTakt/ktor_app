@@ -103,6 +103,24 @@ class ApiTest {
     }
 
     @Test
+    fun stationScreenIsCompact() = api {
+        val sc = json("/api/v1/stations/C/screen").o
+        assertEquals("C", sc.s("stopId"))
+        val deps = sc["departures"]!!.jsonArray
+        assertEquals(2, deps.size)
+        assertEquals(120, deps[1].o["delaySec"]!!.jsonPrimitive.int)          // t-to-c is 2 min late
+        assertEquals(setOf("plannedTime", "delaySec", "line", "category", "to", "cancelled", "atStation"), deps[0].o.keys)
+        val inc = sc["incidents"]!!.jsonArray.single().o
+        assertEquals("i-1", inc.s("id"))
+        assertEquals(true, inc["atStation"]!!.jsonPrimitive.boolean)
+        assertEquals(2, inc["trains"]!!.jsonPrimitive.int)                   // both trains still call at C, then D
+
+        assertEquals(1, json("/api/v1/stations/C/screen?limit=1").o["departures"]!!.jsonArray.size)
+        assertEquals("bad_limit", json("/api/v1/stations/C/screen?limit=50", HttpStatusCode.BadRequest).o["error"]!!.s("code"))
+        assertEquals("station_not_found", json("/api/v1/stations/nope/screen", HttpStatusCode.NotFound).o["error"]!!.s("code"))
+    }
+
+    @Test
     fun stationSearch() = api {
         val r = json("/api/v1/stations?q=station%20b").jsonArray
         assertEquals(listOf("B"), r.map { it.s("stopId") })

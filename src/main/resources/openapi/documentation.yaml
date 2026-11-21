@@ -158,6 +158,24 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Incident" } } } } }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /stations/{stopId}/screen:
+    get:
+      tags: [stations]
+      summary: Compact screen view for small displays (next departures + related incidents, ~1 KB)
+      description: >-
+        Only the fields a departure screen draws. Same data as `topic: screen` on the WebSocket, which pushes it every
+        `frequencySec` and immediately on incident changes. Incidents use the station subscription matching (at the
+        station itself, or affecting a train that will still call here), worst first, at most 5.
+      operationId: getStationScreen
+      parameters:
+        - { $ref: "#/components/parameters/stopId" }
+        - { name: limit, in: query, schema: { type: integer, default: 6, minimum: 1, maximum: 20 }, description: Number of departures }
+        - { name: windowMin, in: query, schema: { type: integer, default: 120, minimum: 1, maximum: 1440 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Screen" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /incidents:
     get:
       tags: [incidents]
@@ -532,6 +550,39 @@ components:
         windowMin: { type: integer }
         entries: { type: array, items: { $ref: "#/components/schemas/BoardEntry" } }
 
+    Screen:
+      type: object
+      required: [stopId, name, now, departures, incidents]
+      properties:
+        stopId: { type: string }
+        name: { type: string }
+        now: { type: integer, format: int64, description: Twin clock (epoch ms) }
+        departures:
+          type: array
+          items:
+            type: object
+            required: [plannedTime, delaySec, line, category, to, cancelled, atStation]
+            properties:
+              plannedTime: { type: integer, format: int64, nullable: true, description: Planned departure (epoch ms) }
+              delaySec: { type: integer, description: Live delay in seconds (0 if unknown) }
+              line: { type: string, description: "Line, else the category" }
+              category: { type: string, nullable: true }
+              to: { type: string, description: "Destination, else the headsign" }
+              cancelled: { type: boolean }
+              atStation: { type: boolean }
+        incidents:
+          type: array
+          items:
+            type: object
+            required: [id, severity, title, where, atStation, trains, updatedAt]
+            properties:
+              id: { type: string }
+              severity: { type: string, nullable: true, enum: [info, minor, major, critical] }
+              title: { type: string }
+              where: { type: string, nullable: true }
+              atStation: { type: boolean, description: "true = at the station itself; false = only via its trains" }
+              trains: { type: integer, description: Upcoming trains at the station affected }
+              updatedAt: { type: integer, format: int64 }
     IncidentScope:
       type: object
       required: [kind]

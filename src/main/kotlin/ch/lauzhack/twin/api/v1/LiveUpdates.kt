@@ -30,6 +30,10 @@ import java.util.concurrent.ConcurrentHashMap
  *    independent of the frequency. On subscribe, the currently active related incidents are sent once (`event: active`).
  * "Related" = same matching as the REST API: for a train, incidents on its remaining route / line / the train itself;
  * for a station, incidents at the station itself plus incidents of every train that will still call at / pass it.
+ *
+ * Topic `screen` (small displays): one compact `screen_update` (ScreenDto: next departures + related incidents) every
+ * `frequencySec`, and again immediately whenever an incident is created / updated / removed. No separate `incident`
+ * messages, so a microcontroller only has to parse one small document.
  */
 
 // ---------------------------------------------------------------- protocol
@@ -38,18 +42,23 @@ import java.util.concurrent.ConcurrentHashMap
 data class WsRequest(
     /** `subscribe` | `unsubscribe` | `ping`. */
     val op: String,
-    /** `train` | `station`. */
+    /** `train` | `station` | `screen`. */
     val topic: String? = null,
     /** trainId or stopId. */
     val id: String? = null,
     /** Seconds between `*_update` messages (1..3600, default 5). Incident notifications ignore it. */
     val frequencySec: Int? = null,
-    /** Station only: board window in minutes (1..1440, default 120). */
+    /** Station / screen: board window in minutes (1..1440, default 120). */
     val windowMin: Int? = null,
+    /** Screen only: number of departures (1..20, default 6). */
+    val limit: Int? = null,
 )
 
 @Serializable
-data class WsSubscribed(val topic: String, val id: String, val frequencySec: Int, val windowMin: Int?, val type: String = "subscribed")
+data class WsSubscribed(
+    val topic: String, val id: String, val frequencySec: Int, val windowMin: Int?, val limit: Int? = null,
+    val type: String = "subscribed",
+)
 
 @Serializable
 data class WsUnsubscribed(val topic: String, val id: String, val type: String = "unsubscribed")
@@ -59,6 +68,9 @@ data class WsTrainUpdate(val id: String, val ts: Long, val data: TrainLiveDto, v
 
 @Serializable
 data class WsStationUpdate(val id: String, val ts: Long, val data: BoardDto, val topic: String = "station", val type: String = "station_update")
+
+@Serializable
+data class WsScreenUpdate(val id: String, val ts: Long, val data: ScreenDto, val topic: String = "screen", val type: String = "screen_update")
 
 /** The train left service (its run ended): the subscription is closed by the server. */
 @Serializable
@@ -109,6 +121,8 @@ class LiveUpdates(val queries: TwinQueries, db: Database, private val clock: () 
         const val DEFAULT_WINDOW_MIN = 120
         const val MAX_SUBSCRIPTIONS = 100
         const val BOARD_LIMIT = 500
+        const val DEFAULT_SCREEN_LIMIT = 6
+        const val MAX_SCREEN_LIMIT = 20
     }
 }
 
@@ -131,6 +145,9 @@ private class WsConnection(private val session: DefaultWebSocketServerSession, p
     }
     private class TrainSub(override val id: String, override val job: Job) : Sub { override val topic = "train" }
     private class StationSub(override val id: String, override val job: Job) : Sub { override val topic = "station" }
+    private class ScreenSub(override val id: String, override val job: Job, val limit: Int, val windowMin: Int) : Sub {
+        override val topic = "screen"
+    }
 
     /** "train:<id>" / "station:<id>" -> subscription. */
     private val subs = ConcurrentHashMap<String, Sub>()
@@ -169,8 +186,8 @@ private class WsConnection(private val session: DefaultWebSocketServerSession, p
     }
 
     private suspend fun target(r: WsRequest): Pair<String, String>? {
-        if (r.topic != "train" && r.topic != "station") {
-            send(WsError.serializer(), WsError("bad_topic", "topic must be train or station", r.topic, r.id)); return null
+        if (r.topic != "train" && r.topic != "station" && r.topic != "screen") {
+            send(WsError.serializer(), WsError("bad_topic", "topic must be train, station or screen", r.topic, r.id)); return null
         }
         if (r.id.isNullOrBlank()) {
             send(WsError.serializer(), WsError("bad_id", "id (trainId or stopId) is required", r.topic, r.id)); return null
@@ -188,15 +205,25 @@ private class WsConnection(private val session: DefaultWebSocketServerSession, p
         if (window !in 1..24 * 60) {
             return send(WsError.serializer(), WsError("bad_windowMin", "windowMin must be between 1 and 1440", topic, id))
         }
+        val limit = r.limit ?: LiveUpdates.DEFAULT_SCREEN_LIMIT
+        if (topic == "screen" && limit !in 1..LiveUpdates.MAX_SCREEN_LIMIT) {
+            return send(WsError.serializer(), WsError("bad_limit", "limit must be between 1 and ${LiveUpdates.MAX_SCREEN_LIMIT}", topic, id))
+        }
         val key = "$topic:$id"
         if (!subs.containsKey(key) && subs.size >= LiveUpdates.MAX_SUBSCRIPTIONS) {
             return send(WsError.serializer(), WsError("too_many_subscriptions", "max ${LiveUpdates.MAX_SUBSCRIPTIONS} per connection", topic, id))
         }
         val known = if (topic == "train") q.trainLive(id) != null else runCatching { q.station(id) }.isSuccess
-        if (!known) return send(WsError.serializer(), WsError("${topic}_not_found", "$topic '$id' not found", topic, id))
+        val what = if (topic == "train") "train" else "station"   // a screen is a station's
+        if (!known) return send(WsError.serializer(), WsError("${what}_not_found", "$what '$id' not found", topic, id))
 
         // Re-subscribing replaces the previous subscription (e.g. to change the frequency).
         subs.remove(key)?.job?.cancel()
+        if (topic == "screen") {
+            send(WsSubscribed.serializer(), WsSubscribed(topic, id, freq, window, limit))
+            subs[key] = ScreenSub(id, session.launch { screenLoop(id, freq, limit, window) }, limit, window)
+            return
+        }
         send(WsSubscribed.serializer(), WsSubscribed(topic, id, freq, window.takeIf { topic == "station" }))
         incidentSnapshot(topic, id)
         val job = if (topic == "train") session.launch { trainLoop(key, id, freq) } else session.launch { stationLoop(id, freq, window) }
@@ -224,6 +251,16 @@ private class WsConnection(private val session: DefaultWebSocketServerSession, p
         }
     }
 
+    private suspend fun CoroutineScope.screenLoop(stopId: String, freqSec: Int, limit: Int, windowMin: Int) {
+        while (isActive) {
+            sendScreen(stopId, limit, windowMin)
+            delay(freqSec * 1000L)
+        }
+    }
+
+    private suspend fun sendScreen(stopId: String, limit: Int, windowMin: Int) =
+        send(WsScreenUpdate.serializer(), WsScreenUpdate(stopId, hub.now(), q.screen(stopId, limit, windowMin)))
+
     // ---------------------------------------------------------------- incidents
 
     private suspend fun incidentSnapshot(topic: String, id: String) {
@@ -231,7 +268,16 @@ private class WsConnection(private val session: DefaultWebSocketServerSession, p
     }
 
     private suspend fun onIncident(c: LiveUpdates.IncidentChange) {
-        for (s in subs.values) relate(s.topic, s.id, c.incident)?.let { send(WsIncident.serializer(), it.copy(event = c.kind)) }
+        for (s in subs.values) {
+            if (s is ScreenSub) {
+                // Removed incidents no longer match anything: refresh every screen; otherwise only related ones.
+                if (c.kind == "removed" || c.kind == "missing" || relate("station", s.id, c.incident) != null) {
+                    sendScreen(s.id, s.limit, s.windowMin)
+                }
+                continue
+            }
+            relate(s.topic, s.id, c.incident)?.let { send(WsIncident.serializer(), it.copy(event = c.kind)) }
+        }
     }
 
     /** The notification for subscription ([topic], [id]) if [row] concerns it, else null. */

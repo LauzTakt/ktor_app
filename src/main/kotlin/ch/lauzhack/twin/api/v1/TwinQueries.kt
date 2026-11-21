@@ -145,6 +145,35 @@ class TwinQueries(
         return BoardDto(s.toDto(), type, now, windowMin, entries)
     }
 
+    /**
+     * Compact screen view of [stopId] (docs/API.md, "Station screen"): the next [limit] departures within [windowMin]
+     * and the related active incidents (same matching as the station WebSocket subscription), worst first.
+     */
+    fun screen(stopId: String, limit: Int, windowMin: Int = 120, maxIncidents: Int = 5): ScreenDto {
+        val b = board(stopId, BoardType.departures, windowMin, limit, includeSkipped = false)
+        val upcoming = trainsUpcomingAt(stopId)
+        val incidents = activeIncidents().mapNotNull { row ->
+            val here = stationIncidentMatch(row, stopId) != null
+            val trains = upcoming.count { trainIncidentMatch(row, it) != null }
+            if (!here && trains == 0) null
+            else ScreenIncidentDto(row.id, row.severity, row.title, row.where, here, trains, row.updatedAt)
+        }.sortedWith(
+            compareBy<ScreenIncidentDto>({ severityRank(it.severity) }, { !it.atStation }).thenByDescending { it.updatedAt },
+        ).take(maxIncidents)
+        return ScreenDto(
+            stopId = b.station.stopId, name = b.station.name, now = b.now,
+            departures = b.entries.map { e ->
+                ScreenDepartureDto(
+                    plannedTime = e.plannedTime ?: e.time, delaySec = e.delaySec ?: 0,
+                    line = e.line ?: e.category ?: "", category = e.category,
+                    to = e.destination?.name ?: e.headsign ?: "", cancelled = e.status == "cancelled",
+                    atStation = e.atStation,
+                )
+            },
+            incidents = incidents,
+        )
+    }
+
     fun stationIncidents(stopId: String): List<IncidentDto> {
         if (state.station(stopId) == null) throw notFound("station", stopId)
         return incidentsForStation(stopId)
@@ -268,6 +297,14 @@ class TwinQueries(
             else -> null
         }
     }
+}
+
+private fun severityRank(s: String?) = when (s?.lowercase()) {
+    "critical" -> 0
+    "major" -> 1
+    "minor" -> 2
+    "info" -> 3
+    else -> 4
 }
 
 private val TrainState.line get() = info?.line ?: position?.line
