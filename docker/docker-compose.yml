@@ -1,6 +1,7 @@
-# Run from the repo root:   docker compose -f docker/docker-compose.yml up -d --build
-# or from this folder:      docker compose up -d --build
-# Secrets (MQTT_BROKER_URL, MQTT_USERNAME, MQTT_PASSWORD) come from ../.env (git-ignored, see ../.env.example).
+# Every setting comes from the environment (Coolify: set them in the app's "Environment Variables" tab;
+# `${VAR:?}` = required, `${VAR:-x}` = default x). Locally, from the repo root:
+#   docker compose -f docker/docker-compose.yml --env-file .env up -d --build
+# No host port is published: Coolify's proxy (or another service on the network) reaches the app on 8080.
 name: ktor-app
 
 services:
@@ -9,12 +10,15 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    container_name: ktor-app
     restart: unless-stopped
-    env_file:
-      - path: ../.env
-        required: false
+    expose:
+      - "8080"
     environment:
+      MQTT_BROKER_URL: ${MQTT_BROKER_URL:?MQTT_BROKER_URL is required, e.g. tcp://host:1883}
+      MQTT_USERNAME: ${MQTT_USERNAME:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      MQTT_ENABLED: ${MQTT_ENABLED:-true}
+      JAVA_OPTS: ${JAVA_OPTS:--XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError}
       PORT: 8080
       DB_PATH: /app/data/twin.sqlite
     volumes:
