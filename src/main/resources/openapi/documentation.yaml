@@ -3,7 +3,7 @@ info:
   title: Train digital twin — REST API v1
   version: "1.0"
   description: |
-    Read API over the live twin data ingested from MQTT, plus staff incident reports (`/reports`, the only writes) (contract: `docs/API.md`; keep both in sync with `api/v1/`).
+    Read API over the live twin data ingested from MQTT, plus staff incident reports (`/reports`, the only writes) and the passenger assistant (`/assistant/ask`) (contract: `docs/API.md`; keep both in sync with `api/v1/` and `assistant/`).
 
     - **Times** are epoch milliseconds UTC (Swiss local time = Europe/Zurich). **Delays** are seconds, `+` = late.
     - `trainId` = `{YYYYMMDD}_{GTFS trip_id}`; `stopId` = 7-digit UIC/DIDOK id (e.g. `8503000` Zürich HB, `8507000` Bern).
@@ -20,6 +20,8 @@ tags:
   - name: incidents
   - name: reports
     description: Incidents reported by staff through the web UI (stored locally, not published to the twin)
+  - name: assistant
+    description: Passenger assistant (Claude Opus 5.5 agent over the live data) for the passenger web app
 
 paths:
   /status:
@@ -235,6 +237,23 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Report" } } } }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: "`already_resolved`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+  /assistant/ask:
+    post:
+      tags: [assistant]
+      summary: Ask the passenger assistant
+      description: |
+        Agent loop on Claude Opus 5.5 (fast mode) over our data and sbb-twin's planner, situation and geometry
+        (`docs/API.md`, "Passenger assistant"). Typically 1.5–5 s. Option times come from the planner; map geometry from
+        sbb-twin. A failure midway still answers `200` with a short apology.
+      operationId: askAssistant
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AskRequest" } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AskResponse" } } } }
+        "400": { description: "`bad_question` or `bad_request`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "503": { description: "`assistant_unavailable` (no ANTHROPIC_API_KEY)", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
 
 components:
   parameters:
@@ -521,3 +540,103 @@ components:
         updatedAt: { type: integer, format: int64 }
         resolvedAt: { type: integer, format: int64, nullable: true }
         resolution: { type: string, nullable: true }
+
+    AskRequest:
+      type: object
+      required: [question]
+      properties:
+        question: { type: string, maxLength: 2000, example: "My IC to Bern was cancelled, how do I get there?" }
+        context:
+          type: object
+          nullable: true
+          description: What the app knows; stopIds (station names also work), all optional
+          properties:
+            fromStopId: { type: string, nullable: true, example: "8503000" }
+            toStopId: { type: string, nullable: true, example: "8507000" }
+            trainId: { type: string, nullable: true, description: The train the passenger is on }
+            lat: { type: number, nullable: true }
+            lon: { type: number, nullable: true }
+        history:
+          type: array
+          description: Last turns of the conversation, oldest first
+          items:
+            type: object
+            properties:
+              role: { type: string, enum: [passenger, assistant] }
+              text: { type: string }
+        sessionId: { type: string, nullable: true }
+
+    AskResponse:
+      type: object
+      required: [answer, summary, situation, options, visuals, followUp, elapsedMs]
+      properties:
+        answer: { type: string, description: "Spoken reply for the voice agent: 1-3 short sentences, no markdown" }
+        summary: { type: string, nullable: true, description: Short line for the screen }
+        situation: { type: array, items: { $ref: "#/components/schemas/SituationItem" } }
+        options: { type: array, description: "Recommended journey first, at most one alternative", items: { $ref: "#/components/schemas/AskOption" } }
+        visuals: { type: array, description: "Map commands; empty = leave the map as it is, else starts with `clear`", items: { $ref: "#/components/schemas/VisualCommand" } }
+        followUp: { type: string, nullable: true, description: Optional question for the passenger }
+        elapsedMs: { type: integer, format: int64 }
+
+    SituationItem:
+      type: object
+      required: [id, title, where, severity, source]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        where: { type: string, nullable: true }
+        severity: { type: string, enum: [info, minor, major, critical] }
+        source: { type: string, enum: [staff, auto, sbb], description: "staff = marked or reported by staff, auto = detected from train movements, sbb = SBB notice" }
+
+    AskOption:
+      type: object
+      required: [id, label, departure, arrival, transfers, recommended, why, journeyId]
+      properties:
+        id: { type: string, example: A }
+        label: { type: string, example: "IC 8 at 18:42, direct" }
+        departure: { type: integer, format: int64, nullable: true, description: "Expected departure (planner, epoch ms)" }
+        arrival: { type: integer, format: int64, nullable: true }
+        transfers: { type: integer, nullable: true }
+        recommended: { type: boolean }
+        why: { type: string, nullable: true }
+        journeyId: { type: string, nullable: true, description: "sbb-twin journey id (`/geometry/journey/{id}`)" }
+
+    GeoJson:
+      type: object
+      description: GeoJSON LineString or MultiLineString (WGS84)
+      additionalProperties: true
+
+    VisualCommand:
+      type: object
+      required: [type]
+      description: |
+        One map command, by `type`:
+        `clear` · `focus {bbox: [w, s, e, n]}` · `route {id, style: recommended|alternative, label, legs: [{line, trainId, fromName, toName, geometry}]}` ·
+        `section {id, colour: red|orange|green|blue, label, geometry}` · `train {trainId, label, follow}` ·
+        `station {stopId, name, lon, lat, role: origin|destination|transfer|incident, label}` · `timer {label, until}`
+      properties:
+        type: { type: string, enum: [clear, focus, route, section, train, station, timer] }
+        bbox: { type: array, items: { type: number }, minItems: 4, maxItems: 4 }
+        id: { type: string }
+        style: { type: string, enum: [recommended, alternative] }
+        label: { type: string, nullable: true }
+        legs:
+          type: array
+          items:
+            type: object
+            properties:
+              line: { type: string, nullable: true }
+              trainId: { type: string, nullable: true }
+              fromName: { type: string, nullable: true }
+              toName: { type: string, nullable: true }
+              geometry: { allOf: [ { $ref: "#/components/schemas/GeoJson" } ], nullable: true }
+        colour: { type: string, enum: [red, orange, green, blue] }
+        geometry: { allOf: [ { $ref: "#/components/schemas/GeoJson" } ], nullable: true }
+        trainId: { type: string }
+        follow: { type: boolean }
+        stopId: { type: string }
+        name: { type: string }
+        lon: { type: number, nullable: true }
+        lat: { type: number, nullable: true }
+        role: { type: string, enum: [origin, destination, transfer, incident] }
+        until: { type: integer, format: int64 }

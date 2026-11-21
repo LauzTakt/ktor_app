@@ -26,6 +26,7 @@ The prediction model also reads "modified data" from the broker on its own; it i
 | SQLite: incident history + station catalog | **done** | `db/Database.kt` |
 | REST API v1 (read: trains, stations, boards, incidents, status) | **done** — see docs/API.md | `api/v1/` |
 | Staff incident reports (REST + SQLite `staff_report`, local only, not published) | **done** | `api/v1/Reports.kt` |
+| Passenger assistant `POST /api/v1/assistant/ask` (Claude Opus 5.5 fast mode agent: tools over our data + sbb-twin planner/situation/geometry; system prompt in `resources/assistant/system-prompt.md`) | **done** — see docs/API.md | `assistant/` |
 | Swagger UI (`/swagger`) | **done** — OpenAPI spec, hand-written: update it with every API change | `resources/openapi/documentation.yaml` |
 | REST API for predictions (model pushes to us) | todo | |
 | WebSocket `/api/v1/ws`: subscribe to trains/stations (`frequencySec` updates + immediate incident pushes) | **done** — see docs/API.md | `api/v1/LiveUpdates.kt` (incident events via `Database.addIncidentListener`) |
@@ -101,6 +102,8 @@ validation, `StatusPages` errors) -> `TwinQueries.kt` (joins LiveState + active 
 - Package `ch.lauzhack.twin`; entry module `Application.module()` in `src/main/kotlin/ch/lauzhack/twin/Application.kt`, wired in `src/main/resources/application.yaml`.
 - Config: `application.yaml`, every value overridable by env: `PORT` (8080), `MQTT_BROKER_URL`, `MQTT_USERNAME`,
   `MQTT_PASSWORD`, `MQTT_ENABLED` (true), `DB_PATH` (`data/twin.sqlite`). `./gradlew run` loads `.env` automatically.
+  Assistant: `ANTHROPIC_API_KEY` (env only), `SBB_TWIN_URL` (`http://127.0.0.1:8787`), `ASSISTANT_MODEL`,
+  `ASSISTANT_FAST_MODE`, `ASSISTANT_EFFORT`, `ASSISTANT_MAX_MODEL_CALLS`.
 - **Never commit `.env`** or any broker credential.
 - Tests (`src/test`) run with `mqtt.enabled=false` and a temp SQLite file.
 
