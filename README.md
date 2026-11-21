@@ -5,11 +5,12 @@ history in SQLite, receives predictions over REST and pushes live updates to bro
 
 - Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - MQTT data source: [docs/DATA_SOURCE.md](docs/DATA_SOURCE.md)
+- REST API: [docs/API.md](docs/API.md)
 - Contributor/agent notes: [CLAUDE.md](CLAUDE.md)
 
 ```sh
 ./gradlew test
-./gradlew run   # GET http://localhost:8080/health
+./gradlew run   # GET http://localhost:8080/api/v1/status
 ```
 
 Requires JDK 21.

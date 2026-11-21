@@ -11,6 +11,12 @@ import kotlin.test.assertTrue
 class ApplicationTest {
     @Test
     fun healthReturnsOk() = testApplication {
+        environment {
+            config = io.ktor.server.config.MapApplicationConfig(
+                "mqtt.enabled" to "false",
+                "db.path" to kotlin.io.path.createTempFile("twin", ".sqlite").toString(),
+            )
+        }
         application { module() }
         val res = client.get("/health")
         assertEquals(HttpStatusCode.OK, res.status)

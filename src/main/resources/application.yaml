@@ -5,9 +5,13 @@ ktor:
     modules:
       - ch.lauzhack.twin.ApplicationKt.module
 
-# Future config (not used yet):
-# mqtt:
-#   url: "ws://127.0.0.1:8787/mqtt"   # sbb-twin broker, see docs/DATA_SOURCE.md
-#   clientId: "ktor-app-<unique>"
-# db:
-#   path: "data/twin.sqlite"
+# sbb-twin broker (see docs/DATA_SOURCE.md). Credentials come from env / .env (never commit them).
+mqtt:
+  enabled: "$MQTT_ENABLED:true"
+  brokerUrl: "$MQTT_BROKER_URL:tcp://127.0.0.1:1883"
+  username: "$MQTT_USERNAME:"
+  password: "$MQTT_PASSWORD:"
+  clientIdPrefix: "ktor-app"
+
+db:
+  path: "$DB_PATH:data/twin.sqlite"

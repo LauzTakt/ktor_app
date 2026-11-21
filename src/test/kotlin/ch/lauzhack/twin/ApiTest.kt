@@ -1,0 +1,129 @@
+package ch.lauzhack.twin
+
+import ch.lauzhack.twin.db.Database
+import ch.lauzhack.twin.model.Incident
+import ch.lauzhack.twin.model.IncidentScope
+import ch.lauzhack.twin.state.LiveState
+import io.ktor.client.request.get
+import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpStatusCode
+import io.ktor.server.testing.ApplicationTestBuilder
+import io.ktor.server.testing.testApplication
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlin.io.path.createTempFile
+import kotlin.test.Test
+import kotlin.test.assertEquals
+
+class ApiTest {
+    private fun seeded(): Pair<LiveState, Database> {
+        val st = LiveState()
+        st.upsertInfo(info("t-at-b", aheadFrom = 1))                          // standing at B
+        st.upsertInfo(info("t-to-c", aheadFrom = 2, delayMs = 120_000))       // between B and C, 2 min late
+        st.upsertInfo(info("t-other", aheadFrom = 0, stops = listOf("X", "Y"), line = "IC1"))
+        st.replacePositions(
+            mapOf("t-at-b" to pos("t-at-b", "B"), "t-to-c" to pos("t-to-c", null, delaySec = 120), "t-other" to pos("t-other", "X")),
+            T0 + 1_200_000, // twin clock = planned time at C
+        )
+        val db = Database(createTempFile("twin", ".sqlite").toString())
+        db.upsertIncident(
+            Incident(id = "i-1", title = "Fault C-D", severity = "critical", createdAt = 1, updatedAt = 1,
+                scope = IncidentScope(kind = "section", from = "C", to = "D")),
+            "{}",
+        )
+        repeat(50) { if (db.incidents(true).isEmpty()) Thread.sleep(20) }
+        return st to db
+    }
+
+    private fun api(test: suspend ApplicationTestBuilder.() -> Unit) = testApplication {
+        val (st, db) = seeded()
+        application { configureHttp(st, db) { true } }
+        test()
+    }
+
+    private suspend fun ApplicationTestBuilder.json(url: String, expect: HttpStatusCode = HttpStatusCode.OK): JsonElement {
+        val r: HttpResponse = client.get(url)
+        assertEquals(expect, r.status, r.bodyAsText())
+        return Json.parseToJsonElement(r.bodyAsText())
+    }
+
+    private val JsonElement.o get() = jsonObject
+    private fun JsonElement.s(k: String) = jsonObject[k]!!.jsonPrimitive.content
+
+    @Test
+    fun trainDetailHasStopStatesAndIncidents() = api {
+        val d = json("/api/v1/trains/t-to-c").o
+        assertEquals("C", d["train"]!!.o["nextStop"]!!.s("stopId"))
+        assertEquals(listOf("passed", "passed", "next", "upcoming"), d["stops"]!!.jsonArray.map { it.s("state") })
+        assertEquals(120, d["stops"]!!.jsonArray[2].o["arrDelaySec"]!!.jsonPrimitive.int)
+        assertEquals(listOf("i-1"), d["incidents"]!!.jsonArray.map { it.s("id") })
+        assertEquals("route", d["incidents"]!!.jsonArray[0].s("match")) // C and D both ahead
+
+        // t-other (X->Y) never touches C-D
+        assertEquals(0, json("/api/v1/trains/t-other/incidents").jsonArray.size)
+
+        val atB = json("/api/v1/trains/t-at-b").o["train"]!!.o
+        assertEquals("B", atB["currentStop"]!!.s("stopId"))
+        assertEquals("C", atB["nextStop"]!!.s("stopId"))
+    }
+
+    @Test
+    fun trainListFilters() = api {
+        assertEquals(3, json("/api/v1/trains").o["total"]!!.jsonPrimitive.int)
+        assertEquals(listOf("t-other"), json("/api/v1/trains?line=ic1").o["items"]!!.jsonArray.map { it.s("trainId") })
+        assertEquals(setOf("t-at-b", "t-to-c"), json("/api/v1/trains?stationId=C").o["items"]!!.jsonArray.map { it.s("trainId") }.toSet())
+        assertEquals(listOf("t-to-c"), json("/api/v1/trains?minDelaySec=60").o["items"]!!.jsonArray.map { it.s("trainId") })
+        assertEquals(2, json("/api/v1/trains?atStation=true").o["total"]!!.jsonPrimitive.int)
+        assertEquals(listOf("upcoming", "upcoming"), json("/api/v1/trains/t-at-b/stops?state=upcoming").jsonArray.drop(1).map { it.s("state") })
+    }
+
+    @Test
+    fun stationBoardListsOnlyTrainsStillToCome() = api {
+        val b = json("/api/v1/stations/B/board").o
+        val entries = b["entries"]!!.jsonArray
+        assertEquals(listOf("t-at-b"), entries.map { it.s("trainId") }) // t-to-c already left B
+        assertEquals(true, entries[0].o["atStation"]!!.jsonPrimitive.boolean)
+
+        val c = json("/api/v1/stations/C/board").o["entries"]!!.jsonArray
+        assertEquals(listOf("t-at-b", "t-to-c"), c.map { it.s("trainId") }) // sorted by expected time (t-to-c is 2 min late)
+
+        // Terminus D: no departures, but arrivals
+        assertEquals(0, json("/api/v1/stations/D/board?type=departures").o["entries"]!!.jsonArray.size)
+        assertEquals(2, json("/api/v1/stations/D/board?type=arrivals").o["entries"]!!.jsonArray.size)
+
+        val st = json("/api/v1/stations/C").o
+        assertEquals(2, st["trainsUpcoming"]!!.jsonPrimitive.int)
+        assertEquals(listOf("i-1"), st["incidents"]!!.jsonArray.map { it.s("id") })
+    }
+
+    @Test
+    fun stationSearch() = api {
+        val r = json("/api/v1/stations?q=station%20b").jsonArray
+        assertEquals(listOf("B"), r.map { it.s("stopId") })
+    }
+
+    @Test
+    fun errorsAreUniform() = api {
+        assertEquals("train_not_found", json("/api/v1/trains/nope", HttpStatusCode.NotFound).o["error"]!!.s("code"))
+        assertEquals("station_not_found", json("/api/v1/stations/nope/board", HttpStatusCode.NotFound).o["error"]!!.s("code"))
+        assertEquals("bad_limit", json("/api/v1/trains?limit=0", HttpStatusCode.BadRequest).o["error"]!!.s("code"))
+        assertEquals("bad_type", json("/api/v1/stations/B/board?type=foo", HttpStatusCode.BadRequest).o["error"]!!.s("code"))
+        assertEquals("bad_bbox", json("/api/v1/trains?bbox=1,2", HttpStatusCode.BadRequest).o["error"]!!.s("code"))
+        assertEquals("not_found", json("/api/v1/nothing", HttpStatusCode.NotFound).o["error"]!!.s("code"))
+    }
+
+    @Test
+    fun incidentEndpoints() = api {
+        assertEquals(1, json("/api/v1/incidents").jsonArray.size)
+        assertEquals(0, json("/api/v1/incidents?severity=minor").jsonArray.size)
+        assertEquals("i-1", json("/api/v1/incidents/i-1").s("id"))
+        assertEquals(listOf("created"), json("/api/v1/incidents/i-1/history").jsonArray.map { it.s("kind") })
+    }
+
+}
