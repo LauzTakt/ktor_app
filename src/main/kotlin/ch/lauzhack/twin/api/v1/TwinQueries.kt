@@ -46,6 +46,9 @@ class TwinQueries(
     private val state: LiveState,
     private val activeIncidents: () -> List<IncidentRow>,
 ) {
+    /** For sibling query classes (JourneyQueries) that need the raw state. */
+    internal val liveState: LiveState get() = state
+
     // ------------------------------------------------------------------ trains
 
     fun trains(f: TrainFilter, limit: Int, offset: Int): PageDto<TrainSummaryDto> {
@@ -194,7 +197,7 @@ class TwinQueries(
 
     // ------------------------------------------------------------------ mapping helpers
 
-    private fun summary(t: TrainState): TrainSummaryDto {
+    internal fun summary(t: TrainState): TrainSummaryDto {
         val info = t.info
         val n = t.nextCallIndex
         val calls = info?.calls.orEmpty()
@@ -221,10 +224,10 @@ class TwinQueries(
         )
     }
 
-    private fun stops(t: TrainState): List<StopDto> =
+    internal fun stops(t: TrainState): List<StopDto> =
         t.info?.calls.orEmpty().mapIndexed { i, c -> c.toDto(i, stateOf(t, i)) }
 
-    private fun stateOf(t: TrainState, i: Int): StopState {
+    internal fun stateOf(t: TrainState, i: Int): StopState {
         val n = t.nextCallIndex ?: return StopState.upcoming
         val calls = t.info?.calls.orEmpty()
         return when {
@@ -236,16 +239,16 @@ class TwinQueries(
     }
 
     /** Index of the train's first not-yet-left call at [stopId], or null if it won't call there any more. */
-    private fun upcomingIndexAt(t: TrainState, stopId: String): Int? {
+    internal fun upcomingIndexAt(t: TrainState, stopId: String): Int? {
         val calls = t.info?.calls ?: return null
         val from = t.nextCallIndex ?: return null
         return (from until calls.size).firstOrNull { calls[it].stopId == stopId }
     }
 
-    private fun incidentsForTrain(t: TrainState): List<IncidentDto> =
+    internal fun incidentsForTrain(t: TrainState): List<IncidentDto> =
         activeIncidents().mapNotNull { inc -> trainIncidentMatch(inc, t)?.let { inc.toDto(it) } }
 
-    private fun incidentsForStation(stopId: String): List<IncidentDto> =
+    internal fun incidentsForStation(stopId: String): List<IncidentDto> =
         activeIncidents().mapNotNull { inc -> stationIncidentMatch(inc, stopId)?.let { inc.toDto(it) } }
 
     // ------------------------------------------------------------------ live updates (WebSocket)
@@ -311,14 +314,14 @@ private val TrainState.line get() = info?.line ?: position?.line
 private val TrainState.category get() = info?.category ?: position?.category
 private val TrainState.status get() = info?.status ?: "unknown"
 
-private fun Station.toDto() = StationDto(stopId, name, lat, lon)
+internal fun Station.toDto() = StationDto(stopId, name, lat, lon)
 private fun StopRef.toDto() = StopRefDto(id, name)
 private fun ch.lauzhack.twin.model.TrainPosition.toDto() = PositionDto(lat, lon, bearing, speedKmh, motion, atStopId, continuity, ts)
 
 private fun delay(actualOrExpected: Long?, planned: Long?) =
     if (actualOrExpected != null && planned != null) ((actualOrExpected - planned) / 1000).toInt() else null
 
-private fun Call.toDto(seq: Int, state: StopState) = StopDto(
+internal fun Call.toDto(seq: Int, state: StopState) = StopDto(
     seq = seq, stopId = stopId, name = name, lat = lat, lon = lon,
     plannedArr = plannedArr, plannedDep = plannedDep, expectedArr = expectedArr, expectedDep = expectedDep,
     actualArr = actualArr, actualDep = actualDep,

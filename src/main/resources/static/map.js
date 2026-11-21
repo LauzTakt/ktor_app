@@ -184,7 +184,7 @@ map.on("contextmenu", (e) => {
   closePopup();
   popup = new maplibregl.Popup({ closeButton: true })
     .setLngLat(e.lngLat)
-    .setHTML(`<a class="btn primary" href="/report.html?scope=point&lat=${e.lngLat.lat.toFixed(5)}&lon=${e.lngLat.lng.toFixed(5)}">Report an incident here</a>`)
+    .setHTML(`<a class="btn primary" href="/admin/report.html?scope=point&lat=${e.lngLat.lat.toFixed(5)}&lon=${e.lngLat.lng.toFixed(5)}">Report an incident here</a>`)
     .addTo(map);
 });
 
@@ -198,7 +198,7 @@ function showReportPopup(r) {
        <div class="muted">${esc(CATEGORIES[r.category] ?? r.category)} · ${esc(r.where)}</div>
        ${r.description ? `<p>${esc(r.description)}</p>` : ""}
        <div class="muted">Reported ${time(r.createdAt)}${r.reporter ? ` by ${esc(r.reporter)}` : ""}</div>
-       <a href="/report.html#${esc(r.id)}">Open in reports</a></div>`,
+       <a href="/admin/report.html#${esc(r.id)}">Open in reports</a></div>`,
     )
     .addTo(map);
 }
@@ -230,7 +230,7 @@ async function showStationPopup(stopId, name, coords) {
   p.setHTML(
     `<div class="pop"><b>${esc(name)}</b>
      <table class="board">${rows || `<tr><td class="muted">No departures in the next hour.</td></tr>`}</table>
-     <a class="btn primary small" href="/report.html?scope=station&stopId=${encodeURIComponent(stopId)}">Report an incident here</a></div>`,
+     <a class="btn primary small" href="/admin/report.html?scope=station&stopId=${encodeURIComponent(stopId)}">Report an incident here</a></div>`,
   );
 }
 
@@ -274,7 +274,7 @@ async function selectTrain(id) {
         .join("")}</table>
       <div class="actions">
         <button class="btn" id="follow">${trains.following ? "Stop following" : "Follow"}</button>
-        <a class="btn primary" href="/report.html?scope=train&trainId=${encodeURIComponent(id)}">Report an incident</a>
+        <a class="btn primary" href="/admin/report.html?scope=train&trainId=${encodeURIComponent(id)}">Report an incident</a>
       </div>`;
     $("closeTrain").onclick = () => selectTrain(undefined);
     $("follow").onclick = (ev) => {

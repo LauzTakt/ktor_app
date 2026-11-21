@@ -37,6 +37,7 @@ fun Application.installApiErrors() {
 
 /** Public read API, mounted at `/api/v1`. Contract: docs/API.md. */
 fun Route.apiV1(q: TwinQueries, db: Database, mqttConnected: () -> Boolean) = route("/api/v1") {
+    val journey = JourneyQueries(q.liveState, q)
     get("/status") { call.respond(q.status(mqttConnected())) }
 
     route("/trains") {
@@ -47,6 +48,21 @@ fun Route.apiV1(q: TwinQueries, db: Database, mqttConnected: () -> Boolean) = ro
                 atStation = p.bool("atStation"), minDelaySec = p.int("minDelaySec"), bbox = BBox.parse(p["bbox"]),
             )
             call.respond(q.trains(filter, p.limit(default = 100, max = 2000), p.int("offset", min = 0) ?: 0))
+        }
+        // Passenger view: "which train am I on?" from the phone's location (constant segment wins over /{trainId}).
+        get("/nearby") {
+            val p = call.request.queryParameters
+            call.respond(
+                journey.nearbyTrains(
+                    lat = p.double("lat", -90.0, 90.0) ?: bad("bad_lat", "lat is required"),
+                    lon = p.double("lon", -180.0, 180.0) ?: bad("bad_lon", "lon is required"),
+                    radiusM = p.int("radiusM", min = 10, max = 20_000) ?: 2_000,
+                    limit = p.limit(default = 5, max = 20),
+                    headingDeg = p.double("headingDeg", 0.0, 360.0),
+                    speedKmh = p.double("speedKmh", 0.0, 500.0),
+                    fixTs = p["ts"]?.let { it.toLongOrNull() ?: bad("bad_ts", "ts must be epoch milliseconds") },
+                ),
+            )
         }
         get("/{trainId}") { call.respond(q.train(call.path("trainId"))) }
         get("/{trainId}/position") { call.respond(q.trainPosition(call.path("trainId"))) }
@@ -62,7 +78,33 @@ fun Route.apiV1(q: TwinQueries, db: Database, mqttConnected: () -> Boolean) = ro
             val p = call.request.queryParameters
             call.respond(q.stations(p["q"], BBox.parse(p["bbox"]), p.limit(default = 50, max = 5000)))
         }
+        get("/nearby") {
+            val p = call.request.queryParameters
+            call.respond(
+                journey.nearbyStations(
+                    lat = p.double("lat", -90.0, 90.0) ?: bad("bad_lat", "lat is required"),
+                    lon = p.double("lon", -180.0, 180.0) ?: bad("bad_lon", "lon is required"),
+                    radiusM = p.int("radiusM", min = 10, max = 50_000) ?: 5_000,
+                    limit = p.limit(default = 8, max = 50),
+                ),
+            )
+        }
         get("/{stopId}") { call.respond(q.station(call.path("stopId"))) }
+        get("/{stopId}/destinations") {
+            val p = call.request.queryParameters
+            call.respond(journey.destinations(call.path("stopId"), p["q"], p.limit(default = 30, max = 500)))
+        }
+        get("/{stopId}/connections") {
+            val p = call.request.queryParameters
+            call.respond(
+                journey.connections(
+                    fromStopId = call.path("stopId"),
+                    toStopId = p["to"] ?: bad("bad_to", "to (destination stopId) is required"),
+                    windowMin = p.int("windowMin", min = 1, max = 24 * 60) ?: 180,
+                    limit = p.limit(default = 10, max = 100),
+                ),
+            )
+        }
         get("/{stopId}/board") {
             val p = call.request.queryParameters
             call.respond(
@@ -122,6 +164,13 @@ private fun bad(code: String, msg: String): Nothing = throw ApiException(HttpSta
 private fun Parameters.int(name: String, min: Int = Int.MIN_VALUE, max: Int = Int.MAX_VALUE): Int? {
     val raw = this[name] ?: return null
     val v = raw.toIntOrNull() ?: bad("bad_$name", "$name must be an integer")
+    if (v < min || v > max) bad("bad_$name", "$name must be between $min and $max")
+    return v
+}
+
+private fun Parameters.double(name: String, min: Double, max: Double): Double? {
+    val raw = this[name] ?: return null
+    val v = raw.toDoubleOrNull()?.takeIf { it.isFinite() } ?: bad("bad_$name", "$name must be a number")
     if (v < min || v > max) bad("bad_$name", "$name must be between $min and $max")
     return v
 }

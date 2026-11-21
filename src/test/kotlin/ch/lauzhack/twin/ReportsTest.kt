@@ -113,24 +113,28 @@ class ReportsTest {
     fun staticPagesAndFleetSocket() = app {
         // Staff pages: no session -> redirect to the login page (which is public).
         val anon = createClient { followRedirects = false }
-        for (page in listOf("/", "/index.html", "/report.html")) {
+        for (page in listOf("/admin", "/admin/", "/admin/index.html", "/admin/report.html")) {
             val r = anon.get(page)
             assertEquals(HttpStatusCode.Found, r.status, page)
             assertTrue(r.headers["Location"]!!.startsWith("/login.html?next="), page)
         }
         assertTrue(anon.get("/login.html").bodyAsText().contains("Staff login"))
+        // The root is the public passenger view; the old staff URL redirects into the panel.
+        assertEquals(HttpStatusCode.OK, anon.get("/").status)
+        assertTrue(anon.get("/").bodyAsText().contains("id=\"passenger-app\""))
+        assertEquals("/admin/report.html", anon.get("/report.html").headers["Location"])
         assertEquals(HttpStatusCode.OK, anon.get("/common.js").status)
 
         // Browser flow: login sets the session cookie, then the pages load.
         val browser = createClient { followRedirects = false; install(HttpCookies) }
         browser.post("/api/v1/auth/login") { contentType(ContentType.Application.Json); setBody("""{"username":"admin","password":"admin"}""") }
-        assertTrue(browser.get("/").bodyAsText().contains("Staff overview"))
-        assertTrue(browser.get("/report.html").bodyAsText().contains("Report an incident"))
+        assertTrue(browser.get("/admin/").bodyAsText().contains("Staff overview"))
+        assertTrue(browser.get("/admin/report.html").bodyAsText().contains("Report an incident"))
         assertEquals(HttpStatusCode.Created, browser.post("/api/v1/reports") {
             contentType(ContentType.Application.Json); setBody("""{"title":"Via cookie","scope":"station","stopId":"B"}""")
         }.status)
         browser.post("/api/v1/auth/logout")
-        assertEquals(HttpStatusCode.Found, browser.get("/").status)
+        assertEquals(HttpStatusCode.Found, browser.get("/admin/").status)
 
         val ws = createClient { install(WebSockets) }
         ws.webSocket("/ws/fleet") {

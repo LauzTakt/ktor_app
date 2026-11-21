@@ -26,6 +26,7 @@ import io.ktor.server.plugins.calllogging.CallLogging
 import io.ktor.server.plugins.compression.Compression
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.response.respond
+import io.ktor.server.response.respondRedirect
 import io.ktor.server.plugins.swagger.swaggerUI
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
@@ -95,8 +96,16 @@ fun Application.configureHttp(state: LiveState, db: Database, authConfig: AuthCo
         reportsV1(state, db)
         liveUpdatesWs(live)
         fleetSocket(fleet)
-        // Staff web UI (staff only, else -> /login.html): `/` = live map, `/report.html` = report an incident.
-        staffPages(auth, mapOf("/" to "static/index.html", "/index.html" to "static/index.html", "/report.html" to "static/report.html"))
-        staticResources("/", "static") // login.html, JS, CSS, GeoJSON: public (no data in them)
+        // Staff panel (staff only, else -> /login.html): `/admin/` = live map, `/admin/report.html` = report an incident.
+        staffPages(
+            auth,
+            mapOf(
+                "/admin" to "static/admin/index.html", "/admin/" to "static/admin/index.html",
+                "/admin/index.html" to "static/admin/index.html", "/admin/report.html" to "static/admin/report.html",
+            ),
+        )
+        get("/report.html") { call.respondRedirect("/admin/report.html", permanent = true) } // old staff URL
+        // `/` = public passenger view (index.html); login.html, JS, CSS, GeoJSON: public (no data in them).
+        staticResources("/", "static")
     }
 }

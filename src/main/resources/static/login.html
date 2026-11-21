@@ -29,8 +29,8 @@
       import { initTheme } from "/common.js";
       initTheme();
       // Only same-site paths ("/x", not "//host" or "https://..."): no open redirect.
-      const raw = new URLSearchParams(location.search).get("next") || "/";
-      const next = raw.startsWith("/") && !raw.startsWith("//") ? raw : "/";
+      const raw = new URLSearchParams(location.search).get("next") || "/admin/";
+      const next = raw.startsWith("/") && !raw.startsWith("//") ? raw : "/admin/";
       const form = document.getElementById("form");
       const msg = document.getElementById("msg");
       form.addEventListener("submit", async (e) => {

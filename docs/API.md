@@ -34,6 +34,10 @@ written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lau
 | `GET /stations/{stopId}` | `StationDetail` |
 | `GET /stations/{stopId}/board` | `Board`: trains that will still call at / pass through the station |
 | `GET /stations/{stopId}/incidents` | `Incident[]` (with `match`) |
+| `GET /trains/nearby` | `NearbyTrain[]`: trains near a phone location, best match first (passenger view) |
+| `GET /stations/nearby` | `NearbyStation[]`: stations near a location, nearest first |
+| `GET /stations/{stopId}/destinations` | `Destination[]`: stations reachable from here with a train in service, most served first |
+| `GET /stations/{stopId}/connections` | `Connections`: trains in service going from this station to `?to=`, by departure |
 | `GET /stations/{stopId}/screen` | `Screen`: compact view for small displays (next departures + related incidents) |
 | `GET /incidents` | `Incident[]` |
 | `GET /incidents/{id}` | `Incident` with `geometry` (GeoJSON) |
@@ -63,6 +67,16 @@ written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lau
 | | `windowMin` | 120 (1…1440) | only entries whose time ≤ now + window (trains standing at the station always included) |
 | | `limit` | 50 (max 500) | |
 | | `includeSkipped` | `true` | include trains that pass through without stopping (`stop.skipped = true`) |
+| `/trains/nearby` | `lat`, `lon` | required | the phone's fix (WGS84) |
+| | `radiusM` | 2000 (10…20000) | |
+| | `headingDeg`, `speedKmh` | | the phone's heading / speed: trains going another way or speed are ranked down |
+| | `ts` | | fix time (epoch ms): trains are moved along their bearing to that time (±15 s) |
+| | `limit` | 5 (max 20) | |
+| `/stations/nearby` | `lat`, `lon` | required | |
+| | `radiusM`, `limit` | 5000 (max 50000), 8 (max 50) | |
+| `/stations/{id}/destinations` | `q`, `limit` | –, 30 (max 500) | name filter |
+| `/stations/{id}/connections` | `to` | required | destination `stopId` |
+| | `windowMin`, `limit` | 180 (1…1440), 10 (max 100) | departures within the window (trains at the station always included) |
 | `/stations/{id}/screen` | `limit` | 6 (max 20) | number of departures |
 | | `windowMin` | 120 (1…1440) | departures window |
 | `/incidents` | `all` | `false` | `true` = also removed incidents |
@@ -158,6 +172,18 @@ written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lau
   "createdAt": ..., "updatedAt": ..., "resolvedAt": null, "resolution": null }
 // errors: bad_title, bad_description, bad_category, bad_severity, bad_scope, bad_stopId, bad_toStopId, bad_trainId,
 //         bad_lat, bad_lon (400); station_not_found, train_not_found (404); bad_request (malformed JSON, 400)
+```
+
+```jsonc
+// NearbyTrain — score = distance + heading/speed mismatch penalties (metres, lower = better)
+{ "train": TrainSummary, "distanceM": 42, "headingDiffDeg": 3, "speedDiffKmh": 5, "score": 72 }
+// NearbyStation / Destination
+{ "station": Station, "distanceM": 120, "trainsUpcoming": 27 }
+{ "station": Station, "trains": 4, "nextArrival": 1795300740000 }
+// Connections
+{ "from": Station, "to": Station, "now": ..., "windowMin": 180,
+  "entries": [ { "train": TrainSummary, "departure": Stop, "arrival": Stop, "departureTime": ..., "arrivalTime": ...,
+                 "plannedDepartureTime": ..., "durationMin": 32, "stopsBetween": 3, "atStation": false, "incidents": Incident[] } ] }
 ```
 
 ### How incidents are matched (`match`)
@@ -271,6 +297,21 @@ TOKEN=$(curl -s -XPOST localhost:8080/api/v1/auth/login -H 'content-type: applic
 curl -H "Authorization: Bearer $TOKEN" localhost:8080/api/v1/staff/users
 ```
 
+## Web UI
+
+All pages follow [`docs/STYLE.md`](STYLE.md) (SBB look: SBB Web font, SBB palette, flat, Lucide icons).
+
+- `/` (public): **passenger view**, mobile first (`index.html`, `passenger.js`, `passenger.css`):
+  - QR codes: `/?train=<trainId>` opens "on tracks" for that train; `/?station=<stopId>` asks for the destination
+    (`&to=<stopId>` goes straight to the trains between both).
+  - Location: a train within 200 m (`/trains/nearby`, with the phone's speed/heading) -> "Are you on this train?"
+    (Yes / No / other trains nearby); else a station within 200 m (`/stations/nearby`) -> "Are you at X?"; else, or
+    on No, "Plan a trip": origin and destination by text or on the map.
+  - On tracks: a Three.js scene (always the same train on the same track; it moves with the real speed), the whole
+    route with the ETA of every stop and where the train is, incidents on top. Live over the WebSocket `train` topic.
+  - At a station: destination by text or map (reachable stations from `/stations/{id}/destinations` highlighted),
+    then `/stations/{id}/connections?to=`; tap a train to follow it on tracks.
+
 ## Staff web UI
 
 Static files in `src/main/resources/static/` (no build step; MapLibre GL from unpkg, swisstopo base map).
@@ -280,8 +321,8 @@ Rail network as in the sbb-twin viewer: `static/data/network-lines.geojson` (Swi
 `twin-theme`, default = system preference); the maps are recoloured in place (`common.js` `applyTheme`).
 Responses are gzip-compressed (Ktor `Compression`).
 
-- `/login.html` (public): staff login; `?next=/report.html` returns there after login. Pages show the user + "Log out".
-- `/`: staff overview map (stripped-down sbb-twin viewer): live trains (`/ws/fleet`), stations, twin incidents,
+- `/login.html` (public): staff login; `?next=/admin/report.html` returns there after login (default `/admin/`). Pages show the user + "Log out".
+- `/admin/`: staff overview map (stripped-down sbb-twin viewer): live trains (`/ws/fleet`), stations, twin incidents,
   open staff reports. Click a train for its stops; click a station for departures; right-click to report at a point.
-- `/report.html`: report form (station / section / train / map point) and the list of reports (resolve them).
+- `/admin/report.html` (old `/report.html` redirects here): report form (station / section / train / map point) and the list of reports (resolve them).
   Accepts `?scope=station&stopId=…`, `?scope=train&trainId=…`, `?scope=point&lat=…&lon=…` to pre-fill.

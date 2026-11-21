@@ -4,6 +4,8 @@ Kotlin/Ktor backend of the LauzHack 2026 train digital-twin project. **Read this
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): full system diagram (source of truth for what this app must do).
 - [`docs/DATA_SOURCE.md`](docs/DATA_SOURCE.md): the sbb-twin MQTT feed this app consumes (topics, payloads, rules).
+- Docker / deploy (Coolify): [`docker/README.md`](docker/README.md); all config from env vars.
+- [`docs/STYLE.md`](docs/STYLE.md): **visual rules for every page** (SBB look). Follow it for any UI work: no gradients, glow or emoji.
 - [`docs/API.md`](docs/API.md): our public REST API v1 (contract for the web UI and the prediction model). Keep it in sync with `api/v1/`.
 
 ## Where this app sits
@@ -31,7 +33,7 @@ The prediction model also reads "modified data" from the broker on its own; it i
 | REST API for predictions (model pushes to us) | todo | |
 | WebSocket `/api/v1/ws`: subscribe to trains/stations (`frequencySec` updates + immediate incident pushes) | **done** — see docs/API.md | `api/v1/LiveUpdates.kt` (incident events via `Database.addIncidentListener`) |
 | WebSocket `/ws/fleet`: whole fleet every `fleet` tick (staff map) | **done** | `web/FleetFeed.kt` |
-| Static web UI: staff map (`/`) + report page (`/report.html`), rail network, light/dark toggle | **done** (plain JS, no build; MapLibre from unpkg) | `resources/static/` |
+| Static web UI: passenger view (`/`, mobile, public) + staff panel behind login (`/admin/` map, `/admin/report.html`), light/dark toggle | **done** (plain JS, no build; MapLibre from unpkg) | `resources/static/` |
 
 ## Data model (step 1: ingest)
 
