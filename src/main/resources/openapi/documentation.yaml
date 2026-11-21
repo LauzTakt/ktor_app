@@ -19,11 +19,11 @@ tags:
   - name: stations
   - name: incidents
   - name: reports
+    description: Incidents reported by staff through the web UI (stored locally, not published to the twin)
   - name: auth
     description: "Staff login. Click **Authorize** and paste the token from `/auth/login` to call staff-only endpoints. Default user: admin / admin"
   - name: staff
     description: Staff-only calls (Bearer token)
-    description: Incidents reported by staff through the web UI (stored locally, not published to the twin)
 
 paths:
   /status:
@@ -158,6 +158,60 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Incident" } } } } }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /trains/nearby:
+    get:
+      tags: [trains]
+      summary: Trains near a phone location, best match first
+      operationId: getNearbyTrains
+      parameters:
+        - { name: lat, in: query, required: true, schema: { type: number } }
+        - { name: lon, in: query, required: true, schema: { type: number } }
+        - { name: radiusM, in: query, schema: { type: integer, default: 2000 } }
+        - { name: headingDeg, in: query, schema: { type: number } }
+        - { name: speedKmh, in: query, schema: { type: number } }
+        - { name: ts, in: query, description: "fix time, epoch ms", schema: { type: integer } }
+        - { name: limit, in: query, schema: { type: integer } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { type: object } } } } }
+        "400": { description: Bad parameter }
+  /stations/nearby:
+    get:
+      tags: [stations]
+      summary: Stations near a location, nearest first
+      operationId: getNearbyStations
+      parameters:
+        - { name: lat, in: query, required: true, schema: { type: number } }
+        - { name: lon, in: query, required: true, schema: { type: number } }
+        - { name: radiusM, in: query, schema: { type: integer, default: 5000 } }
+        - { name: limit, in: query, schema: { type: integer } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { type: object } } } } }
+        "400": { description: Bad parameter }
+  /stations/{stopId}/destinations:
+    get:
+      tags: [stations]
+      summary: Stations reachable from here with a train in service
+      operationId: getDestinations
+      parameters:
+        - { name: stopId, in: path, required: true, schema: { type: string } }
+        - { name: q, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { type: object } } } } }
+        "400": { description: Bad parameter }
+  /stations/{stopId}/connections:
+    get:
+      tags: [stations]
+      summary: Trains in service from this station to another
+      operationId: getConnections
+      parameters:
+        - { name: stopId, in: path, required: true, schema: { type: string } }
+        - { name: to, in: query, required: true, schema: { type: string } }
+        - { name: windowMin, in: query, schema: { type: integer, default: 180 } }
+        - { name: limit, in: query, schema: { type: integer } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object } } } }
+        "400": { description: Bad parameter }
   /stations/{stopId}/screen:
     get:
       tags: [stations]
