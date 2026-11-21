@@ -1,0 +1,13 @@
+ktor:
+  deployment:
+    port: "$PORT:8080"
+  application:
+    modules:
+      - ch.lauzhack.twin.ApplicationKt.module
+
+# Future config (not used yet):
+# mqtt:
+#   url: "ws://127.0.0.1:8787/mqtt"   # sbb-twin broker, see docs/DATA_SOURCE.md
+#   clientId: "ktor-app-<unique>"
+# db:
+#   path: "data/twin.sqlite"
