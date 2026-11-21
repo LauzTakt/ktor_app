@@ -263,8 +263,8 @@ class AssistantTools(
 
     // ================================================================ execution
 
-    suspend fun execute(name: String, input: JsonObject, turn: TurnState): ToolOutcome {
-        turn.toolsCalled += name
+    suspend fun execute(name: String, input: JsonObject, turn: TurnState, logAs: String = name): ToolOutcome {
+        turn.toolsCalled += logAs
         return try {
             when (name) {
                 "find_station" -> findStation(input)
@@ -326,7 +326,7 @@ class AssistantTools(
                 add("station_board" to jsonOf { put("stopId", from); put("windowMin", 30) })
             }
         }
-        calls.map { (n, args) -> async { Triple(n, args, execute(n, args, turn)) } }.awaitAll().filter { !it.third.isError }
+        calls.map { (n, args) -> async { Triple(n, args, execute(n, args, turn, logAs = "pre:$n")) } }.awaitAll().filter { !it.third.isError }
     }
 
     /** Origin and destination named in the question, when both resolve with confidence to different stations. */
