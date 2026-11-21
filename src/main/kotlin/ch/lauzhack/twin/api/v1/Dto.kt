@@ -85,6 +85,13 @@ data class TrainDetailDto(
     val incidents: List<IncidentDto>,
 )
 
+/** Live train payload pushed over the WebSocket (`train_update`): like [TrainDetailDto] without incidents. */
+@Serializable
+data class TrainLiveDto(
+    val train: TrainSummaryDto,
+    val stops: List<StopDto>,
+)
+
 @Serializable
 data class StationDto(val stopId: String, val name: String, val lat: Double?, val lon: Double?)
 

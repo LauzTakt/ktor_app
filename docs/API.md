@@ -2,7 +2,8 @@
 
 Read API over the live twin data ingested from MQTT. Base path **`/api/v1`**, JSON only, all `GET`.
 Implementation: `src/main/kotlin/ch/lauzhack/twin/api/v1/` (`Routes.kt` routing + params, `TwinQueries.kt` logic,
-`Dto.kt` response types). Tests: `src/test/kotlin/ch/lauzhack/twin/ApiTest.kt`.
+`Dto.kt` response types). **Swagger UI: `/swagger`** (spec `src/main/resources/openapi/documentation.yaml`,
+written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lauzhack/twin/ApiTest.kt`.
 
 ## Conventions
 
@@ -130,6 +131,45 @@ Implementation: `src/main/kotlin/ch/lauzhack/twin/api/v1/` (`Routes.kt` routing 
 | `line` | `line`: same line | — |
 | `network` | `network` | `network` |
 
+## WebSocket `/api/v1/ws` (live subscriptions)
+
+One connection, many subscriptions. Client -> server (JSON text frames):
+
+```jsonc
+{ "op": "subscribe", "topic": "train",   "id": "<trainId>", "frequencySec": 5 }
+{ "op": "subscribe", "topic": "station", "id": "8507000",   "frequencySec": 10, "windowMin": 60 }
+{ "op": "unsubscribe", "topic": "train", "id": "<trainId>" }
+{ "op": "ping" }
+```
+
+- `frequencySec` (1…3600, default 5) = period of the `*_update` messages of **that** subscription.
+- **Incident notifications are pushed immediately**, whatever the frequency.
+- Subscribing again to the same `topic`+`id` replaces the subscription (e.g. to change the frequency). Max 100 per connection.
+- Station only: `windowMin` (1…1440, default 120) = board window, like `/stations/{id}/board?type=all`.
+
+Server -> client (every message has `type`):
+
+| `type` | When | Payload |
+|---|---|---|
+| `subscribed` / `unsubscribed` | ack | `topic`, `id`, `frequencySec`, `windowMin` |
+| `train_update` | every `frequencySec` | `data`: `{ train: TrainSummary, stops: Stop[] }` |
+| `station_update` | every `frequencySec` | `data`: `Board` (`type = all`, skipped trains included, max 500 entries) |
+| `train_ended` | the train left service | subscription closed by the server |
+| `incident` | on subscribe (`event: active`, one per active related incident), then on every change (`created`, `updated`, `removed`, `missing`) | `incident`: `Incident`, `trains`: `[{trainId, match}]` |
+| `error` | bad request | `code` (`bad_request`, `bad_op`, `bad_topic`, `bad_id`, `bad_frequencySec`, `bad_windowMin`, `too_many_subscriptions`, `train_not_found`, `station_not_found`), `message`, `topic`, `id` |
+| `pong` | reply to `ping` | `ts` |
+
+Related incidents (same rules as the table above):
+- **train**: incidents matching the train; `incident.match` = the relation, `trains` = `[{trainId, match}]`.
+- **station**: incidents at the station itself (`incident.match` = `endpoint|station|network`, else `null`) **plus**
+  incidents of any train that will still call at / pass the station (listed in `trains` with their `match`).
+
+```jsonc
+{ "type": "incident", "topic": "station", "id": "8503000", "event": "created", "ts": 1795294228000,
+  "incident": { "id": "i-4d5811f3", ..., "match": "endpoint" },
+  "trains": [ { "trainId": "20261121_...", "match": "route" } ] }
+```
+
 ## Examples
 
 ```sh
@@ -140,4 +180,5 @@ curl localhost:8080/api/v1/trains?stationId=8503000&minDelaySec=300  # late trai
 curl localhost:8080/api/v1/trains/20261121_ojp-91-1-D.1.TA.2207.j26 # one train, all stops, incidents
 curl "localhost:8080/api/v1/trains?bbox=8.4,47.3,8.6,47.45"          # trains around Zürich
 curl localhost:8080/api/v1/incidents/i-4d5811f3/history
+websocat ws://localhost:8080/api/v1/ws   # then: {"op":"subscribe","topic":"station","id":"8507000","frequencySec":5}
 ```

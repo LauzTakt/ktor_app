@@ -1,0 +1,429 @@
+openapi: 3.0.3
+info:
+  title: Train digital twin — REST API v1
+  version: "1.0"
+  description: |
+    Read API over the live twin data ingested from MQTT (contract: `docs/API.md`; keep both in sync with `api/v1/`).
+
+    - **Times** are epoch milliseconds UTC (Swiss local time = Europe/Zurich). **Delays** are seconds, `+` = late.
+    - `trainId` = `{YYYYMMDD}_{GTFS trip_id}`; `stopId` = 7-digit UIC/DIDOK id (e.g. `8503000` Zürich HB, `8507000` Bern).
+    - Only **trains already in service** are known. "Now" for windows is the twin clock (last `fleet` tick).
+    - `null` fields are always present. Errors: `{"error": {"code", "message"}}`.
+    - **Live updates**: WebSocket `ws://<host>/api/v1/ws` (not shown here, OpenAPI can't describe it) — see `docs/API.md`, "WebSocket".
+servers:
+  - url: /api/v1
+tags:
+  - name: status
+  - name: trains
+  - name: stations
+  - name: incidents
+
+paths:
+  /status:
+    get:
+      tags: [status]
+      summary: Ingest health + twin heartbeat
+      operationId: getStatus
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Status" } } } }
+
+  /trains:
+    get:
+      tags: [trains]
+      summary: List trains (paged, sorted by trainId)
+      operationId: listTrains
+      parameters:
+        - { name: line, in: query, schema: { type: string }, description: "e.g. `IC1`, `S3` (case-insensitive)" }
+        - { name: category, in: query, schema: { type: string }, description: "e.g. `IC`, `S`, `RE`" }
+        - name: status
+          in: query
+          description: "`unknown` = position known, info not yet"
+          schema: { type: string, enum: [active, cancelled, unknown] }
+        - { name: stationId, in: query, schema: { type: string }, description: "Only trains that will still call at / pass through this station", example: "8503000" }
+        - { name: atStation, in: query, schema: { type: boolean }, description: "`true` = standing at a station, `false` = on the line" }
+        - { name: minDelaySec, in: query, schema: { type: integer }, description: Live delay ≥ this }
+        - $ref: "#/components/parameters/bbox"
+        - { name: limit, in: query, schema: { type: integer, default: 100, minimum: 1, maximum: 2000 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0, minimum: 0 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TrainSummaryPage" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /trains/{trainId}:
+    get:
+      tags: [trains]
+      summary: One train — summary, all stops, incidents affecting it
+      operationId: getTrain
+      parameters: [ { $ref: "#/components/parameters/trainId" } ]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TrainDetail" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /trains/{trainId}/position:
+    get:
+      tags: [trains]
+      summary: Latest position of a train
+      operationId: getTrainPosition
+      parameters: [ { $ref: "#/components/parameters/trainId" } ]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Position" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /trains/{trainId}/stops:
+    get:
+      tags: [trains]
+      summary: Stops of a train's run
+      operationId: getTrainStops
+      parameters:
+        - $ref: "#/components/parameters/trainId"
+        - name: state
+          in: query
+          description: "`upcoming` = everything not passed"
+          schema: { $ref: "#/components/schemas/StopState" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Stop" } } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /trains/{trainId}/incidents:
+    get:
+      tags: [trains]
+      summary: Active incidents affecting a train (with `match`)
+      operationId: getTrainIncidents
+      parameters: [ { $ref: "#/components/parameters/trainId" } ]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Incident" } } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /stations:
+    get:
+      tags: [stations]
+      summary: Search stations
+      operationId: listStations
+      parameters:
+        - { name: q, in: query, schema: { type: string }, description: "Substring of the name, or exact stopId; prefix matches first", example: bern }
+        - $ref: "#/components/parameters/bbox"
+        - { name: limit, in: query, schema: { type: integer, default: 50, minimum: 1, maximum: 5000 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Station" } } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /stations/{stopId}:
+    get:
+      tags: [stations]
+      summary: Station detail (counts + incidents)
+      operationId: getStation
+      parameters: [ { $ref: "#/components/parameters/stopId" } ]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/StationDetail" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /stations/{stopId}/board:
+    get:
+      tags: [stations]
+      summary: Trains that will still call at / pass through the station
+      description: Sorted with trains standing at the station first, then by `time`.
+      operationId: getStationBoard
+      parameters:
+        - $ref: "#/components/parameters/stopId"
+        - name: type
+          in: query
+          description: "`departures` excludes trains ending here, `arrivals` excludes trains starting here"
+          schema: { $ref: "#/components/schemas/BoardType" }
+        - name: windowMin
+          in: query
+          description: Only entries whose time ≤ now + window (trains standing at the station always included)
+          schema: { type: integer, default: 120, minimum: 1, maximum: 1440 }
+        - { name: limit, in: query, schema: { type: integer, default: 50, minimum: 1, maximum: 500 } }
+        - { name: includeSkipped, in: query, schema: { type: boolean, default: true }, description: Include trains passing through without stopping }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Board" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /stations/{stopId}/incidents:
+    get:
+      tags: [stations]
+      summary: Active incidents at a station (with `match`)
+      operationId: getStationIncidents
+      parameters: [ { $ref: "#/components/parameters/stopId" } ]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Incident" } } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /incidents:
+    get:
+      tags: [incidents]
+      summary: List incidents
+      operationId: listIncidents
+      parameters:
+        - { name: all, in: query, schema: { type: boolean, default: false }, description: "`true` = also removed incidents" }
+        - { name: severity, in: query, schema: { type: string, enum: [info, minor, major, critical] } }
+        - { name: scopeKind, in: query, schema: { type: string, enum: [section, station, train, line, network] } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Incident" } } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /incidents/{id}:
+    get:
+      tags: [incidents]
+      summary: One incident, with GeoJSON geometry
+      operationId: getIncident
+      parameters: [ { $ref: "#/components/parameters/incidentId" } ]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Incident" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /incidents/{id}/history:
+    get:
+      tags: [incidents]
+      summary: Incident history (oldest first)
+      operationId: getIncidentHistory
+      parameters: [ { $ref: "#/components/parameters/incidentId" } ]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/IncidentEvent" } } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+components:
+  parameters:
+    trainId:
+      { name: trainId, in: path, required: true, schema: { type: string }, example: 20261121_ojp-91-1-D.1.TA.2207.j26 }
+    stopId:
+      { name: stopId, in: path, required: true, schema: { type: string }, example: "8507000" }
+    incidentId:
+      { name: id, in: path, required: true, schema: { type: string }, example: i-4d5811f3 }
+    bbox:
+      name: bbox
+      in: query
+      description: "`minLon,minLat,maxLon,maxLat` (WGS84)"
+      schema: { type: string }
+      example: "8.4,47.3,8.6,47.45"
+
+  responses:
+    BadRequest:
+      description: "Invalid parameter (`bad_<param>`, e.g. `bad_limit`, `bad_bbox`, `bad_type`)"
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    NotFound:
+      description: "`<what>_not_found` (e.g. `train_not_found`, `position_not_found`)"
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, example: train_not_found }
+            message: { type: string }
+
+    StopRef:
+      type: object
+      required: [stopId, name]
+      properties:
+        stopId: { type: string }
+        name: { type: string }
+
+    Position:
+      type: object
+      required: [lat, lon, bearing, speedKmh, motion, atStopId, continuity, ts]
+      properties:
+        lat: { type: number }
+        lon: { type: number }
+        bearing: { type: number, nullable: true }
+        speedKmh: { type: number, nullable: true }
+        motion: { type: string, nullable: true, enum: [moving, stopped], description: "`stopped` with `atStopId == null` = stopped on the open line" }
+        atStopId: { type: string, nullable: true }
+        continuity: { type: integer, description: "Changes when the train jumps: don't interpolate across a change" }
+        ts: { type: integer, format: int64 }
+
+    StopState:
+      type: string
+      enum: [passed, current, next, upcoming]
+
+    Stop:
+      type: object
+      required: [seq, stopId, name, lat, lon, plannedArr, plannedDep, expectedArr, expectedDep, actualArr, actualDep, arrDelaySec, depDelaySec, skipped, state]
+      properties:
+        seq: { type: integer, description: Index in the run (0 = origin) }
+        stopId: { type: string }
+        name: { type: string }
+        lat: { type: number, nullable: true }
+        lon: { type: number, nullable: true }
+        plannedArr: { type: integer, format: int64, nullable: true }
+        plannedDep: { type: integer, format: int64, nullable: true }
+        expectedArr: { type: integer, format: int64, nullable: true }
+        expectedDep: { type: integer, format: int64, nullable: true }
+        actualArr: { type: integer, format: int64, nullable: true }
+        actualDep: { type: integer, format: int64, nullable: true }
+        arrDelaySec: { type: integer, nullable: true }
+        depDelaySec: { type: integer, nullable: true }
+        skipped: { type: boolean, description: The train passes without stopping }
+        state: { $ref: "#/components/schemas/StopState" }
+
+    TrainSummary:
+      type: object
+      required: [trainId, line, category, number, operator, headsign, status, origin, destination, delaySec, position, currentStop, nextStop, infoUpdatedAt]
+      properties:
+        trainId: { type: string }
+        line: { type: string, nullable: true }
+        category: { type: string, nullable: true }
+        number: { type: string, nullable: true }
+        operator: { type: string, nullable: true }
+        headsign: { type: string, nullable: true }
+        status: { type: string, enum: [active, cancelled, unknown] }
+        origin: { allOf: [ { $ref: "#/components/schemas/StopRef" } ], nullable: true }
+        destination: { allOf: [ { $ref: "#/components/schemas/StopRef" } ], nullable: true }
+        delaySec: { type: integer, nullable: true, description: Live delay at the next stop }
+        position: { allOf: [ { $ref: "#/components/schemas/Position" } ], nullable: true }
+        currentStop: { allOf: [ { $ref: "#/components/schemas/StopRef" } ], nullable: true, description: Station the train is standing at }
+        nextStop: { allOf: [ { $ref: "#/components/schemas/Stop" } ], nullable: true, description: Null at terminus }
+        infoUpdatedAt: { type: integer, format: int64, nullable: true }
+
+    TrainSummaryPage:
+      type: object
+      required: [total, limit, offset, items]
+      properties:
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+        items: { type: array, items: { $ref: "#/components/schemas/TrainSummary" } }
+
+    TrainDetail:
+      type: object
+      required: [train, stops, incidents]
+      properties:
+        train: { $ref: "#/components/schemas/TrainSummary" }
+        stops: { type: array, items: { $ref: "#/components/schemas/Stop" } }
+        incidents: { type: array, items: { $ref: "#/components/schemas/Incident" } }
+
+    Station:
+      type: object
+      required: [stopId, name, lat, lon]
+      properties:
+        stopId: { type: string, example: "8507000" }
+        name: { type: string, example: Bern }
+        lat: { type: number, nullable: true }
+        lon: { type: number, nullable: true }
+
+    StationDetail:
+      type: object
+      required: [station, trainsPresent, trainsUpcoming, incidents]
+      properties:
+        station: { $ref: "#/components/schemas/Station" }
+        trainsPresent: { type: integer, description: Trains standing at the station now }
+        trainsUpcoming: { type: integer, description: Trains in service that will still call at / pass through }
+        incidents: { type: array, items: { $ref: "#/components/schemas/Incident" } }
+
+    BoardType:
+      type: string
+      enum: [departures, arrivals, all]
+      default: departures
+
+    BoardEntry:
+      type: object
+      required: [trainId, line, category, number, operator, headsign, status, origin, destination, stop, time, plannedTime, delaySec, atStation, startsHere, terminatesHere]
+      properties:
+        trainId: { type: string }
+        line: { type: string, nullable: true }
+        category: { type: string, nullable: true }
+        number: { type: string, nullable: true }
+        operator: { type: string, nullable: true }
+        headsign: { type: string, nullable: true }
+        status: { type: string }
+        origin: { allOf: [ { $ref: "#/components/schemas/StopRef" } ], nullable: true }
+        destination: { allOf: [ { $ref: "#/components/schemas/StopRef" } ], nullable: true }
+        stop: { $ref: "#/components/schemas/Stop" }
+        time: { type: integer, format: int64, nullable: true, description: Expected (else planned) dep/arr depending on type; sort key }
+        plannedTime: { type: integer, format: int64, nullable: true }
+        delaySec: { type: integer, nullable: true }
+        atStation: { type: boolean }
+        startsHere: { type: boolean }
+        terminatesHere: { type: boolean }
+
+    Board:
+      type: object
+      required: [station, type, now, windowMin, entries]
+      properties:
+        station: { $ref: "#/components/schemas/Station" }
+        type: { $ref: "#/components/schemas/BoardType" }
+        now: { type: integer, format: int64, description: Twin clock used for the window }
+        windowMin: { type: integer }
+        entries: { type: array, items: { $ref: "#/components/schemas/BoardEntry" } }
+
+    IncidentScope:
+      type: object
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [section, station, train, line, network] }
+        from: { type: string, nullable: true }
+        to: { type: string, nullable: true }
+        stopId: { type: string, nullable: true }
+        trainId: { type: string, nullable: true }
+        line: { type: string, nullable: true }
+
+    Incident:
+      type: object
+      required: [id, title, description, severity, type, reasonCode, scope, where, disruptionId, status, active, createdAt, updatedAt, firstSeenAt, removedAt, match, geometry]
+      properties:
+        id: { type: string, example: i-4d5811f3 }
+        title: { type: string }
+        description: { type: string }
+        severity: { type: string, nullable: true, enum: [info, minor, major, critical] }
+        type: { type: string, nullable: true, example: overhead_line_fault }
+        reasonCode: { type: string, nullable: true }
+        scope: { allOf: [ { $ref: "#/components/schemas/IncidentScope" } ], nullable: true }
+        where: { type: string, nullable: true }
+        disruptionId: { type: string, nullable: true }
+        status: { type: string }
+        active: { type: boolean }
+        createdAt: { type: integer, format: int64 }
+        updatedAt: { type: integer, format: int64 }
+        firstSeenAt: { type: integer, format: int64 }
+        removedAt: { type: integer, format: int64, nullable: true }
+        match:
+          type: string
+          nullable: true
+          enum: [train, route, endpoint, station, line, network]
+          description: Why it is listed for a train/station; null in plain lists
+        geometry:
+          type: object
+          nullable: true
+          description: GeoJSON (MultiLineString), only on `GET /incidents/{id}`
+
+    IncidentEvent:
+      type: object
+      required: [seq, kind, receivedAt, updatedAt, status, severity]
+      properties:
+        seq: { type: integer, format: int64 }
+        kind: { type: string, enum: [created, updated, removed, missing], description: "`missing` = unmarked while we were offline" }
+        receivedAt: { type: integer, format: int64 }
+        updatedAt: { type: integer, format: int64, nullable: true }
+        status: { type: string, nullable: true }
+        severity: { type: string, nullable: true }
+
+    TwinStatus:
+      type: object
+      required: [streamId, ts, tick, trainsActive, trainsSimulated, timetableDate, online]
+      properties:
+        streamId: { type: string }
+        ts: { type: integer, format: int64 }
+        tick: { type: integer, format: int64 }
+        trainsActive: { type: integer }
+        trainsSimulated: { type: integer }
+        timetableDate: { type: string, nullable: true }
+        online: { type: boolean, description: false when no heartbeat for > 30 s }
+
+    Status:
+      type: object
+      required: [now, mqttConnected, trains, positions, stations, lastFleetTs, twin]
+      properties:
+        now: { type: integer, format: int64 }
+        mqttConnected: { type: boolean }
+        trains: { type: integer }
+        positions: { type: integer }
+        stations: { type: integer }
+        lastFleetTs: { type: integer, format: int64, nullable: true }
+        twin: { allOf: [ { $ref: "#/components/schemas/TwinStatus" } ], nullable: true }

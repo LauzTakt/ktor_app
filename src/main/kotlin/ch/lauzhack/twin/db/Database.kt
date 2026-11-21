@@ -28,6 +28,22 @@ class Database(path: String) : AutoCloseable {
     private val lock = Any()
     private val writer = Executors.newSingleThreadExecutor { r -> Thread(r, "sqlite-writer").apply { isDaemon = true } }
 
+    /**
+     * Called on the writer thread after every incident change that was actually recorded (same rule as history:
+     * `created | updated | removed | missing`; re-delivered retained copies are not reported). Must not block.
+     */
+    private val incidentListeners = java.util.concurrent.CopyOnWriteArrayList<(kind: String, incident: IncidentRow) -> Unit>()
+
+    fun addIncidentListener(l: (kind: String, incident: IncidentRow) -> Unit) { incidentListeners += l }
+
+    private fun notifyIncident(kind: String, id: String) {
+        if (incidentListeners.isEmpty()) return
+        val row = conn.prepareStatement("SELECT * FROM incident WHERE id=?").use { ps ->
+            ps.setString(1, id); ps.executeQuery().use { rs -> if (rs.next()) rs.toIncidentRow() else null }
+        } ?: return
+        incidentListeners.forEach { l -> runCatching { l(kind, row) }.onFailure { log.warn("incident listener failed", it) } }
+    }
+
     init {
         File(path).absoluteFile.parentFile?.mkdirs()
         conn = DriverManager.getConnection("jdbc:sqlite:$path")
@@ -157,6 +173,7 @@ class Database(path: String) : AutoCloseable {
         }
         insertEvent(inc.id, kind, now, inc.updatedAt, inc.status, inc.severity, raw)
         log.info("incident {} {}: {}", inc.id, kind, inc.title)
+        notifyIncident(kind, inc.id)
     }
 
     /** Tombstone received (`kind = removed`) or incident absent from the retained set after reconnect (`missing`). */
@@ -178,6 +195,7 @@ class Database(path: String) : AutoCloseable {
         if (n > 0) {
             insertEvent(id, kind, now, null, null, null, null)
             log.info("incident {} {}", id, kind)
+            notifyIncident(kind, id)
         }
     }
 
