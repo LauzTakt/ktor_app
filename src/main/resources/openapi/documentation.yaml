@@ -3,13 +3,14 @@ info:
   title: Train digital twin — REST API v1
   version: "1.0"
   description: |
-    Read API over the live twin data ingested from MQTT (contract: `docs/API.md`; keep both in sync with `api/v1/`).
+    Read API over the live twin data ingested from MQTT, plus staff incident reports (`/reports`, the only writes) (contract: `docs/API.md`; keep both in sync with `api/v1/`).
 
     - **Times** are epoch milliseconds UTC (Swiss local time = Europe/Zurich). **Delays** are seconds, `+` = late.
     - `trainId` = `{YYYYMMDD}_{GTFS trip_id}`; `stopId` = 7-digit UIC/DIDOK id (e.g. `8503000` Zürich HB, `8507000` Bern).
     - Only **trains already in service** are known. "Now" for windows is the twin clock (last `fleet` tick).
     - `null` fields are always present. Errors: `{"error": {"code", "message"}}`.
     - **Live updates**: WebSocket `ws://<host>/api/v1/ws` (not shown here, OpenAPI can't describe it) — see `docs/API.md`, "WebSocket".
+    - **Live fleet** (staff map): WebSocket `ws://<host>/ws/fleet`, every train once per `fleet` tick — see `docs/API.md`, "Live fleet WebSocket".
 servers:
   - url: /api/v1
 tags:
@@ -17,6 +18,8 @@ tags:
   - name: trains
   - name: stations
   - name: incidents
+  - name: reports
+    description: Incidents reported by staff through the web UI (stored locally, not published to the twin)
 
 paths:
   /status:
@@ -160,6 +163,7 @@ paths:
         - { name: all, in: query, schema: { type: boolean, default: false }, description: "`true` = also removed incidents" }
         - { name: severity, in: query, schema: { type: string, enum: [info, minor, major, critical] } }
         - { name: scopeKind, in: query, schema: { type: string, enum: [section, station, train, line, network] } }
+        - { name: geometry, in: query, schema: { type: boolean, default: false }, description: "`true` = include each incident's GeoJSON `geometry` (~12 KB each)" }
       responses:
         "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Incident" } } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -184,6 +188,54 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/IncidentEvent" } } } } }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /reports:
+    get:
+      tags: [reports]
+      summary: List staff reports (newest first)
+      operationId: listReports
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [open, resolved, all], default: open } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Report" } } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+    post:
+      tags: [reports]
+      summary: Report an incident
+      operationId: createReport
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CreateReport" } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Report" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /reports/{id}:
+    get:
+      tags: [reports]
+      summary: One staff report
+      operationId: getReport
+      parameters: [ { $ref: "#/components/parameters/reportId" } ]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Report" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /reports/{id}/resolve:
+    post:
+      tags: [reports]
+      summary: Mark a report resolved
+      operationId: resolveReport
+      parameters: [ { $ref: "#/components/parameters/reportId" } ]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, properties: { resolution: { type: string, nullable: true, maxLength: 1000 } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Report" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "`already_resolved`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
 components:
   parameters:
     trainId:
@@ -192,6 +244,8 @@ components:
       { name: stopId, in: path, required: true, schema: { type: string }, example: "8507000" }
     incidentId:
       { name: id, in: path, required: true, schema: { type: string }, example: i-4d5811f3 }
+    reportId:
+      { name: id, in: path, required: true, schema: { type: string }, example: r-0dfc887a }
     bbox:
       name: bbox
       in: query
@@ -391,7 +445,7 @@ components:
         geometry:
           type: object
           nullable: true
-          description: GeoJSON (MultiLineString), only on `GET /incidents/{id}`
+          description: GeoJSON (MultiLineString), only on `GET /incidents/{id}` and `GET /incidents?geometry=true`
 
     IncidentEvent:
       type: object
@@ -427,3 +481,43 @@ components:
         stations: { type: integer }
         lastFleetTs: { type: integer, format: int64, nullable: true }
         twin: { allOf: [ { $ref: "#/components/schemas/TwinStatus" } ], nullable: true }
+
+    CreateReport:
+      type: object
+      required: [title, scope]
+      properties:
+        title: { type: string, maxLength: 200, example: Door fault on coach 5 }
+        description: { type: string, maxLength: 4000, default: "" }
+        category: { type: string, enum: [rolling_stock, infrastructure, signalling, station, person, obstacle, weather, other], default: other }
+        severity: { type: string, enum: [info, minor, major, critical], default: minor }
+        scope: { type: string, enum: [station, section, train, point], description: "station: stopId; section: stopId + toStopId; train: trainId; point: lat + lon" }
+        stopId: { type: string, nullable: true, example: "8507000" }
+        toStopId: { type: string, nullable: true }
+        trainId: { type: string, nullable: true }
+        lat: { type: number, nullable: true, description: "Required for point; optional for train (default: its live position)" }
+        lon: { type: number, nullable: true }
+        reporter: { type: string, nullable: true, maxLength: 100 }
+
+    Report:
+      type: object
+      required: [id, title, description, category, severity, scope, stopId, toStopId, trainId, line, where, lat, lon, reporter, status, createdAt, updatedAt, resolvedAt, resolution]
+      properties:
+        id: { type: string, example: r-0dfc887a }
+        title: { type: string }
+        description: { type: string }
+        category: { type: string, enum: [rolling_stock, infrastructure, signalling, station, person, obstacle, weather, other] }
+        severity: { type: string, enum: [info, minor, major, critical] }
+        scope: { type: string, enum: [station, section, train, point] }
+        stopId: { type: string, nullable: true }
+        toStopId: { type: string, nullable: true }
+        trainId: { type: string, nullable: true }
+        line: { type: string, nullable: true, description: Line of the train at report time }
+        where: { type: string, example: "IC1 737 → Zürich HB" }
+        lat: { type: number, nullable: true, description: "Station, section midpoint, train position at report time, or the point" }
+        lon: { type: number, nullable: true }
+        reporter: { type: string, nullable: true }
+        status: { type: string, enum: [open, resolved] }
+        createdAt: { type: integer, format: int64 }
+        updatedAt: { type: integer, format: int64 }
+        resolvedAt: { type: integer, format: int64, nullable: true }
+        resolution: { type: string, nullable: true }

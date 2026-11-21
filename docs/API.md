@@ -1,6 +1,7 @@
 # REST API v1
 
-Read API over the live twin data ingested from MQTT. Base path **`/api/v1`**, JSON only, all `GET`.
+Read API over the live twin data ingested from MQTT, plus staff incident reports (the only writes). Base path
+**`/api/v1`**, JSON only. A live fleet WebSocket and the staff web UI are described at the end.
 Implementation: `src/main/kotlin/ch/lauzhack/twin/api/v1/` (`Routes.kt` routing + params, `TwinQueries.kt` logic,
 `Dto.kt` response types). **Swagger UI: `/swagger`** (spec `src/main/resources/openapi/documentation.yaml`,
 written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lauzhack/twin/ApiTest.kt`.
@@ -36,6 +37,10 @@ written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lau
 | `GET /incidents` | `Incident[]` |
 | `GET /incidents/{id}` | `Incident` with `geometry` (GeoJSON) |
 | `GET /incidents/{id}/history` | `IncidentEvent[]` |
+| `GET /reports` | `Report[]`: staff reports, newest first |
+| `POST /reports` | creates a `Report` from a `CreateReport` body → `201` |
+| `GET /reports/{id}` | `Report` |
+| `POST /reports/{id}/resolve` | `{ "resolution": "text" \| null }` (optional body) → resolved `Report`; `409 already_resolved` if not open |
 
 ### Query parameters
 
@@ -60,6 +65,8 @@ written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lau
 | `/incidents` | `all` | `false` | `true` = also removed incidents |
 | | `severity` | | `info`, `minor`, `major`, `critical` |
 | | `scopeKind` | | `section`, `station`, `train`, `line`, `network` |
+| | `geometry` | `false` | `true` = include each incident's GeoJSON `geometry` (~12 KB each) |
+| `/reports` | `status` | `open` | `open`, `resolved`, `all` |
 
 ## Types
 
@@ -119,6 +126,27 @@ written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lau
 { "now": ..., "mqttConnected": true, "trains": 682, "positions": 682, "stations": 2108, "lastFleetTs": ...,
   "twin": { "streamId": "0105a1461f934dee", "ts": ..., "tick": 70, "trainsActive": 682, "trainsSimulated": 30,
             "timetableDate": "2026-11-21", "online": true } }  // online = heartbeat ≤ 30 s old
+
+// CreateReport (POST /reports body). Staff reports live in our SQLite only; nothing is published to the twin.
+{ "title": "Door fault on coach 5",       // required, ≤ 200 chars
+  "description": "",                       // ≤ 4000 chars
+  "category": "rolling_stock",             // rolling_stock | infrastructure | signalling | station | person | obstacle | weather | other (default)
+  "severity": "minor",                     // info | minor (default) | major | critical
+  "scope": "train",                        // station | section | train | point
+  "stopId": null, "toStopId": null,        // station: stopId; section: stopId + toStopId (known stations)
+  "trainId": "20261121_…",                 // train: a train in service
+  "lat": null, "lon": null,                // point: required; train: optional (default = its live position)
+  "reporter": "Driver RE 3456" }           // optional, ≤ 100 chars
+
+// Report
+{ "id": "r-0dfc887a", "title": "...", "description": "...", "category": "rolling_stock", "severity": "minor",
+  "scope": "train", "stopId": null, "toStopId": null, "trainId": "20261121_…", "line": "IC1",
+  "where": "IC1 737 → Zürich HB",          // Bern | Bern – Thun | IC1 737 → Zürich HB | 46.94800, 7.44700
+  "lat": 46.945, "lon": 7.407,             // station / section midpoint / train position at report time / point
+  "reporter": "...", "status": "open",     // open | resolved
+  "createdAt": ..., "updatedAt": ..., "resolvedAt": null, "resolution": null }
+// errors: bad_title, bad_description, bad_category, bad_severity, bad_scope, bad_stopId, bad_toStopId, bad_trainId,
+//         bad_lat, bad_lon (400); station_not_found, train_not_found (404); bad_request (malformed JSON, 400)
 ```
 
 ### How incidents are matched (`match`)
@@ -182,3 +210,28 @@ curl "localhost:8080/api/v1/trains?bbox=8.4,47.3,8.6,47.45"          # trains ar
 curl localhost:8080/api/v1/incidents/i-4d5811f3/history
 websocat ws://localhost:8080/api/v1/ws   # then: {"op":"subscribe","topic":"station","id":"8507000","frequencySec":5}
 ```
+
+## Live fleet WebSocket
+
+`GET /ws/fleet` (WebSocket, server push only): one text frame per `fleet` tick (~1 Hz, ~45 KB for ~700 trains),
+the same row layout as the sbb-twin viewer:
+
+```jsonc
+{ "type": "tick", "ts": 1795296058000,
+  "trains": [ ["20261121_ojp-91-1-D.1.TA.682.j26", 46.945, 7.407, 60.0, 128.6, "moving", 30, "IC1", "IC", null, 1], … ] }
+// [trainId, lat, lon, bearing, speedKmh, motion, delaySec, line, category, atStopId, continuity]
+```
+
+## Staff web UI
+
+Static files in `src/main/resources/static/` (no build step; MapLibre GL from unpkg, swisstopo base map).
+Rail network as in the sbb-twin viewer: `static/data/network-lines.geojson` (Swiss lines, © BAV) and
+`static/data/abroad-lines.geojson` (© OpenStreetMap contributors), copied from the sbb-twin repository `data/`
+(refresh them from there if the twin's network changes). Light/dark toggle on every page (saved in `localStorage`
+`twin-theme`, default = system preference); the maps are recoloured in place (`common.js` `applyTheme`).
+Responses are gzip-compressed (Ktor `Compression`).
+
+- `/`: staff overview map (stripped-down sbb-twin viewer): live trains (`/ws/fleet`), stations, twin incidents,
+  open staff reports. Click a train for its stops; click a station for departures; right-click to report at a point.
+- `/report.html`: report form (station / section / train / map point) and the list of reports (resolve them).
+  Accepts `?scope=station&stopId=…`, `?scope=train&trainId=…`, `?scope=point&lat=…&lon=…` to pre-fill.

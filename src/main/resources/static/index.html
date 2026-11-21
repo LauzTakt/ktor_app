@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Train twin · Staff overview</title>
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.1/dist/maplibre-gl.css" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Crect width=%2216%22 height=%2216%22 rx=%222%22 fill=%22%23eb0000%22/%3E%3Cpath d=%22M7 3h2v4h4v2H9v4H7V9H3V7h4z%22 fill=%22%23fff%22/%3E%3C/svg%3E" />
+    <script>
+      // apply the saved (or system) theme before the first paint
+      document.documentElement.dataset.theme = localStorage.getItem("twin-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    </script>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="https://unpkg.com/maplibre-gl@5.24.1/dist/maplibre-gl.js"></script>
+  </head>
+  <body class="map-page">
+    <header class="topbar">
+      <div class="brand"><span class="logo">+</span> Train twin <span class="sub">Staff overview</span></div>
+      <div class="stats">
+        <span id="conn" class="pill offline">connecting…</span>
+        <span><b id="trainCount">–</b> trains</span>
+        <span><b id="lateCount">–</b> late ≥ 3′</span>
+        <span>twin time <b id="twinClock">–</b></span>
+      </div>
+      <nav><button class="btn" id="themeToggle" type="button">☾ Dark</button> <a class="btn primary" href="/report.html">Report an incident</a></nav>
+    </header>
+    <main>
+      <div id="map"></div>
+      <div class="legend">
+        <div><i class="tri" style="--c:#00973b"></i> moving, on time</div>
+        <div><i class="dot station" style="--c:#2d327d"></i> at a station</div>
+        <div><i class="tri" style="--c:#f27e00"></i> late ≥ 3 min</div>
+        <div><i class="dot" style="--c:#eb0000"></i> stopped on the line</div>
+        <div><i class="line" style="--c:#eb0000"></i> twin incident</div>
+        <div><i class="ring" style="--c:#f27e00"></i> staff report</div>
+      </div>
+      <aside class="panel">
+        <section id="trainPanel" hidden></section>
+        <section>
+          <h2>Twin incidents <span id="incCount" class="count">0</span></h2>
+          <ul id="incList" class="list"><li class="empty">No active incident.</li></ul>
+        </section>
+        <section>
+          <h2>Open staff reports <span id="repCount" class="count">0</span></h2>
+          <ul id="repList" class="list"><li class="empty">No open report.</li></ul>
+        </section>
+      </aside>
+    </main>
+    <script type="module" src="/map.js"></script>
+  </body>
+</html>

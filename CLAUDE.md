@@ -25,10 +25,12 @@ The prediction model also reads "modified data" from the broker on its own; it i
 | Last known train state (memory) | **done** | `state/LiveState.kt` |
 | SQLite: incident history + station catalog | **done** | `db/Database.kt` |
 | REST API v1 (read: trains, stations, boards, incidents, status) | **done** — see docs/API.md | `api/v1/` |
+| Staff incident reports (REST + SQLite `staff_report`, local only, not published) | **done** | `api/v1/Reports.kt` |
 | Swagger UI (`/swagger`) | **done** — OpenAPI spec, hand-written: update it with every API change | `resources/openapi/documentation.yaml` |
 | REST API for predictions (model pushes to us) | todo | |
 | WebSocket `/api/v1/ws`: subscribe to trains/stations (`frequencySec` updates + immediate incident pushes) | **done** — see docs/API.md | `api/v1/LiveUpdates.kt` (incident events via `Database.addIncidentListener`) |
-| Static web UI | todo | |
+| WebSocket `/ws/fleet`: whole fleet every `fleet` tick (staff map) | **done** | `web/FleetFeed.kt` |
+| Static web UI: staff map (`/`) + report page (`/report.html`), rail network, light/dark toggle | **done** (plain JS, no build; MapLibre from unpkg) | `resources/static/` |
 
 ## Data model (step 1: ingest)
 
