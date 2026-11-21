@@ -33,12 +33,41 @@ export async function api(path, init = {}) {
     body: init.json !== undefined ? JSON.stringify(init.json) : init.body,
   });
   const j = await r.json().catch(() => ({}));
+  if (r.status === 401) toLogin(); // staff session expired or logged out
   if (!r.ok) throw new Error(j?.error?.message ?? `HTTP ${r.status}`);
   return j;
 }
 
 export function severityBadge(sev) {
   return `<span class="badge" style="background:${SEVERITY_COLOURS[sev] ?? "#767676"}">${esc(sev ?? "?")}</span>`;
+}
+
+// ---------------------------------------------------------------- staff session (pages are staff-only, see auth/Auth.kt)
+
+export function toLogin() {
+  location.href = `/login.html?next=${encodeURIComponent(location.pathname + location.search)}`;
+}
+
+/** Shows "<user> · Log out" in the top bar. The session itself is an HttpOnly cookie set by POST /api/v1/auth/login. */
+export async function initStaffSession() {
+  const nav = document.querySelector(".topbar nav");
+  try {
+    const me = await api("/auth/me");
+    const who = document.createElement("span");
+    who.className = "who";
+    who.textContent = me.username;
+    const out = document.createElement("button");
+    out.className = "btn";
+    out.type = "button";
+    out.textContent = "Log out";
+    out.addEventListener("click", async () => {
+      await fetch("/api/v1/auth/logout", { method: "POST" }).catch(() => {});
+      toLogin();
+    });
+    nav?.prepend(who, " ", out, " ");
+  } catch {
+    /* api() already redirects on 401 */
+  }
 }
 
 // ---------------------------------------------------------------- theme (light / dark), shared by every page

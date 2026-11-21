@@ -2,7 +2,9 @@ package ch.lauzhack.twin
 
 import ch.lauzhack.twin.db.Database
 import ch.lauzhack.twin.state.LiveState
+import io.ktor.client.plugins.cookies.HttpCookies
 import io.ktor.client.plugins.websocket.WebSockets
+import io.ktor.client.request.bearerAuth
 import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.client.request.get
 import io.ktor.client.request.post
@@ -38,8 +40,16 @@ class ReportsTest {
         test()
     }
 
-    private suspend fun ApplicationTestBuilder.post(url: String, body: String): HttpResponse =
-        client.post(url) { contentType(ContentType.Application.Json); setBody(body) }
+    private var token: String? = null
+
+    /** POST as staff (creating a report is staff-only); [anonymous] = without a token. */
+    private suspend fun ApplicationTestBuilder.post(url: String, body: String, anonymous: Boolean = false): HttpResponse {
+        if (!anonymous && token == null) {
+            token = client.post("/api/v1/auth/login") { contentType(ContentType.Application.Json); setBody("""{"username":"admin","password":"admin"}""") }
+                .body().s("token")
+        }
+        return client.post(url) { contentType(ContentType.Application.Json); setBody(body); if (!anonymous) bearerAuth(token!!) }
+    }
 
     private suspend fun HttpResponse.body(): JsonElement = Json.parseToJsonElement(bodyAsText())
     private fun JsonElement.s(k: String) = jsonObject[k]!!.jsonPrimitive.content
@@ -89,9 +99,38 @@ class ReportsTest {
     }
 
     @Test
+    fun creatingNeedsStaffButReadingAndResolvingArePublic() = app {
+        val anon = post("/api/v1/reports", """{"title":"x","scope":"station","stopId":"B"}""", anonymous = true)
+        assertEquals(HttpStatusCode.Unauthorized, anon.status)
+        assertEquals(0, client.get("/api/v1/reports").body().jsonArray.size)
+
+        val r = post("/api/v1/reports", """{"title":"Lift broken","scope":"station","stopId":"B"}""").body()
+        assertEquals("admin", r.s("reporter")) // defaults to the logged-in staff user
+        assertEquals(HttpStatusCode.OK, post("/api/v1/reports/${r.s("id")}/resolve", "{}", anonymous = true).status)
+    }
+
+    @Test
     fun staticPagesAndFleetSocket() = app {
-        assertTrue(client.get("/").bodyAsText().contains("Staff overview"))
-        assertTrue(client.get("/report.html").bodyAsText().contains("Report an incident"))
+        // Staff pages: no session -> redirect to the login page (which is public).
+        val anon = createClient { followRedirects = false }
+        for (page in listOf("/", "/index.html", "/report.html")) {
+            val r = anon.get(page)
+            assertEquals(HttpStatusCode.Found, r.status, page)
+            assertTrue(r.headers["Location"]!!.startsWith("/login.html?next="), page)
+        }
+        assertTrue(anon.get("/login.html").bodyAsText().contains("Staff login"))
+        assertEquals(HttpStatusCode.OK, anon.get("/common.js").status)
+
+        // Browser flow: login sets the session cookie, then the pages load.
+        val browser = createClient { followRedirects = false; install(HttpCookies) }
+        browser.post("/api/v1/auth/login") { contentType(ContentType.Application.Json); setBody("""{"username":"admin","password":"admin"}""") }
+        assertTrue(browser.get("/").bodyAsText().contains("Staff overview"))
+        assertTrue(browser.get("/report.html").bodyAsText().contains("Report an incident"))
+        assertEquals(HttpStatusCode.Created, browser.post("/api/v1/reports") {
+            contentType(ContentType.Application.Json); setBody("""{"title":"Via cookie","scope":"station","stopId":"B"}""")
+        }.status)
+        browser.post("/api/v1/auth/logout")
+        assertEquals(HttpStatusCode.Found, browser.get("/").status)
 
         val ws = createClient { install(WebSockets) }
         ws.webSocket("/ws/fleet") {

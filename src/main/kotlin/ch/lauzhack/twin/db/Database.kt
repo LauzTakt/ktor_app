@@ -135,6 +135,26 @@ class Database(path: String) : AutoCloseable {
                 )""",
             )
             st.executeUpdate("CREATE INDEX IF NOT EXISTS ix_staff_report_status ON staff_report(status, created_at)")
+            st.executeUpdate(
+                """
+                CREATE TABLE IF NOT EXISTS app_user (       -- staff accounts (see auth/Auth.kt); seeded with admin/admin
+                  username      TEXT PRIMARY KEY,
+                  password_hash TEXT NOT NULL,              -- pbkdf2-sha256$<iterations>$<salt b64>$<hash b64>
+                  role          TEXT NOT NULL DEFAULT 'staff',
+                  created_at    INTEGER NOT NULL,
+                  updated_at    INTEGER NOT NULL
+                )""",
+            )
+            st.executeUpdate(
+                """
+                CREATE TABLE IF NOT EXISTS auth_token (     -- bearer tokens; only their SHA-256 is stored
+                  token_hash    TEXT PRIMARY KEY,
+                  username      TEXT NOT NULL REFERENCES app_user(username) ON DELETE CASCADE,
+                  created_at    INTEGER NOT NULL,
+                  expires_at    INTEGER NOT NULL
+                )""",
+            )
+            st.executeUpdate("CREATE INDEX IF NOT EXISTS ix_auth_token_user ON auth_token(username)")
         }
     }
 
@@ -324,6 +344,65 @@ class Database(path: String) : AutoCloseable {
 
     fun report(id: String): StaffReportRow? = query("SELECT * FROM staff_report WHERE id=?", id) { it.toReportRow() }.firstOrNull()
 
+    // ---------------------------------------------------------------- staff users + tokens (synchronous)
+
+    fun userCount(): Int = query("SELECT COUNT(*) AS n FROM app_user") { it.getInt("n") }.first()
+
+    fun user(username: String): UserRow? = query("SELECT * FROM app_user WHERE username=?", username) { it.toUserRow() }.firstOrNull()
+
+    fun users(): List<UserRow> = query("SELECT * FROM app_user ORDER BY username") { it.toUserRow() }
+
+    /** Returns false if the username is taken. */
+    fun insertUser(u: UserRow): Boolean = synchronized(lock) {
+        conn.prepareStatement("INSERT OR IGNORE INTO app_user(username, password_hash, role, created_at, updated_at) VALUES (?,?,?,?,?)").use { ps ->
+            ps.setString(1, u.username); ps.setString(2, u.passwordHash); ps.setString(3, u.role)
+            ps.setLong(4, u.createdAt); ps.setLong(5, u.updatedAt)
+            ps.executeUpdate() > 0
+        }
+    }
+
+    fun updatePassword(username: String, passwordHash: String, at: Long): Boolean = synchronized(lock) {
+        conn.prepareStatement("UPDATE app_user SET password_hash=?, updated_at=? WHERE username=?").use { ps ->
+            ps.setString(1, passwordHash); ps.setLong(2, at); ps.setString(3, username); ps.executeUpdate() > 0
+        }
+    }
+
+    /** Deletes the user and (cascade) its tokens. */
+    fun deleteUser(username: String): Boolean = synchronized(lock) {
+        conn.prepareStatement("DELETE FROM app_user WHERE username=?").use { ps -> ps.setString(1, username); ps.executeUpdate() > 0 }
+    }
+
+    fun insertToken(tokenHash: String, username: String, createdAt: Long, expiresAt: Long) = synchronized(lock) {
+        conn.prepareStatement("INSERT INTO auth_token(token_hash, username, created_at, expires_at) VALUES (?,?,?,?)").use { ps ->
+            ps.setString(1, tokenHash); ps.setString(2, username); ps.setLong(3, createdAt); ps.setLong(4, expiresAt); ps.executeUpdate()
+        }
+    }
+
+    /** Username owning a non-expired token, or null. */
+    fun tokenUser(tokenHash: String, now: Long): String? =
+        query("SELECT username, expires_at FROM auth_token WHERE token_hash=?", tokenHash) { rs ->
+            rs.getString("username").takeIf { rs.getLong("expires_at") > now }
+        }.firstOrNull()
+
+    fun deleteToken(tokenHash: String) = synchronized(lock) {
+        conn.prepareStatement("DELETE FROM auth_token WHERE token_hash=?").use { ps -> ps.setString(1, tokenHash); ps.executeUpdate() }
+    }
+
+    /** Revokes every token of [username] except [keepHash] (e.g. the caller's own session). */
+    fun deleteTokensOf(username: String, keepHash: String? = null) = synchronized(lock) {
+        conn.prepareStatement("DELETE FROM auth_token WHERE username=? AND token_hash<>?").use { ps ->
+            ps.setString(1, username); ps.setString(2, keepHash ?: ""); ps.executeUpdate()
+        }
+    }
+
+    fun deleteExpiredTokens(now: Long) = synchronized(lock) {
+        conn.prepareStatement("DELETE FROM auth_token WHERE expires_at<=?").use { ps -> ps.setLong(1, now); ps.executeUpdate() }
+    }
+
+    private fun ResultSet.toUserRow() = UserRow(
+        getString("username"), getString("password_hash"), getString("role"), getLong("created_at"), getLong("updated_at"),
+    )
+
     private fun ResultSet.doubleOrNull(col: String): Double? = getDouble(col).takeUnless { wasNull() }
 
     private fun ResultSet.toReportRow() = StaffReportRow(
@@ -366,3 +445,6 @@ data class StaffReportRow(
     val where: String, val lat: Double?, val lon: Double?, val reporter: String?, val status: String,
     val createdAt: Long, val updatedAt: Long, val resolvedAt: Long?, val resolution: String?,
 )
+
+/** One row of `app_user`. Every account is `staff` for now. */
+data class UserRow(val username: String, val passwordHash: String, val role: String, val createdAt: Long, val updatedAt: Long)

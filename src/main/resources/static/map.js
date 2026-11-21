@@ -1,7 +1,7 @@
 // Staff overview: the live twin on a map (trains, stations, twin incidents, staff reports).
 // Data comes from this app (which reads the sbb-twin MQTT broker): WebSocket /ws/fleet + REST /api/v1.
 import { TrainCanvas } from "./trains.js";
-import { addRail, api, applyTheme, baseStyle, bboxOf, initTheme, onTheme, CATEGORIES, clock, delayText, esc, ago, SEVERITY_COLOURS, severityBadge, time } from "./common.js";
+import { addRail, api, initStaffSession, applyTheme, baseStyle, bboxOf, initTheme, onTheme, CATEGORIES, clock, delayText, esc, ago, SEVERITY_COLOURS, severityBadge, time } from "./common.js";
 
 const $ = (id) => document.getElementById(id);
 const empty = { type: "FeatureCollection", features: [] };
@@ -41,6 +41,7 @@ onTheme((theme) => {
   trains.theme = theme;
 });
 initTheme();
+initStaffSession();
 
 // ---------------------------------------------------------------- live fleet (WebSocket)
 

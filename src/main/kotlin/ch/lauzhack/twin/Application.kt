@@ -6,6 +6,11 @@ import ch.lauzhack.twin.api.v1.LiveUpdates
 import ch.lauzhack.twin.api.v1.installApiErrors
 import ch.lauzhack.twin.api.v1.liveUpdatesWs
 import ch.lauzhack.twin.api.v1.reportsV1
+import ch.lauzhack.twin.auth.AuthConfig
+import ch.lauzhack.twin.auth.AuthService
+import ch.lauzhack.twin.auth.authV1
+import ch.lauzhack.twin.auth.installStaffAuth
+import ch.lauzhack.twin.auth.staffPages
 import ch.lauzhack.twin.db.Database
 import ch.lauzhack.twin.mqtt.MqttConfig
 import ch.lauzhack.twin.mqtt.MqttIngestor
@@ -58,11 +63,15 @@ fun Application.module() {
         db.close()
     }
 
-    configureHttp(state, db) { ingestor?.isConnected ?: false }
+    val authConfig = AuthConfig(
+        adminPassword = conf.propertyOrNull("auth.adminPassword")?.getString()?.takeIf { it.isNotEmpty() } ?: "admin",
+        tokenTtlHours = conf.propertyOrNull("auth.tokenTtlHours")?.getString()?.toLongOrNull() ?: 12,
+    )
+    configureHttp(state, db, authConfig) { ingestor?.isConnected ?: false }
 }
 
 /** HTTP layer only (plugins + routes); split from [module] so tests can inject a seeded [LiveState]. */
-fun Application.configureHttp(state: LiveState, db: Database, mqttConnected: () -> Boolean) {
+fun Application.configureHttp(state: LiveState, db: Database, authConfig: AuthConfig = AuthConfig(), mqttConnected: () -> Boolean) {
     install(CallLogging)
     install(Compression) // gzip/deflate: the rail network GeoJSON (~3 MB) and API lists shrink ~5x
     install(ContentNegotiation) { json(Json { explicitNulls = true; encodeDefaults = true }) }
@@ -71,6 +80,9 @@ fun Application.configureHttp(state: LiveState, db: Database, mqttConnected: () 
         pingPeriod = 20.seconds
         timeout = 60.seconds
     }
+    // Staff auth: existing routes stay public; staff-only calls go inside `staffOnly { }` (see auth/Auth.kt).
+    val auth = AuthService(db, authConfig).also { it.ensureDefaultAdmin() }
+    installStaffAuth(auth)
     val queries = TwinQueries(state) { db.incidents(activeOnly = true) }
     val live = LiveUpdates(queries, db)
     val fleet = FleetFeed(state)
@@ -79,10 +91,12 @@ fun Application.configureHttp(state: LiveState, db: Database, mqttConnected: () 
         // Swagger UI at /swagger, spec at /swagger/documentation.yaml (keep in sync with docs/API.md and api/v1/).
         swaggerUI(path = "swagger", swaggerFile = "openapi/documentation.yaml")
         apiV1(queries, db, mqttConnected)
+        authV1(auth)
         reportsV1(state, db)
         liveUpdatesWs(live)
         fleetSocket(fleet)
-        // Staff web UI: `/` = live map (index.html), `/report.html` = report an incident.
-        staticResources("/", "static")
+        // Staff web UI (staff only, else -> /login.html): `/` = live map, `/report.html` = report an incident.
+        staffPages(auth, mapOf("/" to "static/index.html", "/index.html" to "static/index.html", "/report.html" to "static/report.html"))
+        staticResources("/", "static") // login.html, JS, CSS, GeoJSON: public (no data in them)
     }
 }

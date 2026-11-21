@@ -26,6 +26,9 @@ fun Application.installApiErrors() {
             log.error("Unhandled error on {}", call.request.local.uri, e)
             call.respond(HttpStatusCode.InternalServerError, ErrorDto(ErrorBody("internal", "internal error")))
         }
+        status(HttpStatusCode.Unauthorized) { call, status ->
+            call.respond(status, ErrorDto(ErrorBody("unauthorized", "staff login required: Authorization: Bearer <token> from POST /api/v1/auth/login")))
+        }
         status(HttpStatusCode.NotFound) { call, status ->
             call.respond(status, ErrorDto(ErrorBody("not_found", "no such endpoint: ${call.request.local.uri}")))
         }
