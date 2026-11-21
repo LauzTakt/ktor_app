@@ -186,53 +186,64 @@ const placeholders = (n = 3) => Array.from({ length: n }, () => '<div class="pla
 
 // ------------------------------------------------------------------ location
 
-const geo = { status: "idle", fix: null, promise: null };
+const geo = { status: "idle", fix: null, promise: null, refined: null };
 
-/** One fix refined for a few seconds; speed/heading from the device or from two fixes. Null when unavailable. */
+/**
+ * Fast location: resolves with the FIRST usable fix (≤ 150 m, or the best one after 3 s) so the flow never waits for
+ * nothing. The watch keeps running in the background: `refine()` resolves once two fixes ≥ 2 s apart give a speed and
+ * heading (only needed to tell apart several trains close to the user). Null when location is unavailable.
+ */
 function locate() {
   if (geo.promise) return geo.promise;
   if (!("geolocation" in navigator)) { geo.status = "off"; return (geo.promise = Promise.resolve(null)); }
   if (!window.isSecureContext) { geo.status = "insecure"; return (geo.promise = Promise.resolve(null)); }
   geo.status = "busy";
-  geo.promise = new Promise((resolve) => {
-    const fixes = [];
-    const started = Date.now();
-    let done = false;
-    let id = null;
-    const finish = (status) => {
-      if (done) return;
-      done = true;
-      if (id != null) navigator.geolocation.clearWatch(id);
-      clearTimeout(hardStop);
-      if (!fixes.length) { geo.status = status || "off"; resolve(null); return; }
-      const last = fixes[fixes.length - 1];
-      const ok = (v) => v != null && !Number.isNaN(v);
-      let speedKmh = ok(last.coords.speed) ? last.coords.speed * 3.6 : null;
-      let headingDeg = ok(last.coords.heading) ? last.coords.heading : null;
-      const first = fixes.find((f) => last.timestamp - f.timestamp >= 2000);
-      if (first && (speedKmh == null || headingDeg == null)) {
-        const d = haversine(first.coords.latitude, first.coords.longitude, last.coords.latitude, last.coords.longitude);
-        const dt = (last.timestamp - first.timestamp) / 1000;
-        if (d > Math.max(first.coords.accuracy, last.coords.accuracy) * 0.5) {
-          speedKmh ??= (d / dt) * 3.6;
-          headingDeg ??= bearing(first.coords.latitude, first.coords.longitude, last.coords.latitude, last.coords.longitude);
-        } else speedKmh ??= 0;
+  const fixes = [];
+  let resolveFirst, resolveRefined, id = null;
+  geo.refined = new Promise((r) => (resolveRefined = r));
+  geo.promise = new Promise((r) => (resolveFirst = r));
+  const toFix = (last, speedKmh, headingDeg) =>
+    ({ lat: last.coords.latitude, lon: last.coords.longitude, acc: Math.round(last.coords.accuracy), speedKmh, headingDeg, ts: last.timestamp });
+  const ok = (v) => v != null && !Number.isNaN(v);
+  const motion = () => {
+    const last = fixes[fixes.length - 1];
+    let speedKmh = ok(last.coords.speed) ? last.coords.speed * 3.6 : null;
+    let headingDeg = ok(last.coords.heading) ? last.coords.heading : null;
+    const first = fixes.find((f) => last.timestamp - f.timestamp >= 1000);
+    if (first && (speedKmh == null || headingDeg == null)) {
+      const d = haversine(first.coords.latitude, first.coords.longitude, last.coords.latitude, last.coords.longitude);
+      if (d > Math.max(first.coords.accuracy, last.coords.accuracy) * 0.5) {
+        speedKmh ??= (d / ((last.timestamp - first.timestamp) / 1000)) * 3.6;
+        headingDeg ??= bearing(first.coords.latitude, first.coords.longitude, last.coords.latitude, last.coords.longitude);
+      } else speedKmh ??= 0;
+    }
+    return { last, speedKmh, headingDeg, known: speedKmh != null && (headingDeg != null || speedKmh < 10) };
+  };
+  const stop = () => { if (id != null) navigator.geolocation.clearWatch(id); id = null; };
+  const giveFirst = () => {
+    if (geo.status !== "busy") return;
+    if (!fixes.length) { geo.status = "off"; resolveFirst(null); resolveRefined(null); stop(); return; }
+    const best = fixes.reduce((a, b) => (b.coords.accuracy < a.coords.accuracy ? b : a));
+    const m = motion();
+    geo.fix = toFix(best, m.speedKmh, m.headingDeg);
+    geo.status = "ok";
+    resolveFirst(geo.fix);
+    if (m.known) { resolveRefined(geo.fix); stop(); }
+  };
+  id = navigator.geolocation.watchPosition(
+    (p) => {
+      fixes.push(p);
+      if (geo.status === "busy" && p.coords.accuracy <= 150) giveFirst();
+      else if (geo.status === "ok") {
+        const m = motion();
+        if (m.known) { geo.fix = toFix(m.last, m.speedKmh, m.headingDeg); resolveRefined(geo.fix); stop(); }
       }
-      geo.fix = { lat: last.coords.latitude, lon: last.coords.longitude, acc: Math.round(last.coords.accuracy), speedKmh, headingDeg, ts: last.timestamp };
-      geo.status = "ok";
-      resolve(geo.fix);
-    };
-    id = navigator.geolocation.watchPosition(
-      (p) => {
-        fixes.push(p);
-        const spanned = p.timestamp - fixes[0].timestamp;
-        if ((p.coords.accuracy <= 50 && spanned >= 2500) || (p.coords.accuracy <= 100 && Date.now() - started > 4500)) finish();
-      },
-      (e) => finish(e.code === 1 ? "denied" : "off"),
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 12000 },
-    );
-    const hardStop = setTimeout(() => finish("off"), 9000);
-  });
+    },
+    (e) => { if (geo.status === "busy") { geo.status = e.code === 1 ? "denied" : "off"; resolveFirst(null); resolveRefined(null); stop(); } },
+    { enableHighAccuracy: true, maximumAge: 5000, timeout: 12000 },
+  );
+  setTimeout(giveFirst, 3000);
+  setTimeout(() => { resolveRefined(geo.fix); stop(); }, 8000);
   return geo.promise;
 }
 function haversine(lat1, lon1, lat2, lon2) {
@@ -295,11 +306,17 @@ function detectScreen(opts = {}) {
     onLeave(() => (alive = false));
     $("#skip", s).onclick = () => { alive = false; browseScreen(); };
     (async () => {
+      const minShow = new Promise((r) => setTimeout(r, 1200)); // let the illustration breathe, no longer
       const fix = await locate();
+      let trains = fix ? (await nearbyTrainsFor(fix).catch(() => [])).filter((t) => t.distanceM <= NEAR_M) : [];
+      // Several trains close by and no speed/heading yet: wait (≤ 3 s) for a second fix to tell them apart.
+      if (trains.length > 1 && fix.headingDeg == null) {
+        const refined = await Promise.race([geo.refined, new Promise((r) => setTimeout(() => r(null), 3000))]);
+        if (refined?.headingDeg != null) trains = (await nearbyTrainsFor(refined).catch(() => trains)).filter((t) => t.distanceM <= NEAR_M);
+      }
+      await minShow;
       if (!alive) return;
       if (!fix) return browseScreen({ note: `${geoText()} Choose where you start and where you go.` });
-      const trains = (await nearbyTrainsFor(fix).catch(() => [])).filter((t) => t.distanceM <= NEAR_M);
-      if (!alive) return;
       if (trains.length) return askTrainScreen(trains);
       return askStationOrBrowse(fix);
     })();
