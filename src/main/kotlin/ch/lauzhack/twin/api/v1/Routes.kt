@@ -82,7 +82,7 @@ fun Route.apiV1(q: TwinQueries, db: Database, mqttConnected: () -> Boolean) = ro
             val severity = p["severity"]
             val kind = p["scopeKind"]
             call.respond(
-                db.incidents(activeOnly = !all)
+                db.incidents(activeOnly = !all, withGeometry = p.bool("geometry") ?: false)
                     .filter { severity == null || it.severity.equals(severity, ignoreCase = true) }
                     .filter { kind == null || it.scope?.kind.equals(kind, ignoreCase = true) }
                     .map { it.toDto() },

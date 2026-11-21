@@ -86,6 +86,9 @@ class LiveState {
         return if (i == null && p == null) null else TrainState(trainId, i, p, i?.let { nextCallIndex(it, p) })
     }
 
+    /** Latest `fleet` snapshot (immutable; replaced every second). */
+    fun positions(): Map<String, TrainPosition> = positions
+
     fun trainIds(): Set<String> = infos.keys + positions.keys
     fun trainCount() = infos.size
     fun positionCount() = positions.size

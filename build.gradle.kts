@@ -27,6 +27,8 @@ dependencies {
     implementation(libs.ktor.serialization.kotlinx.json)
     implementation(libs.ktor.server.call.logging)
     implementation(libs.ktor.server.status.pages)
+    implementation(libs.ktor.server.websockets)
+    implementation(libs.ktor.server.compression)
     implementation(libs.logback.classic)
     implementation(libs.paho.mqttv3)
     implementation(libs.sqlite.jdbc)
