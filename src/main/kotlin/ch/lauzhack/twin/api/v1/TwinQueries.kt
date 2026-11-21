@@ -213,40 +213,60 @@ class TwinQueries(
         return (from until calls.size).firstOrNull { calls[it].stopId == stopId }
     }
 
-    private fun incidentsForTrain(t: TrainState): List<IncidentDto> {
+    private fun incidentsForTrain(t: TrainState): List<IncidentDto> =
+        activeIncidents().mapNotNull { inc -> trainIncidentMatch(inc, t)?.let { inc.toDto(it) } }
+
+    private fun incidentsForStation(stopId: String): List<IncidentDto> =
+        activeIncidents().mapNotNull { inc -> stationIncidentMatch(inc, stopId)?.let { inc.toDto(it) } }
+
+    // ------------------------------------------------------------------ live updates (WebSocket)
+
+    /** Train summary + all stops, or null if the train is unknown (not in service). No incidents (they are pushed separately). */
+    fun trainLive(trainId: String): TrainLiveDto? = state.train(trainId)?.let { TrainLiveDto(summary(it), stops(it)) }
+
+    fun trainState(trainId: String): TrainState? = state.train(trainId)
+
+    /** Trains in service that will still call at / pass through [stopId]. */
+    fun trainsUpcomingAt(stopId: String): List<TrainState> =
+        state.trainsCallingAt(stopId).filter { upcomingIndexAt(it, stopId) != null }
+
+    fun activeIncidentRows(): List<IncidentRow> = activeIncidents()
+
+    /**
+     * Why [inc] concerns train [t] (see docs/API.md, "How incidents are matched"), or null if it doesn't:
+     * `train`, `route` (runs through the section), `endpoint` (calls at one end), `station`, `line`, `network`.
+     */
+    fun trainIncidentMatch(inc: IncidentRow, t: TrainState): String? {
+        val sc = inc.scope ?: return null
         val calls = t.info?.calls.orEmpty()
         val n = t.nextCallIndex ?: 0
         // Stops still to come, plus the previous one (the train may be inside a section that starts there).
         val upcoming = calls.drop(n).mapTo(HashSet()) { it.stopId }
         val withPrevious = calls.drop((n - 1).coerceAtLeast(0)).mapTo(HashSet()) { it.stopId }
-        val line = t.info?.line ?: t.position?.line
-        return activeIncidents().mapNotNull { inc ->
-            val sc = inc.scope ?: return@mapNotNull null
-            val match = when (sc.kind) {
-                "train" -> "train".takeIf { sc.trainId == t.trainId }
-                "section" -> when {
-                    sc.from in withPrevious && sc.to in withPrevious -> "route" // runs through the section
-                    sc.from in upcoming || sc.to in upcoming -> "endpoint"      // calls at one end of it
-                    else -> null
-                }
-                "station" -> "station".takeIf { (sc.from ?: sc.stopId) in upcoming }
-                "line" -> "line".takeIf { line != null && sc.line.equals(line, ignoreCase = true) }
-                "network" -> "network"
+        val line = t.line
+        return when (sc.kind) {
+            "train" -> "train".takeIf { sc.trainId == t.trainId }
+            "section" -> when {
+                sc.from in withPrevious && sc.to in withPrevious -> "route"
+                sc.from in upcoming || sc.to in upcoming -> "endpoint"
                 else -> null
             }
-            match?.let { inc.toDto(it) }
+            "station" -> "station".takeIf { (sc.from ?: sc.stopId) in upcoming }
+            "line" -> "line".takeIf { line != null && sc.line.equals(line, ignoreCase = true) }
+            "network" -> "network"
+            else -> null
         }
     }
 
-    private fun incidentsForStation(stopId: String): List<IncidentDto> = activeIncidents().mapNotNull { inc ->
-        val sc = inc.scope ?: return@mapNotNull null
-        val match = when (sc.kind) {
+    /** Why [inc] concerns station [stopId] itself (`endpoint`, `station`, `network`), or null. */
+    fun stationIncidentMatch(inc: IncidentRow, stopId: String): String? {
+        val sc = inc.scope ?: return null
+        return when (sc.kind) {
             "section" -> "endpoint".takeIf { sc.from == stopId || sc.to == stopId }
             "station" -> "station".takeIf { (sc.from ?: sc.stopId) == stopId }
             "network" -> "network"
             else -> null
         }
-        match?.let { inc.toDto(it) }
     }
 }
 
