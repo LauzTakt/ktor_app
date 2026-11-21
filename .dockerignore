@@ -1,0 +1,13 @@
+.git
+.gradle
+.kotlin
+.idea
+*.iml
+build
+data
+.env
+.env.*
+!.env.example
+docker/*.yml
+!docker/certs/
+docs
