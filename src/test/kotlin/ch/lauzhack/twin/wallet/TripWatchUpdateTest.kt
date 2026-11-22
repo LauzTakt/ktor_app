@@ -5,60 +5,94 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class TripWatchUpdateTest {
-    private val waiting = TripWatchAdvice(TripWatchAction.WaitForTrain)
-    private val tram = TripWatchAdvice(
-        TripWatchAction.Board("20260925_tram7_stettbach", "bahnhofstrasse-hb"),
+    private val waiting = TripWatchAdvice(TripWatchAction.WaitForService)
+    private val rail = TripWatchAction.Board(
+        serviceId = "rail:2030-05-06:regional-12",
+        boardingStopId = "station-west",
+        alightingStopId = "station-central",
+        publishedDepartureAt = Instant.parse("2030-05-06T07:10:00Z").toEpochMilli(),
     )
-    private val train = TripWatchAction.Board(
-        serviceId = "20260925_s9_stettbach",
-        boardingStopId = "8503000",
-        publishedDepartureAt = Instant.parse("2026-09-25T17:58:00Z").toEpochMilli(),
+    private val replacementBus = TripWatchAction.Board(
+        serviceId = "bus:2030-05-06:replacement-45",
+        boardingStopId = "station-west-bus-stop",
+        alightingStopId = "station-central",
     )
 
     @Test
     fun firstAdviceSyncsSilently() {
-        assertEquals(TripWatchDelivery.SYNC_SILENTLY, classifyTripWatchUpdate(null, tram))
+        assertEquals(TripWatchDelivery.SYNC_SILENTLY, classifyTripWatchUpdate(null, TripWatchAdvice(rail)))
     }
 
     @Test
     fun reopeningEstimateOnlyUpdatesTheWaitingDetail() {
-        val estimate = waiting.copy(detail = "Stops are expected to resume from 20:00.")
+        val estimate = waiting.copy(detail = "Services are expected to resume at 10:30.")
         assertEquals(TripWatchDelivery.SYNC_SILENTLY, classifyTripWatchUpdate(waiting, estimate))
     }
 
     @Test
-    fun namedTrainChangesTheWaitingRidersAction() {
-        assertEquals(TripWatchDelivery.NOTIFY, classifyTripWatchUpdate(waiting, TripWatchAdvice(train)))
+    fun confirmedServiceChangesTheWaitingInstruction() {
+        assertEquals(TripWatchDelivery.NOTIFY, classifyTripWatchUpdate(waiting, TripWatchAdvice(replacementBus)))
     }
 
     @Test
-    fun repeatedTramAdviceIsSkipped() {
-        assertEquals(TripWatchDelivery.SKIP, classifyTripWatchUpdate(tram, tram.copy()))
+    fun repeatedReplacementInstructionsAreSkipped() {
+        val advice = TripWatchAdvice(replacementBus)
+        assertEquals(TripWatchDelivery.SKIP, classifyTripWatchUpdate(advice, advice.copy()))
     }
 
     @Test
     fun forecastChangesSyncSilently() {
-        val before = TripWatchAdvice(train, detail = "Expected departure 19:59.")
-        val after = before.copy(detail = "Expected departure 20:00.")
+        val before = TripWatchAdvice(rail, detail = "Expected departure 09:12.")
+        val after = before.copy(detail = "Expected departure 09:13.")
         assertEquals(TripWatchDelivery.SYNC_SILENTLY, classifyTripWatchUpdate(before, after))
     }
 
     @Test
     fun changedBoardingPointRequestsAnAlert() {
-        val before = TripWatchAdvice(train.copy(boardingPointId = "platform-41"))
-        val after = TripWatchAdvice(train.copy(boardingPointId = "platform-42"))
+        val before = TripWatchAdvice(rail.copy(boardingPointId = "platform-1"))
+        val after = TripWatchAdvice(rail.copy(boardingPointId = "platform-2"))
         assertEquals(TripWatchDelivery.NOTIFY, classifyTripWatchUpdate(before, after))
     }
 
     @Test
     fun revisedPublishedDepartureRequestsAnAlert() {
-        val rescheduled = train.copy(publishedDepartureAt = Instant.parse("2026-09-25T18:12:00Z").toEpochMilli())
-        assertEquals(TripWatchDelivery.NOTIFY, classifyTripWatchUpdate(TripWatchAdvice(train), TripWatchAdvice(rescheduled)))
+        val rescheduled = rail.copy(publishedDepartureAt = Instant.parse("2030-05-06T07:30:00Z").toEpochMilli())
+        assertEquals(TripWatchDelivery.NOTIFY, classifyTripWatchUpdate(TripWatchAdvice(rail), TripWatchAdvice(rescheduled)))
     }
 
     @Test
     fun withdrawnBoardingAdviceRequestsACorrection() {
-        val correction = TripWatchAdvice(TripWatchAction.CheckTrip, detail = "The S9 will skip Stettbach.")
-        assertEquals(TripWatchDelivery.NOTIFY, classifyTripWatchUpdate(TripWatchAdvice(train), correction))
+        val correction = TripWatchAdvice(TripWatchAction.CheckTrip, detail = "This service skips your stop.")
+        assertEquals(TripWatchDelivery.NOTIFY, classifyTripWatchUpdate(TripWatchAdvice(rail), correction))
+    }
+
+    @Test
+    fun boardingReplacementServiceRequestsAnAlert() {
+        assertEquals(
+            TripWatchDelivery.NOTIFY,
+            classifyTripWatchUpdate(TripWatchAdvice(rail), TripWatchAdvice(replacementBus)),
+        )
+    }
+
+    @Test
+    fun relocatedReplacementStopRequestsAnAlert() {
+        val relocated = replacementBus.copy(boardingStopId = "bus-stop-park")
+        assertEquals(
+            TripWatchDelivery.NOTIFY,
+            classifyTripWatchUpdate(TripWatchAdvice(replacementBus), TripWatchAdvice(relocated)),
+        )
+    }
+
+    @Test
+    fun changedTransferStopOnTheSameServiceRequestsAnAlert() {
+        val rerouted = rail.copy(alightingStopId = "station-north")
+        assertEquals(TripWatchDelivery.NOTIFY, classifyTripWatchUpdate(TripWatchAdvice(rail), TripWatchAdvice(rerouted)))
+    }
+
+    @Test
+    fun changedAlightingStopWhileOnBoardRequestsAnAlert() {
+        val before = TripWatchAdvice(TripWatchAction.Alight(rail.serviceId, "station-central"))
+        val after = TripWatchAdvice(TripWatchAction.Alight(rail.serviceId, "station-north"))
+        assertEquals(TripWatchDelivery.NOTIFY, classifyTripWatchUpdate(before, after))
     }
 }
