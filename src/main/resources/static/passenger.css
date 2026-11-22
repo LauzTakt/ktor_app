@@ -70,17 +70,8 @@ button.row, .row.tap { cursor: pointer; }
 .row .m { font-size: 13px; color: var(--metal); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row .side { flex: none; text-align: right; font-size: 13px; color: var(--metal); }
 .row .chev { color: var(--granite); }
-.row .tag { font-size: 12px; color: var(--sky); font-weight: 700; }
 .radio { width: 20px; height: 20px; flex: none; border-radius: 50%; border: 2px solid var(--cement); transition: border-color 200ms var(--ease), border-width 200ms var(--ease); }
 .row.selected .radio { border-color: var(--sky); border-width: 6px; }
-
-/* Where-are-you choices */
-.choice { min-height: 76px; padding: 14px 16px; gap: 14px; }
-.choice .ic { width: 44px; height: 44px; border-radius: 10px; background: var(--milk); color: var(--granite); display: grid; place-items: center; flex: none; }
-.choice .t { font-size: 17px; }
-.choice .guess { font-size: 13px; color: var(--charcoal); margin-top: 2px; }
-.choice.suggested { border-color: var(--sky); box-shadow: 0 0 0 1px var(--sky); }
-.choice.suggested .ic { background: var(--sky); color: #fff; }
 
 /* Status dot + word (never colour alone) */
 .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--cement); }
@@ -119,12 +110,6 @@ s.planned { color: var(--metal); }
 .back { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 2px; border: 0; background: none; color: var(--sky);
   font-size: 14px; cursor: pointer; }
 
-/* ---------- locating ---------- */
-.loc { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--metal); }
-.loc .pin { position: relative; width: 10px; height: 10px; border-radius: 50%; background: var(--cement); flex: none; }
-.loc.busy .pin, .loc.ok .pin { background: var(--sky); }
-.loc.ok .pin { background: var(--green); }
-.loc.busy .pin::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--sky); animation: pulse 1.4s var(--ease) infinite; }
 @keyframes pulse { from { transform: scale(0.6); opacity: 1; } to { transform: scale(1.9); opacity: 0; } }
 
 .placeholder { height: 56px; border-radius: 10px; background: var(--milk); animation: breathe 1.2s var(--ease) infinite alternate; }
@@ -140,37 +125,8 @@ button.stop:hover { background: var(--milk); }
 .stop:first-child::before { top: 50%; }
 .stop:last-child::before { bottom: 50%; }
 .stop::after { content: ""; position: absolute; left: 5px; top: 50%; width: 8px; height: 8px; margin-top: -6px; border-radius: 50%; border: 2px solid var(--iron); background: var(--white); }
-.stop.now::after { border-color: var(--green); background: var(--green); }
-.stop.dest::after { width: 10px; height: 10px; left: 4px; margin-top: -7px; border-color: var(--charcoal); background: var(--charcoal); }
 .stop .n { flex: 1; font-size: 15px; }
-.stop.dest .n { font-weight: 700; }
 .stop .tm { font-size: 14px; text-align: right; }
-
-/* ---------- live trip ---------- */
-.trip { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-.trip .head { display: flex; align-items: center; gap: 12px; }
-.trip .head .to { font-size: 13px; color: var(--metal); }
-.trip .head .spacer { flex: 1; }
-.trip .head .to b { display: block; font-size: 18px; color: var(--charcoal); }
-.eta { display: flex; align-items: baseline; gap: 6px; }
-.eta .num { font-size: 48px; line-height: 1; font-weight: 700; letter-spacing: -1px; transition: opacity 200ms var(--ease); }
-.eta .num.changed { animation: tick 260ms var(--ease); }
-@keyframes tick { from { opacity: 0.3; transform: translateY(4px); } }
-.eta .unit { font-size: 18px; font-weight: 400; color: var(--metal); }
-.arr { font-size: 15px; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
-.arr .time { font-weight: 700; }
-
-.track { position: relative; height: 40px; margin: 4px 8px 18px; }
-.track .rail { position: absolute; left: 0; right: 0; top: 18px; height: 4px; border-radius: 2px; background: var(--silver); }
-.track .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 2px; background: var(--charcoal); transition: width 1s linear; }
-.track .tick { position: absolute; top: 15px; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; border: 2px solid var(--iron); background: var(--white); }
-.track .tick.done { background: var(--charcoal); border-color: var(--charcoal); }
-.track .tick.end { width: 14px; height: 14px; top: 13px; margin-left: -7px; border-color: var(--charcoal); }
-.track .marker { position: absolute; top: 6px; width: 28px; height: 28px; margin-left: -14px; border-radius: 50%; background: var(--c, var(--green)); color: #fff;
-  display: grid; place-items: center; border: 2px solid var(--white); transition: left 1s linear, background-color 250ms var(--ease); }
-.track .marker .icon { width: 15px; height: 15px; }
-.track .marker::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; border: 2px solid var(--sky); animation: pulse 1.8s var(--ease) infinite; }
-.track .labels { position: absolute; top: 34px; left: -8px; right: -8px; display: flex; justify-content: space-between; font-size: 12px; color: var(--metal); }
 
 /* ---------- incidents ---------- */
 .alert { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--cloud); border-radius: 10px; background: var(--white);
@@ -192,16 +148,10 @@ button.stop:hover { background: var(--milk); }
 .conn .l1 .h { font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .conn .l2 { font-size: 13px; color: var(--metal); }
 .conn .r { grid-row: span 2; }
-.conn .more { grid-column: 1 / -1; display: grid; grid-template-rows: 0fr; transition: grid-template-rows 250ms var(--ease); }
-.conn .more > div { overflow: hidden; }
-.conn.open .more { grid-template-rows: 1fr; }
-.conn .more .btn { margin-top: 10px; width: 100%; }
 .conn .warn { color: var(--red); font-weight: 700; }
 
 /* ---------- arrival ---------- */
 .finish { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; margin-top: 12vh; }
-.finish .ok { width: 56px; height: 56px; border-radius: 50%; background: var(--green); color: #fff; display: grid; place-items: center; animation: rowIn 300ms var(--ease) both; }
-.finish .ok .icon { width: 28px; height: 28px; }
 
 /* ---------- toast ---------- */
 .toast { position: fixed; left: 50%; bottom: max(24px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 50; max-width: calc(100vw - 32px);

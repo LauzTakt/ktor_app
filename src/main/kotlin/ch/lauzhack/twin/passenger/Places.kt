@@ -1,32 +1,34 @@
 package ch.lauzhack.twin.passenger
 
+import ch.lauzhack.twin.common.searchKey
+import ch.lauzhack.twin.common.array
+import ch.lauzhack.twin.common.double
+import ch.lauzhack.twin.common.obj
+import ch.lauzhack.twin.common.objects
+import ch.lauzhack.twin.common.str
+import ch.lauzhack.twin.twinapi.SbbTwinClient
+import kotlin.math.roundToInt
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import java.text.Normalizer
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.hypot
-import kotlin.math.roundToInt
 
 /** A station of the twin's `stations.geojson` (`trains` = how many trains call there today). */
-data class Station(val id: String, val name: String, val trains: Int, val lon: Double, val lat: Double) {
+data class CatalogStation(val id: String, val name: String, val trains: Int, val lon: Double, val lat: Double) {
     val norm: String = Places.norm(name)
 }
 
 /** A station named in a question, with the role its preceding word suggests (`to`, `from` or null). */
-data class PlaceHit(val st: Station, val role: String?)
+data class PlaceHit(val st: CatalogStation, val role: String?)
 
 /** Station names in free text (port of sbb-client `server/mock.ts`: placesIn). Pure: the station list is passed in. */
 object Places {
-    private val MARKS = Regex("[\\u0300-\\u036f]")
     private val NON_ALNUM = Regex("[^a-z0-9]+")
 
     /** Lower case, accents off, punctuation to spaces, padded with one space on each side. */
     fun norm(s: String): String =
-        " " + Normalizer.normalize(s.lowercase(), Normalizer.Form.NFD).replace(MARKS, "").replace(NON_ALNUM, " ").trim() + " "
+        " " + searchKey(s).replace(NON_ALNUM, " ").trim() + " "
 
     val ALIASES = mapOf(
         "zurich" to "Zürich HB", "zuerich" to "Zürich HB", "zurich main station" to "Zürich HB", "zurich hauptbahnhof" to "Zürich HB",
@@ -40,14 +42,14 @@ object Places {
     private val TO_WORDS = setOf("to", "towards", "nach", "a", "pour", "para", "hacia", "per", "verso", "zum", "zur", "bis", "into", "for")
     private val FROM_WORDS = setOf("from", "von", "ab", "de", "depuis", "da", "desde", "at", "in", "im", "bei", "en", "leaving")
 
-    private class Hit(val st: Station, val start: Int, val end: Int)
+    private class Hit(val st: CatalogStation, val start: Int, val end: Int)
 
     /** Stations named in [question], in order of appearance; the longest non-overlapping names win. */
-    fun placesIn(question: String, list: List<Station>): List<PlaceHit> {
+    fun placesIn(question: String, list: List<CatalogStation>): List<PlaceHit> {
         val byName = list.associateBy { it.name }
         val q = norm(question)
         val hits = mutableListOf<Hit>()
-        fun add(st: Station?, key: String) {
+        fun add(st: CatalogStation?, key: String) {
             if (st == null) return
             var i = q.indexOf(key)
             while (i >= 0) {
@@ -78,14 +80,10 @@ object Places {
         }
     }
 
-    fun distanceKm(lat: Double, lon: Double, s: Station): Double {
-        val dx = (s.lon - lon) * 111.32 * cos(lat * PI / 180)
-        val dy = (s.lat - lat) * 110.57
-        return hypot(dx, dy)
-    }
+    fun distanceKm(lat: Double, lon: Double, s: CatalogStation): Double = ch.lauzhack.twin.common.distanceKm(lat, lon, s.lat, s.lon)
 
     /** The closest station with at least 10 trains, or a busier one when it is barely further (port of twin.ts). */
-    fun nearest(list: List<Station>, lat: Double, lon: Double): Pair<Station, Double>? {
+    fun nearest(list: List<CatalogStation>, lat: Double, lon: Double): Pair<CatalogStation, Double>? {
         val near = list.filter { it.trains >= 10 }.map { it to distanceKm(lat, lon, it) }.sortedBy { it.second }.take(8)
         if (near.isEmpty()) return null
         return near.reduce { b, c -> if (c.second - b.second < 0.6 && c.first.trains > b.first.trains * 2) c else b }
@@ -97,14 +95,14 @@ object Places {
  * own stations learned from MQTT `info`) stands in for 30 s, so nearest station and place matching keep working.
  */
 class StationCatalog(
-    private val twin: TwinHttp,
+    private val twin: SbbTwinClient,
     private val now: () -> Long = System::currentTimeMillis,
-    private val local: () -> List<Station> = { emptyList() },
+    private val local: () -> List<CatalogStation> = { emptyList() },
 ) {
     private val mutex = Mutex()
-    @Volatile private var cache: Pair<Long, List<Station>>? = null
+    @Volatile private var cache: Pair<Long, List<CatalogStation>>? = null
 
-    suspend fun list(): List<Station> {
+    suspend fun list(): List<CatalogStation> {
         cache?.takeIf { now() - it.first < 600_000 }?.let { return it.second }
         return mutex.withLock {
             cache?.takeIf { now() - it.first < 600_000 }?.let { return@withLock it.second }
@@ -118,20 +116,20 @@ class StationCatalog(
                 cache = (now() - 570_000) to fallback // retry the twin in 30 s
                 return@withLock fallback
             }
-            val list = fromTwin.obj().objs("features").mapNotNull { f ->
-                val p = f.o("properties")
-                val c = f.o("geometry").a("coordinates")
+            val list = fromTwin.obj().objects("features").mapNotNull { f ->
+                val p = f.obj("properties")
+                val c = f.obj("geometry").array("coordinates")
                 val id = p.str("id") ?: return@mapNotNull null
                 val lon = (c.getOrNull(0) as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull() ?: return@mapNotNull null
                 val lat = (c.getOrNull(1) as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull() ?: return@mapNotNull null
-                Station(id, p.str("name") ?: id, p.num("trains")?.toInt() ?: 0, lon, lat)
+                CatalogStation(id, p.str("name") ?: id, p.double("trains")?.toInt() ?: 0, lon, lat)
             }
             cache = now() to list
             list
         }
     }
 
-    suspend fun byId(id: String?): Station? = id?.let { i -> list().find { it.id == i } }
+    suspend fun byId(id: String?): CatalogStation? = id?.let { i -> list().find { it.id == i } }
 
     /** `GET /api/nearest` body: `{id, name, lon, lat, distanceKm}`. */
     suspend fun nearestJson(lat: Double, lon: Double): JsonObject? {

@@ -1,8 +1,7 @@
-// Times as HH:mm in Europe/Zurich (payloads are epoch ms UTC), lines as SBB writes them ("IC 8").
+// Times as HH:mm in Europe/Zurich (payloads are epoch ms UTC).
 const clock = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Zurich", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 export const hhmm = (ms: number | null | undefined) => (ms ? clock.format(ms) : "");
 export const minutes = (ms: number) => Math.max(0, Math.round(ms / 60000));
-export const spacedLine = (line: string) => line.replace(/^([A-Z]+)(\d)/, "$1 $2");
 
 /** "1 h 05 min" / "47 min" */
 export function duration(ms: number) {

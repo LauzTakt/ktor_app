@@ -1,24 +1,19 @@
 package ch.lauzhack.twin.assistant
 
+import ch.lauzhack.twin.common.distanceKm
+import ch.lauzhack.twin.common.searchKey
 import ch.lauzhack.twin.state.LiveState
 import ch.lauzhack.twin.state.Station
-import java.text.Normalizer
-import java.util.Locale
-import kotlin.math.asin
-import kotlin.math.cos
-import kotlin.math.sqrt
 
 /**
  * Station search for the assistant: names in any of the Swiss languages or English, without accents, with or without
  * "station"/"Hauptbahnhof". Ranking: exact name, then name starting with the query, then every query word starting a
  * name word, then substring; ties go to the busier station (more trains calling), so "Zürich" is Zürich HB.
  *
- * Catalog = stations of the trains in service ([LiveState]) plus every station seen before ([catalog], SQLite).
+ * Catalog = [LiveState.stations]: the stations of the trains in service plus every station seen before (seeded from
+ * SQLite at startup, see [LiveState.seedStations]).
  */
-class StationResolver(
-    private val state: LiveState,
-    private val catalog: () -> Collection<Station> = { emptyList() },
-) {
+class StationResolver(private val state: LiveState) {
     @Volatile private var cached: Pair<Long, Map<String, Station>> = 0L to emptyMap()
 
     fun all(): Map<String, Station> {
@@ -26,14 +21,12 @@ class StationResolver(
         val (at, map) = cached
         val live = state.stations()
         if (now - at < CACHE_MS && map.size >= live.size) return map
-        val merged = HashMap<String, Station>()
-        runCatching { catalog() }.getOrDefault(emptyList()).forEach { merged[it.stopId] = it }
-        live.forEach { merged[it.stopId] = it }
+        val merged = live.associateByTo(HashMap()) { it.stopId }
         cached = now to merged
         return merged
     }
 
-    fun byId(stopId: String): Station? = state.station(stopId) ?: all()[stopId]
+    fun byId(stopId: String): Station? = state.station(stopId)
 
     /** Best matches for a name (or an exact stopId), best first. */
     fun search(query: String, limit: Int = 5): List<Station> {
@@ -140,12 +133,10 @@ class StationResolver(
         private const val CACHE_MS = 60_000L
         private val UIC = Regex("\\d{7}")
 
-        fun normalize(s: String): String =
-            Normalizer.normalize(s.lowercase(Locale.ROOT), Normalizer.Form.NFD)
-                .replace(Regex("\\p{M}+"), "")
-                .replace("ß", "ss")
-                .replace(Regex("[^a-z0-9]+"), " ")
-                .trim()
+        private val NON_ALNUM = Regex("[^a-z0-9]+")
+
+        /** [searchKey] with punctuation as single spaces. */
+        fun normalize(s: String): String = searchKey(s).replace(NON_ALNUM, " ").trim()
 
         private val WORD = Regex("[\\p{L}\\p{N}][\\p{L}\\p{N}'’./-]*")
         private val ARTICLES = setOf("the", "der", "die", "das", "le", "la", "les", "l", "il", "lo", "gare", "bahnhof", "station")
@@ -192,14 +183,6 @@ class StationResolver(
                 .let { if (it.size > 1 && it.first() in setOf("de", "di", "of")) it.drop(1) else it }
             val joined = kept.joinToString(" ")
             return ALIASES[joined] ?: ALIASES[joined.removeSuffix(" hb")]?.let { if (joined.endsWith(" hb")) "$it hb" else it } ?: joined
-        }
-
-        fun distanceKm(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-            val dLat = Math.toRadians(lat2 - lat1)
-            val dLon = Math.toRadians(lon2 - lon1)
-            val a = Math.sin(dLat / 2).let { it * it } +
-                cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) * Math.sin(dLon / 2).let { it * it }
-            return 2 * 6371.0 * asin(sqrt(a))
         }
     }
 }

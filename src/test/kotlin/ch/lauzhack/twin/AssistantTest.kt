@@ -1,10 +1,10 @@
 package ch.lauzhack.twin
 
-import ch.lauzhack.twin.api.v1.TwinQueries
+import ch.lauzhack.twin.query.TwinQueries
 import ch.lauzhack.twin.assistant.AnthropicLlm
 import ch.lauzhack.twin.assistant.AssistantConfig
 import ch.lauzhack.twin.assistant.AssistantTools
-import ch.lauzhack.twin.assistant.SbbTwinClient
+import ch.lauzhack.twin.twinapi.SbbTwinClient
 import ch.lauzhack.twin.assistant.StationResolver
 import ch.lauzhack.twin.assistant.buildAssistant
 import ch.lauzhack.twin.db.Database

@@ -1,5 +1,9 @@
 package ch.lauzhack.twin.assistant
 
+import ch.lauzhack.twin.common.int
+import ch.lauzhack.twin.common.long
+import ch.lauzhack.twin.twinapi.SbbTwinClient
+import ch.lauzhack.twin.twinapi.JourneyCache
 import com.anthropic.client.AnthropicClient
 import com.anthropic.client.okhttp.AnthropicOkHttpClient
 import com.anthropic.errors.RateLimitException
@@ -13,6 +17,8 @@ import com.anthropic.models.messages.TextBlockParam
 import com.anthropic.models.messages.ToolResultBlockParam
 import com.anthropic.models.messages.ToolUseBlock
 import io.ktor.server.config.ApplicationConfig
+import java.time.Duration
+import java.util.Optional
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -21,11 +27,9 @@ import kotlinx.coroutines.future.await
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonObject
 import org.slf4j.LoggerFactory
-import java.time.Duration
-import java.util.Optional
 
 data class AssistantConfig(
-    /** sbb-twin base URL (`SBB_TWIN_URL`). */
+    /** sbb-twin base URL (`twin.url` / `SBB_TWIN_URL`, shared with the passenger app). */
     val twinUrl: String = "http://127.0.0.1:8787",
     val model: String = "claude-sonnet-5-5",
     /** Fast mode (`speed: "fast"`): same model, faster output, premium price. Only Opus 5.5 / Fable 5.2 support it. */
@@ -48,7 +52,7 @@ data class AssistantConfig(
             fun s(key: String) = conf.propertyOrNull("assistant.$key")?.getString()?.trim()?.takeIf { it.isNotEmpty() }
             val d = AssistantConfig()
             return AssistantConfig(
-                twinUrl = s("twinUrl") ?: d.twinUrl,
+                twinUrl = conf.propertyOrNull("twin.url")?.getString()?.trim()?.takeIf { it.isNotEmpty() } ?: d.twinUrl,
                 model = s("model") ?: d.model,
                 fastMode = s("fastMode")?.toBooleanStrictOrNull() ?: d.fastMode,
                 effort = s("effort")?.lowercase() ?: d.effort,
@@ -108,12 +112,12 @@ class AnthropicLlm(private val client: AnthropicClient) : LlmClient {
 fun buildAssistant(
     cfg: AssistantConfig,
     llm: LlmClient,
-    queries: ch.lauzhack.twin.api.v1.TwinQueries,
+    queries: ch.lauzhack.twin.query.TwinQueries,
     state: ch.lauzhack.twin.state.LiveState,
     db: ch.lauzhack.twin.db.Database,
     journeys: JourneyCache = JourneyCache(),
 ): AssistantAgent {
-    val stations = StationResolver(state) { db.stations() }
+    val stations = StationResolver(state)
     val tools = AssistantTools(queries, db, stations, SbbTwinClient(cfg.twinUrl, cfg.twinTimeoutMs), journeys)
     return AssistantAgent(cfg, llm, tools)
 }

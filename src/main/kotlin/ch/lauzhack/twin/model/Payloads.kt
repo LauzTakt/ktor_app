@@ -25,11 +25,7 @@ data class Call(
     val actualArr: Long? = null,
     val actualDep: Long? = null,
     val skipped: Boolean = false,
-) {
-    /** Best known arrival time (falls back to departure for the first stop, which has no arrival). */
-    val bestArr: Long? get() = actualArr ?: expectedArr ?: plannedArr ?: bestDep
-    val bestDep: Long? get() = actualDep ?: expectedDep ?: plannedDep
-}
+)
 
 /** `trains/{trainId}/info` (retained, QoS 1). Only published while the train is in service; tombstone at the end. */
 @Serializable

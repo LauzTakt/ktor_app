@@ -1,8 +1,8 @@
 package ch.lauzhack.twin
 
-import ch.lauzhack.twin.api.v1.angleDiff
-import ch.lauzhack.twin.api.v1.haversineM
-import ch.lauzhack.twin.api.v1.move
+import ch.lauzhack.twin.common.angleDiff
+import ch.lauzhack.twin.common.haversineM
+import ch.lauzhack.twin.common.move
 import ch.lauzhack.twin.db.Database
 import ch.lauzhack.twin.model.TrainPosition
 import ch.lauzhack.twin.state.LiveState

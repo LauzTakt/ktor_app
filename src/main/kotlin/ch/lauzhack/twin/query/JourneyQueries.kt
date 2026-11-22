@@ -1,15 +1,15 @@
-package ch.lauzhack.twin.api.v1
+package ch.lauzhack.twin.query
 
+import ch.lauzhack.twin.common.angleDiff
+import ch.lauzhack.twin.common.haversineM
+import ch.lauzhack.twin.common.move
+import ch.lauzhack.twin.common.notFound
+import ch.lauzhack.twin.common.searchKey
 import ch.lauzhack.twin.state.LiveState
 import ch.lauzhack.twin.state.TrainState
 import kotlinx.serialization.Serializable
-import kotlin.math.PI
 import kotlin.math.abs
-import kotlin.math.asin
-import kotlin.math.cos
 import kotlin.math.min
-import kotlin.math.sin
-import kotlin.math.sqrt
 
 /*
  * Passenger-facing queries for the public user view (`/`): "where am I" (nearby trains / stations from the phone's
@@ -176,23 +176,3 @@ class JourneyQueries(private val state: LiveState, private val q: TwinQueries) {
         const val SPEED_PENALTY_M_PER_KMH = 4.0
     }
 }
-
-private const val EARTH_M = 6_371_000.0
-private fun Double.rad() = this * PI / 180
-
-internal fun haversineM(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-    val dLat = (lat2 - lat1).rad(); val dLon = (lon2 - lon1).rad()
-    val a = sin(dLat / 2) * sin(dLat / 2) + cos(lat1.rad()) * cos(lat2.rad()) * sin(dLon / 2) * sin(dLon / 2)
-    return 2 * EARTH_M * asin(sqrt(a.coerceIn(0.0, 1.0)))
-}
-
-/** Point [distM] metres from (lat, lon) along [bearingDeg] (small distances: equirectangular is plenty). */
-internal fun move(lat: Double, lon: Double, bearingDeg: Double, distM: Double): Pair<Double, Double> {
-    val b = bearingDeg.rad()
-    val dLat = distM * cos(b) / EARTH_M
-    val dLon = distM * sin(b) / (EARTH_M * cos(lat.rad()))
-    return (lat + dLat * 180 / PI) to (lon + dLon * 180 / PI)
-}
-
-/** Smallest angle between two bearings, 0…180. */
-internal fun angleDiff(a: Double, b: Double): Double = abs(((a - b) % 360 + 540) % 360 - 180)

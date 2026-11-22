@@ -1,5 +1,10 @@
 package ch.lauzhack.twin.assistant
 
+import ch.lauzhack.twin.common.ZURICH
+import ch.lauzhack.twin.common.arr
+import ch.lauzhack.twin.common.obj
+import ch.lauzhack.twin.common.str
+
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -22,7 +27,6 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.OffsetDateTime
-import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -31,12 +35,8 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToLong
 
-/** Swiss local time: every time the model reads or writes is in this zone. */
-val ZURICH: ZoneId = ZoneId.of("Europe/Zurich")
-private val HHMM = DateTimeFormatter.ofPattern("HH:mm")
 private val DAY_TIME = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy, HH:mm", Locale.ENGLISH)
 
-fun hhmm(ms: Long?): String? = ms?.let { Instant.ofEpochMilli(it).atZone(ZURICH).format(HHMM) }
 fun dayTime(ms: Long): String = Instant.ofEpochMilli(ms).atZone(ZURICH).format(DAY_TIME)
 
 /** Minutes of delay between an expected/actual and a planned time (rounded, + = late). */
@@ -64,20 +64,6 @@ fun parseTime(raw: String?, now: Long): Long? {
 }
 
 // ---------------------------------------------------------------- JSON helpers
-
-fun JsonElement?.obj(): JsonObject? = this as? JsonObject
-fun JsonElement?.arr(): JsonArray? = this as? JsonArray
-fun JsonObject.str(key: String): String? = (this[key] as? JsonPrimitive)?.takeUnless { it is JsonNull }?.contentOrNull?.takeIf { it.isNotBlank() }
-fun JsonObject.long(key: String): Long? = (this[key] as? JsonPrimitive)?.let { it.longOrNull ?: it.doubleOrNull?.toLong() }
-fun JsonObject.int(key: String): Int? = (this[key] as? JsonPrimitive)?.let { it.intOrNull ?: it.doubleOrNull?.toInt() ?: it.contentOrNull?.toIntOrNull() }
-fun JsonObject.double(key: String): Double? = (this[key] as? JsonPrimitive)?.doubleOrNull
-fun JsonObject.bool(key: String): Boolean? = (this[key] as? JsonPrimitive)?.let { it.booleanOrNull ?: it.contentOrNull?.toBooleanStrictOrNull() }
-fun JsonObject.objects(key: String): List<JsonObject> = (this[key] as? JsonArray)?.mapNotNull { it as? JsonObject }.orEmpty()
-fun JsonObject.strings(key: String): List<String> = when (val v = this[key]) {
-    is JsonArray -> v.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.takeIf { s -> s.isNotBlank() } }
-    is JsonPrimitive -> v.contentOrNull?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
-    else -> emptyList()
-}
 
 /** `put` that leaves out nulls, empty strings and empty lists, to keep tool results short. */
 fun JsonObjectBuilder.opt(key: String, value: Any?) {

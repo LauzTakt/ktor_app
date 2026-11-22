@@ -1,4 +1,4 @@
-package ch.lauzhack.twin.api.v1
+package ch.lauzhack.twin.query
 
 import ch.lauzhack.twin.db.IncidentRow
 import ch.lauzhack.twin.model.Call
@@ -6,11 +6,10 @@ import ch.lauzhack.twin.model.StopRef
 import ch.lauzhack.twin.state.LiveState
 import ch.lauzhack.twin.state.Station
 import ch.lauzhack.twin.state.TrainState
-import io.ktor.http.HttpStatusCode
-
-class ApiException(val status: HttpStatusCode, val code: String, override val message: String) : RuntimeException(message)
-
-fun notFound(what: String, id: String) = ApiException(HttpStatusCode.NotFound, "${what}_not_found", "$what '$id' not found")
+import ch.lauzhack.twin.common.NotFoundException
+import ch.lauzhack.twin.common.invalid
+import ch.lauzhack.twin.common.notFound
+import ch.lauzhack.twin.common.searchKey
 
 /** Bounding box `minLon,minLat,maxLon,maxLat` (WGS84). */
 data class BBox(val minLon: Double, val minLat: Double, val maxLon: Double, val maxLat: Double) {
@@ -20,7 +19,7 @@ data class BBox(val minLon: Double, val minLat: Double, val maxLon: Double, val 
         fun parse(s: String?): BBox? {
             if (s.isNullOrBlank()) return null
             val v = s.split(",").map { it.trim().toDoubleOrNull() }
-            if (v.size != 4 || v.any { it == null }) throw ApiException(HttpStatusCode.BadRequest, "bad_bbox", "bbox must be minLon,minLat,maxLon,maxLat")
+            if (v.size != 4 || v.any { it == null }) invalid("bad_bbox", "bbox must be minLon,minLat,maxLon,maxLat")
             return BBox(v[0]!!, v[1]!!, v[2]!!, v[3]!!)
         }
     }
@@ -39,16 +38,14 @@ data class TrainFilter(
 )
 
 /**
- * Read model of the API: joins the in-memory train state with the SQLite incidents.
+ * Read side of the app: joins the in-memory train state with the SQLite incidents. Used by the REST API, the
+ * WebSocket hub and the assistant; knows nothing about HTTP.
  * Pure functions of [state] + [activeIncidents], so they are cheap to test.
  */
 class TwinQueries(
     private val state: LiveState,
     private val activeIncidents: () -> List<IncidentRow>,
 ) {
-    /** For sibling query classes (JourneyQueries) that need the raw state. */
-    internal val liveState: LiveState get() = state
-
     // ------------------------------------------------------------------ trains
 
     fun trains(f: TrainFilter, limit: Int, offset: Int): PageDto<TrainSummaryDto> {
@@ -86,7 +83,7 @@ class TwinQueries(
 
     fun trainPosition(trainId: String): PositionDto {
         val t = state.train(trainId) ?: throw notFound("train", trainId)
-        return t.position?.toDto() ?: throw ApiException(HttpStatusCode.NotFound, "position_not_found", "no position yet for train '$trainId'")
+        return t.position?.toDto() ?: throw NotFoundException("position_not_found", "no position yet for train '$trainId'")
     }
 
     fun trainIncidents(trainId: String): List<IncidentDto> = incidentsForTrain(state.train(trainId) ?: throw notFound("train", trainId))
@@ -348,12 +345,6 @@ class TwinQueries(
         return trains.firstNotNullOfOrNull { trainIncidentMatch(inc, it) }
     }
 }
-
-private val DIACRITICS = Regex("\\p{Mn}+")
-
-/** Station-name search key: trimmed, lower case, accents removed ("Zürich" and "zurich" match; ß -> ss). */
-internal fun searchKey(s: String): String =
-    java.text.Normalizer.normalize(s.trim().lowercase(), java.text.Normalizer.Form.NFD).replace(DIACRITICS, "").replace("ß", "ss")
 
 private fun severityRank(s: String?) = when (s?.lowercase()) {
     "critical" -> 0

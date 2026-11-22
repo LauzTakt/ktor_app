@@ -35,3 +35,5 @@
  |                         +-----------------+ |     +---------------------+
  |                                             |
  +---------------------------------------------+
+
+Inside the Ktor app (packages, layers, how the modules call each other): [`CODE_ARCHITECTURE.md`](CODE_ARCHITECTURE.md).

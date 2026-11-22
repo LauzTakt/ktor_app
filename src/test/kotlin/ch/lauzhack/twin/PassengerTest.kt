@@ -3,7 +3,7 @@ package ch.lauzhack.twin
 import ch.lauzhack.twin.db.Database
 import ch.lauzhack.twin.passenger.PassengerConfig
 import ch.lauzhack.twin.passenger.Places
-import ch.lauzhack.twin.passenger.Station
+import ch.lauzhack.twin.passenger.CatalogStation
 import ch.lauzhack.twin.state.LiveState
 import com.sun.net.httpserver.HttpServer
 import io.ktor.client.request.get
@@ -68,11 +68,11 @@ class PassengerTest {
         """{"type":"Feature","properties":{"id":"$id","name":"$name","trains":$trains},"geometry":{"type":"Point","coordinates":[$lon,$lat]}}"""
 
     private val stations = listOf(
-        Station("8503000", "Zürich HB", 900, 8.5402, 47.3782),
-        Station("8503016", "Zürich Flughafen", 300, 8.5625, 47.4504),
-        Station("8507000", "Bern", 600, 7.4391, 46.9490),
-        Station("8500218", "Olten", 400, 7.9077, 47.3519),
-        Station("8507082", "Ins", 40, 7.1060, 46.9990),
+        CatalogStation("8503000", "Zürich HB", 900, 8.5402, 47.3782),
+        CatalogStation("8503016", "Zürich Flughafen", 300, 8.5625, 47.4504),
+        CatalogStation("8507000", "Bern", 600, 7.4391, 46.9490),
+        CatalogStation("8500218", "Olten", 400, 7.9077, 47.3519),
+        CatalogStation("8507082", "Ins", 40, 7.1060, 46.9990),
     )
 
     private fun withApp(backend: FakeBackend, cfg: PassengerConfig = PassengerConfig(twinUrl = backend.url), block: suspend ApplicationTestBuilder.() -> Unit) =
@@ -99,8 +99,8 @@ class PassengerTest {
     @Test
     fun `nearest prefers a much busier station that is barely further`() {
         val list = listOf(
-            Station("1", "Small", 20, 8.5000, 47.3800),
-            Station("2", "Big", 500, 8.5050, 47.3800), // ~0.38 km further
+            CatalogStation("1", "Small", 20, 8.5000, 47.3800),
+            CatalogStation("2", "Big", 500, 8.5050, 47.3800), // ~0.38 km further
         )
         assertEquals("Big", Places.nearest(list, 47.38, 8.4990)?.first?.name)
         assertNull(Places.nearest(list.map { it.copy(trains = 5) }, 47.38, 8.5))

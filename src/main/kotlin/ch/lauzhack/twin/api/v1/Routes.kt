@@ -1,15 +1,18 @@
 package ch.lauzhack.twin.api.v1
 
-import ch.lauzhack.twin.db.Database
+import ch.lauzhack.twin.common.invalid
+import ch.lauzhack.twin.query.BBox
+import ch.lauzhack.twin.query.BoardType
+import ch.lauzhack.twin.query.IncidentQueries
+import ch.lauzhack.twin.query.JourneyQueries
+import ch.lauzhack.twin.query.StopState
+import ch.lauzhack.twin.query.TrainFilter
+import ch.lauzhack.twin.query.TwinQueries
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.withCharset
 import io.ktor.http.Parameters
-import io.ktor.server.application.Application
-import io.ktor.server.application.install
-import io.ktor.server.plugins.BadRequestException
-import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.request.header
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
@@ -18,32 +21,9 @@ import io.ktor.server.routing.Route
 import io.ktor.server.routing.RoutingCall
 import io.ktor.server.routing.get
 import io.ktor.server.routing.route
-import org.slf4j.LoggerFactory
-
-/** Uniform `{"error":{"code","message"}}` bodies for every API error. */
-fun Application.installApiErrors() {
-    val log = LoggerFactory.getLogger("api")
-    install(StatusPages) {
-        exception<ApiException> { call, e -> call.respond(e.status, ErrorDto(ErrorBody(e.code, e.message))) }
-        exception<BadRequestException> { call, e ->
-            call.respond(HttpStatusCode.BadRequest, ErrorDto(ErrorBody("bad_request", e.message ?: "bad request")))
-        }
-        exception<Throwable> { call, e ->
-            log.error("Unhandled error on {}", call.request.local.uri, e)
-            call.respond(HttpStatusCode.InternalServerError, ErrorDto(ErrorBody("internal", "internal error")))
-        }
-        status(HttpStatusCode.Unauthorized) { call, status ->
-            call.respond(status, ErrorDto(ErrorBody("unauthorized", "staff login required: Authorization: Bearer <token> from POST /api/v1/auth/login")))
-        }
-        status(HttpStatusCode.NotFound) { call, status ->
-            call.respond(status, ErrorDto(ErrorBody("not_found", "no such endpoint: ${call.request.local.uri}")))
-        }
-    }
-}
 
 /** Public read API, mounted at `/api/v1`. Contract: docs/API.md. */
-fun Route.apiV1(q: TwinQueries, db: Database, mqttConnected: () -> Boolean) = route("/api/v1") {
-    val journey = JourneyQueries(q.liveState, q)
+fun Route.apiV1(q: TwinQueries, journey: JourneyQueries, incidents: IncidentQueries, mqttConnected: () -> Boolean) = route("/api/v1") {
     get("/status") { call.respond(q.status(mqttConnected())) }
 
     route("/trains") {
@@ -159,25 +139,15 @@ fun Route.apiV1(q: TwinQueries, db: Database, mqttConnected: () -> Boolean) = ro
     route("/incidents") {
         get {
             val p = call.request.queryParameters
-            val all = p.bool("all") ?: false
-            val severity = p["severity"]
-            val kind = p["scopeKind"]
             call.respond(
-                db.incidents(activeOnly = !all, withGeometry = p.bool("geometry") ?: false)
-                    .filter { severity == null || it.severity.equals(severity, ignoreCase = true) }
-                    .filter { kind == null || it.scope?.kind.equals(kind, ignoreCase = true) }
-                    .map { it.toDto() },
+                incidents.list(
+                    all = p.bool("all") ?: false, severity = p["severity"], scopeKind = p["scopeKind"],
+                    withGeometry = p.bool("geometry") ?: false,
+                ),
             )
         }
-        get("/{id}") {
-            val id = call.path("id")
-            call.respond(db.incident(id)?.toDto() ?: throw notFound("incident", id))
-        }
-        get("/{id}/history") {
-            val id = call.path("id")
-            if (db.incident(id) == null) throw notFound("incident", id)
-            call.respond(db.incidentHistory(id).map { it.toDto() })
-        }
+        get("/{id}") { call.respond(incidents.incident(call.path("id"))) }
+        get("/{id}/history") { call.respond(incidents.history(call.path("id"))) }
     }
 }
 
@@ -185,7 +155,7 @@ fun Route.apiV1(q: TwinQueries, db: Database, mqttConnected: () -> Boolean) = ro
 
 private fun RoutingCall.path(name: String): String = parameters[name]!!
 
-private fun bad(code: String, msg: String): Nothing = throw ApiException(HttpStatusCode.BadRequest, code, msg)
+private fun bad(code: String, msg: String): Nothing = invalid(code, msg)
 
 private fun Parameters.int(name: String, min: Int = Int.MIN_VALUE, max: Int = Int.MAX_VALUE): Int? {
     val raw = this[name] ?: return null

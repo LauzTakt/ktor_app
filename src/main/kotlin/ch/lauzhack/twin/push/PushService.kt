@@ -1,19 +1,18 @@
 package ch.lauzhack.twin.push
 
-import ch.lauzhack.twin.api.v1.ApiException
-import ch.lauzhack.twin.api.v1.TwinQueries
+import ch.lauzhack.twin.common.NotFoundException
+import ch.lauzhack.twin.common.UnavailableException
+import ch.lauzhack.twin.common.hhmm
+import ch.lauzhack.twin.common.invalid
 import ch.lauzhack.twin.db.IncidentRow
+import ch.lauzhack.twin.query.TwinQueries
 import ch.lauzhack.twin.state.LiveState
 import ch.lauzhack.twin.state.TrainState
-import io.ktor.http.HttpStatusCode
 import io.ktor.server.config.ApplicationConfig
-import org.slf4j.LoggerFactory
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import org.slf4j.LoggerFactory
 
 /**
  * Push configuration. VAPID keys: from env, else generated once and kept in SQLite (`push_setting`), so Web Push
@@ -112,23 +111,23 @@ class PushService(
     }
 
     fun registerFcm(token: String, platform: String?): PushDevice {
-        if (!fcmEnabled) throw ApiException(HttpStatusCode.ServiceUnavailable, "fcm_disabled", "native push is not configured on this server (FCM_SERVICE_ACCOUNT_JSON)")
+        if (!fcmEnabled) throw UnavailableException("fcm_disabled", "native push is not configured on this server (FCM_SERVICE_ACCOUNT_JSON)")
         if (token.length !in 20..4096) bad("bad_token", "token must be an FCM registration token")
         return store.upsertDevice("fcm", token, null, null, platform, now())
     }
 
     fun device(deviceId: String): PushDevice =
-        store.device(deviceId) ?: throw ApiException(HttpStatusCode.NotFound, "device_not_found", "device '$deviceId' not found")
+        store.device(deviceId) ?: throw NotFoundException("device_not_found", "device '$deviceId' not found")
 
     fun deleteDevice(deviceId: String) {
-        if (!store.deleteDevice(deviceId)) throw ApiException(HttpStatusCode.NotFound, "device_not_found", "device '$deviceId' not found")
+        if (!store.deleteDevice(deviceId)) throw NotFoundException("device_not_found", "device '$deviceId' not found")
     }
 
     fun subscriptions(deviceId: String): List<PushSubscription> { device(deviceId); return store.subscriptions(deviceId) }
 
     fun followTrain(deviceId: String, trainId: String, stopId: String?): PushSubscription {
         device(deviceId)
-        val t = queries.trainState(trainId) ?: throw ApiException(HttpStatusCode.NotFound, "train_not_found", "train '$trainId' not found")
+        val t = queries.trainState(trainId) ?: throw NotFoundException("train_not_found", "train '$trainId' not found")
         val stopName = stopId?.let { id ->
             val i = queries.upcomingIndexAt(t, id) ?: bad("bad_stopId", "train '$trainId' does not call at '$id' any more")
             t.info!!.calls[i].name
@@ -141,7 +140,7 @@ class PushService(
     fun followLine(deviceId: String, line: String): PushSubscription {
         device(deviceId)
         val trains = queries.trainsOnLine(line.trim())
-        if (trains.isEmpty()) throw ApiException(HttpStatusCode.NotFound, "line_not_found", "no train in service on line '$line'")
+        if (trains.isEmpty()) throw NotFoundException("line_not_found", "no train in service on line '$line'")
         val name = trains.first().info?.line ?: trains.first().position?.line ?: line.trim()
         val sub = store.upsertSubscription(deviceId, "line", name, null, "Line $name", null, now())
         queries.activeIncidentRows().filter { queries.lineIncidentMatch(it, name, trains) != null }.forEach { store.markNotified(sub.id, it.id) }
@@ -150,7 +149,7 @@ class PushService(
 
     fun unfollow(deviceId: String, subscriptionId: String) {
         if (!store.deleteSubscription(deviceId, subscriptionId)) {
-            throw ApiException(HttpStatusCode.NotFound, "subscription_not_found", "subscription '$subscriptionId' not found")
+            throw NotFoundException("subscription_not_found", "subscription '$subscriptionId' not found")
         }
     }
 
@@ -260,10 +259,5 @@ class PushService(
         else -> "Information"
     }
 
-    private fun bad(code: String, msg: String): Nothing = throw ApiException(HttpStatusCode.BadRequest, code, msg)
-
-    private companion object {
-        val HHMM: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.of("Europe/Zurich"))
-        fun hhmm(ms: Long): String = HHMM.format(Instant.ofEpochMilli(ms))
-    }
+    private fun bad(code: String, msg: String): Nothing = invalid(code, msg)
 }
