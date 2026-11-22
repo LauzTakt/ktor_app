@@ -318,3 +318,70 @@ button.stop:hover { background: var(--milk); }
   .assistant-fab[aria-expanded="true"] { top: calc(12px + env(safe-area-inset-top)); bottom: auto; width: 44px; height: 44px; }
   .assistant-fab[aria-expanded="true"] .icon { width: 22px; height: 22px; }
 }
+
+/* ---------- alerts (push notifications) ---------- */
+.follow { display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 16px; }
+.follow .main { flex: 1; min-width: 0; }
+.follow .t { font-weight: 700; font-size: 15px; }
+.follow .m { font-size: 13px; color: var(--metal); }
+.follow .btn { flex: none; height: 36px; padding: 0 16px; }
+.fic { width: 36px; height: 36px; flex: none; border-radius: 10px; background: var(--milk); color: var(--granite); display: grid; place-items: center; }
+.fic.on { background: var(--sky); color: #fff; }
+.vh { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.row:has(.vh:focus-visible) { outline: 2px solid var(--sky); outline-offset: 2px; }
+.sheet-backdrop { position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end; justify-content: center; background: rgba(0, 0, 0, 0.4);
+  animation: fadeIn2 200ms var(--ease) both; }
+.sheet-backdrop.leave { animation: fadeOut 200ms var(--ease) both; }
+.sheet { width: min(560px, 100%); max-height: 88dvh; overflow: auto; display: flex; flex-direction: column; gap: 12px; padding: 20px 16px max(16px, env(safe-area-inset-bottom));
+  background: var(--white); border-radius: 16px 16px 0 0; box-shadow: var(--shadow); animation: sheetIn 260ms var(--ease) both; }
+.sheet h2 { margin: 0; font-size: 18px; }
+.sheet .note { margin: 0; }
+.sheet .stop-pick { max-height: 44dvh; overflow: auto; }
+.sheet .stop-pick .row { min-height: 52px; cursor: pointer; }
+.sheet .stop-pick .t { font-size: 15px; }
+.sheet .actions { position: static; padding: 0; }
+.check { display: flex; align-items: center; gap: 10px; font-size: 14px; cursor: pointer; }
+.check input { width: 18px; height: 18px; accent-color: var(--sky); }
+@keyframes fadeIn2 { from { opacity: 0; } }
+@keyframes sheetIn { from { transform: translateY(24px); opacity: 0; } }
+@media (min-width: 600px) { .sheet-backdrop { align-items: center; } .sheet { border-radius: 16px; } }
+.linkish { flex: 1; min-width: 0; padding: 0; border: 0; background: none; text-align: left; cursor: pointer; }
+.linkish > * { display: block; }
+.warnbox { padding: 10px 12px; border: 1px solid var(--cloud); border-radius: 10px; background: var(--milk); color: var(--iron); margin: 0; }
+.row .warn, .lead .warn { color: var(--red); font-weight: 700; }
+.line-h { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.line-h #lname { font-size: 18px; font-weight: 400; color: var(--metal); }
+
+/* ---------- station: next departures ---------- */
+.deps-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-top: -4px; }
+.deps-head h2 { margin: 0; }
+.deps-head .note { color: var(--orange); font-weight: 700; }
+.deps { padding: 4px 0; overflow: hidden; }
+.deps > .placeholder { margin: 8px 12px; }
+.dep + .dep { border-top: 1px solid var(--cloud); }
+.dep-row { display: grid; grid-template-columns: 76px minmax(0, 1fr) auto; align-items: center; gap: 12px; width: 100%; min-height: 60px;
+  padding: 10px 12px 10px 16px; border: 0; background: none; text-align: left; cursor: pointer; transition: background-color 200ms var(--ease); }
+.dep-row:hover { background: var(--milk); }
+.dep-time { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.dep-time .delay, .dep-time .late { display: block; font-size: 13px; }
+.dep-main { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.dep-l1 { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.dep-l1 .h { font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dep-l2 { font-size: 13px; color: var(--metal); }
+.dep-l2 b { color: var(--at-station); font-weight: 700; }
+.dep-l2 .warn { color: var(--red); font-weight: 700; }
+.dep-l2 .inc { color: var(--red); font-weight: 700; white-space: nowrap; }
+.dep-l2 .inc .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--red); margin-right: 5px; vertical-align: 0; }
+.dep .chev { color: var(--granite); transition: transform 200ms var(--ease); }
+.dep.open .chev { transform: rotate(90deg); }
+.dep.cancelled .dep-l1 .h { color: var(--cancelled); }
+.dep-more { display: flex; flex-direction: column; gap: 10px; padding: 0 16px 14px; animation: rowIn 220ms var(--ease) both; }
+.dep-more .btn { align-self: flex-start; height: 36px; }
+.dep-stops { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 2px solid var(--cloud); display: flex; flex-direction: column; gap: 6px; }
+.dep-stops li { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+.dep-stops li .n { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dep-stops li .tm { flex: none; color: var(--iron); }
+.dep-stops li.gap .n { color: var(--metal); }
+.dep-all { width: 100%; height: 44px; border: 0; border-top: 1px solid var(--cloud); background: none; color: var(--sky); font-size: 14px; cursor: pointer; }
+.dep-all:hover { background: var(--milk); }
+.dep-time .cancel { display: block; font-size: 13px; color: var(--red); }

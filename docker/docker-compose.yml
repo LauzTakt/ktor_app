@@ -23,6 +23,11 @@ services:
       SBB_TWIN_URL: ${SBB_TWIN_URL:-http://127.0.0.1:8787}
       ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
       PASSENGER_AGENT_ID: ${PASSENGER_AGENT_ID:-}
+      # Push notifications (Web Push needs nothing; Android app: Firebase service account JSON, raw or base64)
+      FCM_SERVICE_ACCOUNT_JSON: ${FCM_SERVICE_ACCOUNT_JSON:-}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:push@train-twin.invalid}
       JAVA_OPTS: ${JAVA_OPTS:--XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError}
       PORT: 8080
       DB_PATH: /app/data/twin.sqlite

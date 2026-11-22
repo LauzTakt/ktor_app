@@ -92,6 +92,14 @@ data class TrainLiveDto(
     val stops: List<StopDto>,
 )
 
+/** A line with trains in service (GET /api/v1/lines). */
+@Serializable
+data class LineDto(val line: String, val category: String?, val trains: Int, val incidents: Int)
+
+/** GET /api/v1/lines/{line}: its trains in service and the incidents concerning it (`match` as for line subscriptions). */
+@Serializable
+data class LineDetailDto(val line: String, val category: String?, val trains: List<TrainSummaryDto>, val incidents: List<IncidentDto>)
+
 @Serializable
 data class StationDto(val stopId: String, val name: String, val lat: Double?, val lon: Double?)
 
@@ -128,6 +136,8 @@ data class BoardEntryDto(
     val atStation: Boolean,
     val startsHere: Boolean,
     val terminatesHere: Boolean,
+    /** Active incidents concerning this train (with `match`, same as `/trains/{id}/incidents`), worst first. */
+    val incidents: List<IncidentDto> = emptyList(),
 )
 
 @Serializable

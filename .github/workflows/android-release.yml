@@ -3,6 +3,8 @@
 #
 # Optional repo config:
 #   vars.MOBILE_SERVER_URL       - URL the app loads (default: the one in mobile/capacitor.config.json)
+#   secrets.GOOGLE_SERVICES_JSON_BASE64 - Firebase config of the Android app (push notifications). Alternatively commit
+#                                  mobile/android/app/google-services.json. Without it the app builds but cannot get push.
 #   secrets.ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
 #                                - release signing key. Without them the APK is signed with a throwaway
 #                                  debug key (installs fine, but users must uninstall before each update).
@@ -68,6 +70,19 @@ jobs:
           fi
           echo "App loads: $(jq -r .server.url capacitor.config.json)"
           npx cap sync android
+
+      - name: Firebase config (push notifications)
+        env:
+          GOOGLE_SERVICES_B64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_B64" ]; then
+            echo "$GOOGLE_SERVICES_B64" | base64 -d > android/app/google-services.json
+          fi
+          if [ -s android/app/google-services.json ]; then
+            echo "Firebase project: $(jq -r .project_info.project_id android/app/google-services.json)"
+          else
+            echo "::warning::No google-services.json: the APK cannot receive push notifications"
+          fi
 
       - name: Decode keystore
         env:

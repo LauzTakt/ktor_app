@@ -24,6 +24,11 @@ import ch.lauzhack.twin.mqtt.MqttIngestor
 import ch.lauzhack.twin.passenger.PassengerConfig
 import ch.lauzhack.twin.passenger.PassengerService
 import ch.lauzhack.twin.passenger.passengerApi
+import ch.lauzhack.twin.push.PushConfig
+import ch.lauzhack.twin.push.PushSender
+import ch.lauzhack.twin.push.PushService
+import ch.lauzhack.twin.push.PushStore
+import ch.lauzhack.twin.push.pushV1
 import ch.lauzhack.twin.state.LiveState
 import ch.lauzhack.twin.wallet.TripWatchJourneys
 import ch.lauzhack.twin.wallet.TripWatchService
@@ -112,7 +117,11 @@ fun Application.module() {
     val passengerCfg = PassengerConfig.from(conf)
     if (!passengerCfg.voiceEnabled) log.warn("ELEVENLABS_API_KEY or PASSENGER_AGENT_ID is not set: /api/voice/session will answer 503")
 
-    configureHttp(state, db, authConfig, assistant, passengerCfg, journeys, WalletConfig.fromEnvironment(dbPath)) {
+    // Push notifications (web + Android app): VAPID keys from env or generated; FCM from FCM_SERVICE_ACCOUNT_JSON.
+    val pushCfg = PushConfig.from(conf)
+    if (pushCfg.fcmServiceAccount == null) log.warn("FCM_SERVICE_ACCOUNT_JSON is not set: Android app push is disabled (Web Push still works)")
+
+    configureHttp(state, db, authConfig, assistant, passengerCfg, journeys, WalletConfig.fromEnvironment(dbPath), pushCfg) {
         ingestor?.isConnected ?: false
     }
 }
@@ -129,8 +138,10 @@ fun Application.configureHttp(
     passenger: PassengerConfig = PassengerConfig(),
     journeys: JourneyCache = JourneyCache(),
     wallet: WalletConfig = WalletConfig(),
+    push: PushConfig = PushConfig(),
+    pushSenders: Map<String, PushSender>? = null,
     mqttConnected: () -> Boolean,
-) {
+): PushService {
     install(CallLogging) {
         filter { call ->
             val path = call.request.path()
@@ -151,6 +162,8 @@ fun Application.configureHttp(
     val live = LiveUpdates(queries, db)
     val fleet = FleetFeed(state)
     val agent = assistant?.invoke(queries)
+    val pushService = PushService(PushStore(db), queries, state, push, pushSenders).also { it.start(db::addIncidentListener) }
+    monitor.subscribe(ApplicationStopped) { pushService.close() }
     val tripWatch = if (wallet.enabled) {
         val apple = wallet.apple()
         val google = wallet.google()
@@ -193,6 +206,7 @@ fun Application.configureHttp(
         tripWatchRoutes(tripWatch)
         liveUpdatesWs(live)
         fleetSocket(fleet)
+        pushV1(pushService)
         // Staff panel (staff only, else -> /login.html): `/admin/` = live map, `/admin/report.html` = report an incident.
         staffPages(
             auth,
@@ -205,6 +219,7 @@ fun Application.configureHttp(
         // `/` = public passenger view (index.html); login.html, JS, CSS, GeoJSON: public (no data in them).
         staticResources("/", "static")
     }
+    return pushService
 }
 
 /**

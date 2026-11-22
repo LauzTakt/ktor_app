@@ -9,6 +9,12 @@
       // Same theme as the staff pages (docs/STYLE.md): saved choice, else the system preference. Before first paint.
       document.documentElement.dataset.theme = localStorage.getItem("twin-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
     </script>
+    <!-- Installable web app (needed for alerts on iPhone: Share > Add to Home Screen) -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#eb0000" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Train twin" />
     <link rel="preload" href="https://cdn.app.sbb.ch/fonts/v1_6_subset/SBBWeb-Roman.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="https://cdn.app.sbb.ch/fonts/v1_6_subset/SBBWeb-Bold.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.1/dist/maplibre-gl.css" />
@@ -25,6 +31,7 @@
       <span class="live" id="live">Live</span>
       <span class="spacer"></span>
       <button class="btn" id="restart" type="button" hidden>Change trip</button>
+      <button class="icon-btn" id="alerts-btn" type="button" title="Your alerts" aria-label="Your alerts"></button>
       <button class="icon-btn" id="theme" type="button" title="Dark mode" aria-label="Dark mode"></button>
     </header>
 

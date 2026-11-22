@@ -79,6 +79,10 @@ fun Route.apiV1(q: TwinQueries, db: Database, mqttConnected: () -> Boolean) = ro
         get("/{trainId}/incidents") { call.respond(q.trainIncidents(call.path("trainId"))) }
     }
 
+    // Lines of the trains in service (for "follow a line": push notifications on its incidents).
+    get("/lines") { call.respond(q.lines(call.request.queryParameters["q"])) }
+    get("/lines/{line}") { call.respond(q.line(call.path("line"))) }
+
     route("/stations") {
         get {
             val p = call.request.queryParameters

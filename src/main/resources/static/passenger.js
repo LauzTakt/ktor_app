@@ -7,8 +7,11 @@
 //             else (or No) -> browsing: pick origin and destination by text or on the map
 //   On a train ("on tracks"): 3D train on a track, the whole route with the ETA of every stop, incidents on top.
 //   At a station: pick the destination (text or map) -> trains from here to there, live.
+//   Alerts (push.js): on a train, "Notify me" -> arrival at the chosen stop + its incidents; bell in the top bar ->
+//             your alerts + follow a whole line (incidents only); `/?line=<line>` -> line status.
 
 import { addRail, applyTheme as applyMapTheme, baseStyle } from "./common.js";
+import * as push from "./push.js";
 
 const TZ = "Europe/Zurich";
 const THEME_KEY = "twin-theme"; // shared with the staff pages
@@ -51,6 +54,7 @@ const ICONS = {
   list: '<path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/>',
   swap: '<path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/>',
   moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+  bell: '<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
 };
 const ic = (name, cls = "") => `<svg class="icon ${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
@@ -480,10 +484,13 @@ function destinationScreen(from) {
   show((s) => {
     s.innerHTML = `
       ${backBtn("Start again")}
-      <div class="step">From ${esc(from.name)}</div>
+      <div class="step">At ${esc(from.name)}</div>
+      <div class="deps-head"><h2>Next departures</h2><span class="note" id="deps-note"></span></div>
+      <div class="deps card" id="deps">${placeholders(3)}</div>
       <h1>Where are you going?</h1>
       <div id="picker"></div>`;
     $("[data-back]", s).onclick = () => restartBtn.click();
+    departuresBoard($("#deps", s), $("#deps-note", s), from);
     api(`/stations/${encodeURIComponent(from.stopId)}/destinations?limit=500`).catch(() => []).then((dests) => {
       const reachable = new Map(dests.map((d) => [d.station.stopId, { trains: d.trains, nextArrival: d.nextArrival }]));
       onLeave(stationPicker($("#picker", s), {
@@ -492,6 +499,97 @@ function destinationScreen(from) {
       }));
     });
   });
+}
+
+/**
+ * Next departures at [from] (station screen, above the destination picker): time + delay, line, destination,
+ * countdown, and a mark on trains with an incident. Tapping a row opens it: incidents, the next stops with their
+ * ETA, and a link to the train. Live: refreshed every 20 s and right away when an incident changes.
+ */
+function departuresBoard(box, note, from) {
+  const SHOW = 5, MAX = 12;
+  const open = new Set();          // expanded trainIds (kept across refreshes)
+  const details = new Map();       // trainId -> { stops } (fetched on first expand)
+  let entries = [], showAll = false, fails = 0;
+
+  const countdown = (e) => {
+    if (e.status === "cancelled") return '<span class="warn">Does not run</span>';
+    if (e.atStation) return "<b>At the platform</b>";
+    return untilText(e.time) === "now" ? "<b>Leaving now</b>" : esc(untilText(e.time));
+  };
+  const stopsHtml = (e) => {
+    const d = details.get(e.trainId);
+    if (!d) return '<div class="placeholder"></div>';
+    const k = d.stops.findIndex((x) => x.stopId === from.stopId && x.state !== "passed");
+    const next = d.stops.slice(k + 1).filter((x) => !x.skipped);
+    if (!next.length) return "";
+    const pick = next.length > 4 ? [...next.slice(0, 3), null, next.at(-1)] : next;
+    return `<ol class="dep-stops">${pick.map((x) => x ? `<li><span class="n">${esc(x.name)}</span>
+        <span class="tm">${timeHtml(x.plannedArr ?? x.plannedDep, x.expectedArr ?? x.expectedDep, e.status === "cancelled")}</span></li>`
+      : `<li class="gap"><span class="n">${next.length - 4} more stop${next.length - 4 === 1 ? "" : "s"}</span></li>`).join("")}</ol>`;
+  };
+
+  const draw = () => {
+    if (!entries.length) {
+      box.innerHTML = `<p class="empty">No departures in the next 2 hours from trains already running.</p>`;
+      return;
+    }
+    const list = showAll ? entries : entries.slice(0, SHOW);
+    box.innerHTML = list.map((e) => {
+      const n = e.incidents.length;
+      const isOpen = open.has(e.trainId);
+      const cancelled = e.status === "cancelled";
+      return `<div class="dep${isOpen ? " open" : ""}${cancelled ? " cancelled" : ""}">
+        <button class="dep-row" type="button" data-id="${esc(e.trainId)}" aria-expanded="${isOpen}">
+          <span class="dep-time">${timeHtml(e.plannedTime, e.time, cancelled)}</span>
+          <span class="dep-main">
+            <span class="dep-l1">${lineLabel(e)}<span class="h">${esc(e.headsign || e.destination?.name || "?")}</span></span>
+            <span class="dep-l2">${countdown(e)}${n ? ` · <span class="inc"><span class="dot"></span>${n} incident${n === 1 ? "" : "s"}</span>` : ""}</span>
+          </span>
+          ${ic("chevron", "chev")}
+        </button>
+        ${isOpen ? `<div class="dep-more">
+          ${n ? `<div class="list">${e.incidents.map(alertHtml).join("")}</div>` : ""}
+          ${stopsHtml(e)}
+          <button class="btn" type="button" data-train="${esc(e.trainId)}">Follow this train</button>
+        </div>` : ""}
+      </div>`;
+    }).join("") + (entries.length > SHOW
+      ? `<button class="dep-all" type="button">${showAll ? "Fewer departures" : `${entries.length - SHOW} more departure${entries.length - SHOW === 1 ? "" : "s"}`}</button>` : "");
+
+    box.querySelectorAll(".dep-row").forEach((b) => (b.onclick = () => {
+      const id = b.dataset.id;
+      buzz(8);
+      if (open.has(id)) open.delete(id); else {
+        open.add(id);
+        if (!details.has(id)) api(`/trains/${encodeURIComponent(id)}/stops`).then((stops) => { details.set(id, { stops }); draw(); }).catch(() => {});
+      }
+      draw();
+    }));
+    box.querySelectorAll("[data-train]").forEach((b) => (b.onclick = () => { buzz(15); onTracksScreen(b.dataset.train); }));
+    const all = $(".dep-all", box);
+    if (all) all.onclick = () => { showAll = !showAll; draw(); };
+  };
+
+  const refresh = () => api(`/stations/${encodeURIComponent(from.stopId)}/board?type=departures&windowMin=120&limit=${MAX}&includeSkipped=false`)
+    .then((b) => {
+      fails = 0;
+      entries = b.entries;
+      const late = entries.filter((e) => (e.delaySec ?? 0) >= LATE_SEC).length;
+      const inc = entries.filter((e) => e.incidents.length).length;
+      note.textContent = [late && `${late} late`, inc && `${inc} with incidents`].filter(Boolean).join(" · ");
+      details.clear();     // stop times change: refetch for the open rows
+      open.forEach((id) => api(`/trains/${encodeURIComponent(id)}/stops`).then((stops) => { details.set(id, { stops }); draw(); }).catch(() => {}));
+      draw();
+    })
+    .catch(() => { if (++fails === 1 && !entries.length) box.innerHTML = '<p class="empty">Departures could not be loaded. Retrying…</p>'; });
+  refresh();
+  const poll = setInterval(refresh, 20_000);
+  const clock = setInterval(draw, 15_000);       // countdowns
+  onLeave(() => { clearInterval(poll); clearInterval(clock); });
+  onLeave(live.subscribe("station", from.stopId, { frequencySec: 3600, windowMin: 120 }, (m) => {
+    if (m.type === "incident" && m.event !== "active") refresh();
+  }));
 }
 
 // ------------------------------------------------------------------ 3b. just browsing: origin + destination
@@ -635,6 +733,7 @@ function onTracksScreen(trainId, trip = null) {
         <div class="scene-cap"><span id="line"></span><div class="main"><div class="t" id="to"></div><div class="m" id="where"></div></div><span id="state"></span></div>
       </div>
       <div class="nextstop card" id="next"></div>
+      <div class="follow card" id="follow"></div>
       ${trip ? '<a id="watch-train" class="btn block watch-entry" hidden>Watch this trip</a>' : ''}
       <h2>Route</h2>
       <div class="route" id="route">${placeholders(4)}</div>`;
@@ -650,6 +749,7 @@ function onTracksScreen(trainId, trip = null) {
     onLeave(() => scene.then((x) => x?.dispose()));
 
     const drawAlerts = () => { $("#alerts", s).innerHTML = [...incidents.values()].map(alertHtml).join(""); };
+    const follow = followCard($("#follow", s), () => last && { trainId, train: last.train, stops: last.stops });
 
     const draw = (train, stops) => {
       last = { train, stops };
@@ -703,6 +803,7 @@ function onTracksScreen(trainId, trip = null) {
       d.incidents.forEach((i) => incidents.set(i.id, i));
       drawAlerts();
       draw(d.train, d.stops);
+      follow.refresh();
     }).catch((e) => { if (e.status === 404) trainGone(s); });
 
     onLeave(live.subscribe("train", trainId, { frequencySec: 3 }, (m) => {
@@ -719,6 +820,234 @@ function onTracksScreen(trainId, trip = null) {
     const tick = setInterval(() => last && draw(last.train, last.stops), 15_000);
     onLeave(() => clearInterval(tick));
   });
+}
+
+// ------------------------------------------------------------------ 6. alerts (push notifications, push.js)
+
+/** Subscriptions of this device, cached for the session (refreshed after every change). */
+const alerts = {
+  subs: null,
+  async load(force = false) {
+    if (!this.subs || force) this.subs = await push.list().catch(() => this.subs || []);
+    return this.subs;
+  },
+  forTrain(id) { return this.subs?.find((x) => x.kind === "train" && x.trainId === id); },
+  forLine(line) { return this.subs?.find((x) => x.kind === "line" && x.line?.toLowerCase() === line?.toLowerCase()); },
+};
+
+const subText = (x) => x.kind === "line" ? "Incidents on this line"
+  : x.stopName ? `Arrival at ${x.stopName} and incidents` : "Incidents on this train";
+
+/** "Notify me" card on the train screen. [ctx] returns { trainId, train, stops } once the train is loaded. */
+function followCard(el, ctx) {
+  const draw = () => {
+    const c = ctx();
+    if (!c) { el.hidden = true; return; }
+    el.hidden = false;
+    const sub = alerts.forTrain(c.trainId);
+    el.innerHTML = sub
+      ? `<span class="fic on">${ic("bell")}</span><div class="main"><div class="t">Alerts on</div><div class="m">${esc(subText(sub))}</div></div>
+         <button class="btn" type="button" data-edit>Change</button>`
+      : `<span class="fic">${ic("bell")}</span><div class="main"><div class="t">Get alerts</div><div class="m">Before your stop, and when an incident starts or ends.</div></div>
+         <button class="btn primary" type="button" data-edit>Notify me</button>`;
+    $("[data-edit]", el).onclick = () => { buzz(); followSheet(c, refresh); };
+  };
+  const refresh = () => alerts.load(true).then(draw);
+  draw();
+  return { refresh };
+}
+
+/** Bottom sheet: pick the stop where you get off (or incidents only), optionally follow the whole line too. */
+function followSheet({ trainId, train, stops }, done) {
+  const current = alerts.forTrain(trainId);
+  const line = train.line;
+  const lineSub = line ? alerts.forLine(line) : null;
+  const sup = push.support();
+  const ahead = stops.filter((x) => (x.state === "next" || x.state === "upcoming") && !x.skipped);
+  const chosen = current ? (current.stopId || "") : (ahead.at(-1)?.stopId || "");
+  const opt = (value, title, meta) => `<label class="row tap${value === chosen ? " selected" : ""}">
+      <input class="vh" type="radio" name="stop" value="${esc(value)}"${value === chosen ? " checked" : ""}><span class="radio"></span>
+      <span class="main"><span class="t">${esc(title)}</span><span class="m">${meta}</span></span></label>`;
+
+  const back = document.createElement("div");
+  back.className = "sheet-backdrop";
+  back.innerHTML = `<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-t">
+    <h2 id="sheet-t">Alerts for ${esc(line || train.category || "this train")} to ${esc(train.headsign || train.destination?.name || "?")}</h2>
+    ${sup.ok ? `
+      <p class="note">Where do you get off? You get an alert about ${Math.round(push.leadSec / 60)} min before arriving, and whenever an incident on this train starts or ends.</p>
+      <div class="list stop-pick">
+        ${ahead.map((x) => opt(x.stopId, x.name, `Arrival ${timeHtml(x.plannedArr ?? x.plannedDep, x.expectedArr ?? x.expectedDep)}`)).join("")}
+        ${opt("", "Incidents only", "No arrival alert")}
+      </div>
+      ${line && !lineSub ? `<label class="check"><input type="checkbox" id="sheet-line"> Also follow line ${esc(line)} (incidents only)</label>` : ""}
+      <div class="pair"><button class="btn" type="button" data-close>Cancel</button><button class="btn primary" type="button" id="sheet-ok">${current ? "Save" : "Turn on"}</button></div>
+      ${current ? '<button class="btn block" type="button" id="sheet-off">Turn off alerts for this train</button>' : ""}`
+    : `<p class="lead">${esc(sup.reason)}</p><div class="actions"><button class="btn block" type="button" data-close>Close</button></div>`}
+  </div>`;
+  document.body.append(back);
+  const close = () => { back.classList.add("leave"); setTimeout(() => back.remove(), 200); document.removeEventListener("keydown", onKey); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  back.addEventListener("click", (e) => { if (e.target === back || e.target.closest("[data-close]")) close(); });
+  back.querySelectorAll('input[name="stop"]').forEach((r) => r.addEventListener("change", () => {
+    back.querySelectorAll(".stop-pick .row").forEach((row) => row.classList.toggle("selected", row.contains(r) && r.checked));
+  }));
+  $(".stop-pick .row.selected", back)?.scrollIntoView({ block: "center" });
+  (back.querySelector("#sheet-ok") || back.querySelector("[data-close]")).focus({ preventScroll: true });
+
+  const busy = (btn, on, label) => { btn.disabled = on; if (label) btn.textContent = label; };
+  const ok = $("#sheet-ok", back);
+  if (ok) ok.onclick = async () => {
+    const stopId = back.querySelector('input[name="stop"]:checked')?.value || null;
+    busy(ok, true, "Turning on…");
+    try {
+      await push.follow({ trainId, stopId });
+      if ($("#sheet-line", back)?.checked) await push.follow({ line });
+      buzz(15);
+      const stop = ahead.find((x) => x.stopId === stopId);
+      toast(stop ? `Alerts on. We will tell you before ${stop.name}.` : "Alerts on for this train.");
+      close();
+      done();
+    } catch (e) {
+      toast(e.message || "Could not turn alerts on.", 6000);
+      busy(ok, false, current ? "Save" : "Turn on");
+    }
+  };
+  const off = $("#sheet-off", back);
+  if (off) off.onclick = async () => {
+    busy(off, true, "Turning off…");
+    try { await push.unfollow(current.id); toast("Alerts off for this train."); close(); done(); }
+    catch (e) { toast(e.message || "Could not turn alerts off."); busy(off, false, "Turn off alerts for this train"); }
+  };
+}
+
+/** Bell in the top bar: what this device follows, and "follow a line". [onBack] returns to the previous screen. */
+function alertsScreen(onBack) {
+  setUrl({});
+  show((s) => {
+    const sup = push.support();
+    s.innerHTML = `
+      ${backBtn()}
+      <h1>Your alerts</h1>
+      <p class="lead">Trains and lines you follow. Alerts arrive even when this page is closed.</p>
+      ${sup.ok ? "" : `<p class="note warnbox">${esc(sup.reason)}</p>`}
+      <div class="list" id="subs">${placeholders(2)}</div>
+      <h2>Follow a line</h2>
+      <p class="note">Get an alert when an incident starts or ends anywhere on a line.</p>
+      <label class="search">${ic("search")}<input id="lq" type="search" placeholder="Line, e.g. IC 1 or S3" autocomplete="off" enterkeyhint="search" aria-label="Search a line"></label>
+      <div class="list" id="lines">${placeholders(3)}</div>
+      <div class="actions" id="test-box" hidden><button class="btn block" type="button" id="test">Send a test alert</button></div>`;
+    $("[data-back]", s).onclick = () => onBack();
+    const self = () => alertsScreen(onBack);
+
+    const drawSubs = (subs) => {
+      $("#test-box", s).hidden = !push.enabled();
+      $("#subs", s).innerHTML = subs.length ? subs.map((x) => `
+        <div class="row">
+          <button class="main linkish" type="button" data-open="${esc(x.id)}"><span class="t">${esc(x.label)}</span><span class="m">${esc(subText(x))}</span></button>
+          <button class="icon-btn" type="button" data-off="${esc(x.id)}" title="Stop following" aria-label="Stop following ${esc(x.label)}">${ic("x")}</button>
+        </div>`).join("")
+        : `<p class="empty">You follow nothing yet. Open your train and tap Notify me, or follow a line below.</p>`;
+      $("#subs", s).querySelectorAll("[data-off]").forEach((b) => (b.onclick = async () => {
+        b.disabled = true;
+        try { await push.unfollow(b.dataset.off); buzz(); alerts.load(true).then(drawSubs); }
+        catch (e) { toast(e.message || "Could not remove it."); b.disabled = false; }
+      }));
+      $("#subs", s).querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => {
+        const x = subs.find((y) => y.id === b.dataset.open);
+        buzz(15);
+        if (x.kind === "train") onTracksScreen(x.trainId); else lineScreen(x.line, self);
+      }));
+    };
+    alerts.load(true).then(drawSubs);
+
+    let all = [];
+    const drawLines = () => {
+      const q = $("#lq", s).value.trim().toLowerCase().replace(/\s+/g, "");
+      const hits = all.filter((l) => !q || l.line.toLowerCase().replace(/\s+/g, "").includes(q)).slice(0, 30);
+      $("#lines", s).innerHTML = hits.length ? hits.map((l) => `
+        <button class="row" type="button" data-line="${esc(l.line)}">${lineLabel(l)}
+          <span class="main"><span class="t">Line ${esc(l.line)}</span><span class="m">${l.trains} train${l.trains === 1 ? "" : "s"} running${l.incidents ? ` · <span class="warn">${l.incidents} incident${l.incidents === 1 ? "" : "s"}</span>` : " · No incidents"}</span></span>
+          ${alerts.forLine(l.line) ? `<span class="side">${ic("bell")}</span>` : ""}${ic("chevron", "chev")}</button>`).join("")
+        : `<p class="empty">${all.length ? "No line in service matches." : "No line in service right now."}</p>`;
+      $("#lines", s).querySelectorAll("[data-line]").forEach((b) => (b.onclick = () => { buzz(15); lineScreen(b.dataset.line, self); }));
+    };
+    api("/lines").then((l) => { all = l; drawLines(); }).catch(() => { $("#lines", s).innerHTML = '<p class="empty">Lines could not be loaded.</p>'; });
+    $("#lq", s).addEventListener("input", debounce(drawLines, 120));
+
+    $("#test", s).onclick = async (e) => {
+      e.target.disabled = true;
+      try {
+        const r = await push.test();
+        toast(r.result === "ok" ? "Test alert sent. It should arrive in a few seconds." : "The test alert could not be delivered.");
+      } catch (err) { toast(err.message || "Could not send the test alert."); }
+      e.target.disabled = false;
+    };
+  }, { restart: false });
+}
+
+/** Line status: incidents concerning the line and its trains in service; follow it for incident alerts. */
+function lineScreen(line, onBack) {
+  setUrl({ line });
+  show((s) => {
+    s.innerHTML = `
+      ${backBtn()}
+      <div class="step">Line status</div>
+      <h1 class="line-h"><span id="lbl"></span><span id="lname">Line ${esc(line)}</span></h1>
+      <p class="lead" id="lsum">&nbsp;</p>
+      <div class="follow card" id="follow"><div class="main"><div class="m">&nbsp;</div></div></div>
+      <h2>Incidents</h2>
+      <div class="list" id="linc">${placeholders(1)}</div>
+      <h2>Trains in service</h2>
+      <div class="list" id="ltr">${placeholders(3)}</div>`;
+    $("[data-back]", s).onclick = () => onBack();
+    let name = line;
+
+    const drawFollow = () => {
+      const sub = alerts.forLine(name);
+      const el = $("#follow", s);
+      el.innerHTML = sub
+        ? `<span class="fic on">${ic("bell")}</span><div class="main"><div class="t">Following this line</div><div class="m">Alerts when an incident starts or ends.</div></div>
+           <button class="btn" type="button" id="lf">Stop</button>`
+        : `<span class="fic">${ic("bell")}</span><div class="main"><div class="t">Follow this line</div><div class="m">Alerts when an incident starts or ends.</div></div>
+           <button class="btn primary" type="button" id="lf">Follow</button>`;
+      $("#lf", el).onclick = async (e) => {
+        e.target.disabled = true;
+        try {
+          if (sub) { await push.unfollow(sub.id); toast(`You no longer follow line ${name}.`); }
+          else { await push.follow({ line: name }); buzz(15); toast(`Following line ${name}.`); }
+          await alerts.load(true);
+        } catch (err) { toast(err.message || "Could not change it.", 6000); }
+        drawFollow();
+      };
+    };
+
+    const draw = (d) => {
+      name = d.line;
+      $("#lbl", s).innerHTML = lineLabel(d, true);
+      $("#lname", s).textContent = `to ${new Set(d.trains.map((t) => t.headsign).filter(Boolean)).size > 2 ? "several destinations" : [...new Set(d.trains.map((t) => t.headsign).filter(Boolean))].join(" / ") || "?"}`;
+      $("#lsum", s).innerHTML = d.incidents.length
+        ? `<span class="warn">${d.incidents.length} incident${d.incidents.length === 1 ? "" : "s"}</span> · ${d.trains.length} train${d.trains.length === 1 ? "" : "s"} running`
+        : `No incidents · ${d.trains.length} train${d.trains.length === 1 ? "" : "s"} running`;
+      $("#linc", s).innerHTML = d.incidents.length ? d.incidents.map(alertHtml).join("") : '<p class="empty">Nothing to report on this line.</p>';
+      $("#ltr", s).innerHTML = d.trains.map((t) => `
+        <button class="row" type="button" data-id="${esc(t.trainId)}">${lineLabel(t)}
+          <span class="main"><span class="t">to ${esc(t.headsign || t.destination?.name || "?")}</span>
+            <span class="m">${t.currentStop ? `At ${esc(t.currentStop.name)}` : t.nextStop ? `Next: ${esc(t.nextStop.name)}` : ""}</span></span>
+          <span class="side">${stateHtml(t)}</span></button>`).join("");
+      $("#ltr", s).querySelectorAll("[data-id]").forEach((b) => (b.onclick = () => { buzz(15); onTracksScreen(b.dataset.id); }));
+    };
+    const refresh = () => api(`/lines/${encodeURIComponent(line)}`).then(draw).catch((e) => {
+      if (e.status === 404) {
+        $("#lsum", s).textContent = "No train is running on this line right now.";
+        $("#linc", s).innerHTML = ""; $("#ltr", s).innerHTML = "";
+      } else toast("Connection problem. Retrying…");
+    });
+    alerts.load().then(drawFollow);
+    refresh();
+    const poll = setInterval(refresh, 30_000);
+    onLeave(() => clearInterval(poll));
+  }, { restart: true });
 }
 
 function trainGone(s) {
@@ -911,17 +1240,25 @@ async function trainScene(canvas) {
 // ------------------------------------------------------------------ boot
 
 live.connect();
+push.init({ onForeground: (n) => { buzz([20, 40, 20]); toast(n.body ? `${n.title} · ${n.body}` : n.title, 6000); } });
+$("#alerts-btn").innerHTML = ic("bell");
+$("#alerts-btn").addEventListener("click", () => { buzz(); const back = location.search; alertsScreen(() => routeFromUrl(back, { back: true })); });
 tripWatchAvailable.then((available) => {
   $(".watched-trips-nav").hidden = !available;
 });
-const params = new URLSearchParams(location.search);
+routeFromUrl(location.search);
+
+function routeFromUrl(search, opts = {}) {
+const params = new URLSearchParams(search);
 const qrTrain = params.get("train");
 const qrStation = params.get("station");
+const qrLine = params.get("line");
 if (qrTrain) {
   const from = params.get("from");
   const to = params.get("to");
   onTracksScreen(qrTrain, from && to ? { fromStopId: from, toStopId: to } : null);
 }
+else if (qrLine) lineScreen(qrLine, () => alertsScreen(() => detectScreen({ back: true })));
 else if (qrStation) {
   api(`/stations/${encodeURIComponent(qrStation)}`).then((d) => {
     const from = { stopId: d.station.stopId, name: d.station.name };
@@ -929,4 +1266,5 @@ else if (qrStation) {
     if (to) api(`/stations/${encodeURIComponent(to)}`).then((x) => connectionsScreen(from, { stopId: x.station.stopId, name: x.station.name })).catch(() => destinationScreen(from));
     else destinationScreen(from);
   }).catch(() => browseScreen({ note: "This station code is not known. Choose where you start and where you go." }));
-} else detectScreen();
+} else detectScreen(opts);
+}

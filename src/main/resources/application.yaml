@@ -36,3 +36,12 @@ assistant:
 passenger:
   agentId: "$PASSENGER_AGENT_ID:"
   elevenLabsUrl: "$ELEVENLABS_API_URL:https://api.elevenlabs.io"
+
+# Push notifications (push/, docs/API.md "Push notifications"). VAPID keys: leave empty to generate a pair once (kept in
+# SQLite); set both to pin them (base64url, e.g. from `npx web-push generate-vapid-keys`). The Firebase service account
+# for the Android app is read from FCM_SERVICE_ACCOUNT_JSON (env only, raw JSON or base64); without it only Web Push works.
+push:
+  vapidPublicKey: "$VAPID_PUBLIC_KEY:"
+  vapidPrivateKey: "$VAPID_PRIVATE_KEY:"
+  vapidSubject: "$VAPID_SUBJECT:mailto:push@train-twin.invalid"
+  arrivalLeadSec: "$PUSH_ARRIVAL_LEAD_SEC:120"
