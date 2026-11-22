@@ -4,7 +4,7 @@ import ch.lauzhack.twin.db.IncidentRow
 import ch.lauzhack.twin.model.Call
 import ch.lauzhack.twin.model.StopRef
 import ch.lauzhack.twin.state.LiveState
-import ch.lauzhack.twin.state.Station
+import ch.lauzhack.twin.model.Station
 import ch.lauzhack.twin.state.TrainState
 import ch.lauzhack.twin.common.NotFoundException
 import ch.lauzhack.twin.common.invalid

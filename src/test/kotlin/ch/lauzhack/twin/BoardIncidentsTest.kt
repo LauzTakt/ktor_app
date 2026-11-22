@@ -22,7 +22,7 @@ class BoardIncidentsTest {
         st.upsertInfo(info("t-ok", aheadFrom = 0, stops = listOf("B", "X"), line = "IC 1"))  // B -> X
         st.replacePositions(mapOf("t-hit" to pos("t-hit", "B"), "t-ok" to pos("t-ok", "B")), T0 + 600_000)
         val db = testDb()
-        db.upsertIncident(Incident(id = "i-cd", title = "Fault C-D", severity = "major", createdAt = 1, updatedAt = 1, scope = IncidentScope(kind = "section", from = "C", to = "D")), "{}")
+        db.incidents.upsert(Incident(id = "i-cd", title = "Fault C-D", severity = "major", createdAt = 1, updatedAt = 1, scope = IncidentScope(kind = "section", from = "C", to = "D")), "{}")
         db.awaitIncidents()
         application { configureHttp(st, db) { true } }
 

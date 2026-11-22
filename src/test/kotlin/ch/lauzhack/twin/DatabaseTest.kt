@@ -1,6 +1,5 @@
 package ch.lauzhack.twin
 
-import ch.lauzhack.twin.db.Database
 import ch.lauzhack.twin.model.Incident
 import ch.lauzhack.twin.model.IncidentScope
 import kotlin.test.Test
@@ -17,20 +16,20 @@ class DatabaseTest {
     @Test
     fun incidentLifecycleIsRecordedOncePerChange() {
         val db = testDb()
-        db.upsertIncident(inc(10), "{}")
-        db.upsertIncident(inc(10), "{}") // retained re-delivery: ignored
-        db.upsertIncident(inc(20, "critical"), "{}")
-        db.removeIncident("i-1")
-        db.removeIncident("i-1") // duplicate tombstone: ignored
+        db.incidents.upsert(inc(10), "{}")
+        db.incidents.upsert(inc(10), "{}") // retained re-delivery: ignored
+        db.incidents.upsert(inc(20, "critical"), "{}")
+        db.incidents.remove("i-1")
+        db.incidents.remove("i-1") // duplicate tombstone: ignored
 
-        val history = eventually({ db.incidentHistory("i-1") }) { it.size >= 3 }
+        val history = eventually({ db.incidents.history("i-1") }) { it.size >= 3 }
         assertEquals(listOf("created", "updated", "removed"), history.map { it.kind })
-        assertEquals(0, db.incidents(activeOnly = true).size)
-        assertNotNull(db.incidents(activeOnly = false).single().removedAt)
-        assertEquals("8516218", db.incidents(activeOnly = false).single().scope?.to)
+        assertEquals(0, db.incidents.list(activeOnly = true).size)
+        assertNotNull(db.incidents.list(activeOnly = false).single().removedAt)
+        assertEquals("8516218", db.incidents.list(activeOnly = false).single().scope?.to)
 
-        db.upsertIncident(inc(30), "{}") // re-marked
-        val active = eventually({ db.incidents(activeOnly = true) }) { it.isNotEmpty() }
+        db.incidents.upsert(inc(30), "{}") // re-marked
+        val active = eventually({ db.incidents.list(activeOnly = true) }) { it.isNotEmpty() }
         assertNull(active.single().removedAt)
         db.close()
     }
@@ -38,9 +37,9 @@ class DatabaseTest {
     @Test
     fun reconcileMarksMissingIncidents() {
         val db = testDb()
-        db.upsertIncident(inc(10), "{}")
-        db.reconcileActiveIncidents(emptySet())
-        val h = eventually({ db.incidentHistory("i-1") }) { it.size >= 2 }
+        db.incidents.upsert(inc(10), "{}")
+        db.incidents.reconcile(emptySet())
+        val h = eventually({ db.incidents.history("i-1") }) { it.size >= 2 }
         assertEquals("missing", h.last().kind)
         db.close()
     }

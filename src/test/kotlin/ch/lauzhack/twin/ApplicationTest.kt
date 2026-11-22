@@ -1,7 +1,7 @@
 package ch.lauzhack.twin
 
 import ch.lauzhack.twin.db.Database
-import ch.lauzhack.twin.state.Station
+import ch.lauzhack.twin.model.Station
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
@@ -23,7 +23,7 @@ class ApplicationTest {
         val dbPath = createTempFile("twin-stations", ".sqlite")
         val station = Station("8503000", "Zürich HB", 47.378, 8.540)
         try {
-            Database(dbPath.toString()).use { it.saveStations(listOf(station)) }
+            Database(dbPath.toString()).use { it.stations.save(listOf(station)) }
             testApplication {
                 environment {
                     config = MapApplicationConfig("mqtt.enabled" to "false", "db.path" to dbPath.toString())

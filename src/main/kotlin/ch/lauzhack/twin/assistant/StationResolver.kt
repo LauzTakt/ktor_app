@@ -3,7 +3,7 @@ package ch.lauzhack.twin.assistant
 import ch.lauzhack.twin.common.distanceKm
 import ch.lauzhack.twin.query.StationSearch
 import ch.lauzhack.twin.state.LiveState
-import ch.lauzhack.twin.state.Station
+import ch.lauzhack.twin.model.Station
 
 /**
  * Station search for the assistant over [StationSearch] (the matching shared with the REST API and the passenger app);

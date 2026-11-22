@@ -9,7 +9,7 @@ import ch.lauzhack.twin.common.objects
 import ch.lauzhack.twin.common.str
 import ch.lauzhack.twin.twinapi.SbbTwinClient
 import ch.lauzhack.twin.twinapi.TwinException
-import ch.lauzhack.twin.web.FleetFeed
+import ch.lauzhack.twin.query.FleetFeed
 import io.ktor.http.ContentType
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode

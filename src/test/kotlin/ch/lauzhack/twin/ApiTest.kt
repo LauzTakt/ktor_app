@@ -34,7 +34,7 @@ class ApiTest {
             T0 + 1_200_000, // twin clock = planned time at C
         )
         val db = testDb()
-        db.upsertIncident(
+        db.incidents.upsert(
             Incident(id = "i-1", title = "Fault C-D", severity = "critical", createdAt = 1, updatedAt = 1,
                 scope = IncidentScope(kind = "section", from = "C", to = "D")),
             "{}",

@@ -34,7 +34,7 @@ fun <T> eventually(block: () -> T, ok: (T) -> Boolean): T {
 }
 
 /** Waits until the writer thread has stored at least [n] active incidents. */
-fun Database.awaitIncidents(n: Int = 1) = eventually({ incidents(true) }) { it.size >= n }
+fun Database.awaitIncidents(n: Int = 1) = eventually({ incidents.list(true) }) { it.size >= n }
 
 fun pos(id: String, atStop: String?, delaySec: Int = 0, ts: Long = T0) =
     TrainPosition(trainId = id, lat = 47.0, lon = 8.0, atStopId = atStop, delaySec = delaySec, motion = if (atStop != null) "stopped" else "moving", ts = ts, streamId = "s")

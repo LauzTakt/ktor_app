@@ -1,7 +1,7 @@
 package ch.lauzhack.twin
 
 import ch.lauzhack.twin.state.LiveState
-import ch.lauzhack.twin.state.Station
+import ch.lauzhack.twin.model.Station
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
@@ -15,9 +15,9 @@ class StationCatalogTest {
     @Test
     fun `catalog stations are found nearby without any train in service`() = testApplication {
         val db = testDb()
-        db.saveStations(listOf(Station("8507100", "Thun", 46.754852, 7.629607)))
-        eventually({ db.stations() }) { it.isNotEmpty() }
-        val st = LiveState(db.stations())
+        db.stations.save(listOf(Station("8507100", "Thun", 46.754852, 7.629607)))
+        eventually({ db.stations.all() }) { it.isNotEmpty() }
+        val st = LiveState(db.stations.all())
         application { configureHttp(st, db) { true } }
         val r = client.get("/api/v1/stations/nearby?lat=46.75489&lon=7.629645&radiusM=500&limit=3")
         assertEquals(HttpStatusCode.OK, r.status)

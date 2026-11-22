@@ -32,6 +32,7 @@ import ch.lauzhack.twin.push.pushV1
 import ch.lauzhack.twin.query.IncidentQueries
 import ch.lauzhack.twin.query.JourneyQueries
 import ch.lauzhack.twin.query.TwinQueries
+import ch.lauzhack.twin.report.ReportService
 import ch.lauzhack.twin.state.LiveState
 import ch.lauzhack.twin.wallet.TripWatchJourneys
 import ch.lauzhack.twin.wallet.TripWatchService
@@ -39,7 +40,7 @@ import ch.lauzhack.twin.wallet.TripWatchStore
 import ch.lauzhack.twin.wallet.TripWatchConfig
 import ch.lauzhack.twin.wallet.tripWatchRoutes
 import ch.lauzhack.twin.web.AppLinksConfig
-import ch.lauzhack.twin.web.FleetFeed
+import ch.lauzhack.twin.query.FleetFeed
 import ch.lauzhack.twin.web.appLinks
 import ch.lauzhack.twin.web.fleetSocket
 import io.ktor.server.http.content.staticResources
@@ -81,7 +82,7 @@ fun Application.module() {
     val conf = environment.config
     val dbPath = conf.propertyOrNull("db.path")?.getString() ?: "data/twin.sqlite"
     val db = Database(dbPath)
-    val state = LiveState(db.stations())
+    val state = LiveState(db.stations.all())
     val journeys = JourneyCache()
 
     val mqttEnabled = conf.propertyOrNull("mqtt.enabled")?.getString()?.toBooleanStrictOrNull() ?: true
@@ -93,7 +94,7 @@ fun Application.module() {
                 password = conf.propertyOrNull("mqtt.password")?.getString(),
                 clientIdPrefix = conf.propertyOrNull("mqtt.clientIdPrefix")?.getString() ?: "ktor-app",
             ),
-            state, db,
+            state, db.incidents, db.stations,
         ).also { it.start() }
     } else null
 
@@ -114,7 +115,7 @@ fun Application.module() {
     llm?.keepWarm(assistantCfg.model)
     val assistant = llm?.let { l ->
         { q: TwinQueries ->
-            buildAssistant(assistantCfg, l, q, state, db, journeys).also { a -> Thread({ Thread.sleep(8_000); a.warmUp() }, "assistant-warm-up").apply { isDaemon = true }.start() }
+            buildAssistant(assistantCfg, l, q, state, IncidentQueries(db.incidents), ReportService(db.reports, state), journeys).also { a -> Thread({ Thread.sleep(8_000); a.warmUp() }, "assistant-warm-up").apply { isDaemon = true }.start() }
         }
     }
 
@@ -162,14 +163,14 @@ fun Application.configureHttp(
         timeout = 60.seconds
     }
     // Staff auth: existing routes stay public; staff-only calls go inside `staffOnly { }` (see auth/Auth.kt).
-    val auth = AuthService(db, authConfig).also { it.ensureDefaultAdmin() }
+    val auth = AuthService(db.users, db.tokens, authConfig).also { it.ensureDefaultAdmin() }
     installStaffAuth(auth)
-    val queries = TwinQueries(state) { db.incidents(activeOnly = true) }
+    val queries = TwinQueries(state) { db.incidents.list(activeOnly = true) }
     val journeyQueries = JourneyQueries(state, queries)
-    val live = LiveUpdates(queries, db)
+    val live = LiveUpdates(queries, db.incidents)
     val fleet = FleetFeed(state)
     val agent = assistant?.invoke(queries)
-    val pushService = PushService(PushStore(db), queries, state, push, pushSenders).also { it.start(db::addIncidentListener) }
+    val pushService = PushService(PushStore(db.sqlite), queries, state, push, pushSenders).also { it.start(db.incidents::addListener) }
     monitor.subscribe(ApplicationStopped) { pushService.close() }
     val tripWatch = if (tripWatchConfig.enabled) {
         val apple = tripWatchConfig.apple()
@@ -181,7 +182,7 @@ fun Application.configureHttp(
             fresh = { mqttConnected() && queries.status(true).twin?.online == true },
         ).also { service ->
             val changes = Channel<Unit>(Channel.CONFLATED)
-            db.addIncidentListener { _, _ -> changes.trySend(Unit) }
+            db.incidents.addListener { _, _ -> changes.trySend(Unit) }
             val worker = CoroutineScope(Dispatchers.IO).launch {
                 while (isActive) {
                     try {
@@ -206,9 +207,9 @@ fun Application.configureHttp(
         appLinks(appLinks) // /.well-known/ files: QR codes and links open the mobile app (web/AppLinks.kt)
         // Swagger UI at /swagger, spec at /swagger/documentation.yaml (keep in sync with docs/API.md and api/v1/).
         swaggerUI(path = "swagger", swaggerFile = "openapi/documentation.yaml")
-        apiV1(queries, journeyQueries, IncidentQueries(db), mqttConnected)
+        apiV1(queries, journeyQueries, IncidentQueries(db.incidents), mqttConnected)
         authV1(auth)
-        reportsV1(state, db)
+        reportsV1(ReportService(db.reports, state))
         assistantV1(agent)
         passengerApi(PassengerService(passenger, fleet, journeys.takeIf { tripWatch != null }) { localCatalog(state) })
         tripWatchRoutes(tripWatch)

@@ -32,11 +32,9 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.nio.ByteBuffer
-import java.security.KeyFactory
 import java.security.Signature
 import java.security.interfaces.ECPrivateKey
 import java.security.interfaces.ECPublicKey
-import java.security.spec.ECPublicKeySpec
 import java.util.concurrent.CopyOnWriteArrayList
 import javax.crypto.Cipher
 import javax.crypto.KeyAgreement
@@ -120,8 +118,8 @@ class PushTest {
         val st = LiveState()
         val db = testDb()
         val fake = Fake()
-        val q = TwinQueries(st) { db.incidents(activeOnly = true) }
-        val push = PushService(PushStore(db), q, st, PushConfig(arrivalLeadSec = 120), mapOf("web" to fake, "fcm" to fake))
+        val q = TwinQueries(st) { db.incidents.list(activeOnly = true) }
+        val push = PushService(PushStore(db.sqlite), q, st, PushConfig(arrivalLeadSec = 120), mapOf("web" to fake, "fcm" to fake))
         val device = push.registerWeb("https://push.example.org/e1", b64url.encodeToString(P256.encode(P256.generate().public as ECPublicKey)), b64url.encodeToString(ByteArray(16)), null)
 
         init {
@@ -136,8 +134,8 @@ class PushTest {
 
         /** Stores [inc] and returns its row, as the Database listener would hand it over. */
         fun store(inc: Incident): ch.lauzhack.twin.db.IncidentRow {
-            db.upsertIncident(inc, "{}")
-            repeat(100) { db.incidents(true).firstOrNull { it.id == inc.id }?.let { return it }; Thread.sleep(10) }
+            db.incidents.upsert(inc, "{}")
+            repeat(100) { db.incidents.list(true).firstOrNull { it.id == inc.id }?.let { return it }; Thread.sleep(10) }
             error("incident not stored")
         }
     }
