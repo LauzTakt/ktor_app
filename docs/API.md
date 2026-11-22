@@ -491,6 +491,11 @@ All pages follow [`docs/STYLE.md`](STYLE.md) (SBB look: SBB Web font, SBB palett
     route with the ETA of every stop and where the train is, incidents on top. Live over the WebSocket `train` topic.
   - At a station: destination by text or map (reachable stations from `/stations/{id}/destinations` highlighted),
     then `/stations/{id}/connections?to=`; tap a train to follow it on tracks.
+  - Station view (`/?stop=<stopId>`; also from "Station info" on the destination screen, from "Departures and
+    incidents at a station" on "Plan a trip", and by tapping any stop in a train's route): a collapsible list of
+    incidents (those of the station from `/stations/{id}` plus those of its departing trains, worst first; hidden
+    when there are none) and the next departures (`/stations/{id}/board`); tap a departure to open the train.
+    Live: board every 20 s and on incident events over the WebSocket `station` topic.
 
 ## Staff web UI
 

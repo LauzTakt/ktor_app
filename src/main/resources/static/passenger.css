@@ -335,3 +335,21 @@ button.stop:hover { background: var(--milk); }
 .dep-all { width: 100%; height: 44px; border: 0; border-top: 1px solid var(--cloud); background: none; color: var(--sky); font-size: 14px; cursor: pointer; }
 .dep-all:hover { background: var(--milk); }
 .dep-time .cancel { display: block; font-size: 13px; color: var(--red); }
+
+/* ---------- station view (stationScreen) ---------- */
+button.stop { font: inherit; color: inherit; }
+.step-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.link { display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; min-height: 32px; padding: 0 2px; border: 0; background: none;
+  color: var(--sky); font: inherit; font-size: 14px; cursor: pointer; }
+.link .icon { width: 15px; height: 15px; }
+.incidents { overflow: hidden; border-radius: 10px; }
+.incidents summary { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 10px 12px; cursor: pointer; list-style: none; }
+.incidents summary::-webkit-details-marker { display: none; }
+.incidents summary:hover { background: var(--milk); }
+.incidents summary .t { flex: 1; font-size: 15px; font-weight: 700; }
+.incidents summary .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--sky); }
+.incidents.sev-critical summary .dot, .incidents.sev-major summary .dot { background: var(--red); }
+.incidents.sev-minor summary .dot { background: var(--orange); }
+.incidents summary .chev { color: var(--granite); transition: transform 200ms var(--ease); }
+.incidents[open] summary .chev { transform: rotate(90deg); }
+.incidents > .list { padding: 0 12px 12px; }
