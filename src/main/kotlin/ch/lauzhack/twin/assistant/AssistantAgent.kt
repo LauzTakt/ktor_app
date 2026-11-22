@@ -27,9 +27,9 @@ import java.util.Optional
 data class AssistantConfig(
     /** sbb-twin base URL (`SBB_TWIN_URL`). */
     val twinUrl: String = "http://127.0.0.1:8787",
-    val model: String = "claude-opus-5-5",
-    /** Fast mode (`speed: "fast"`): same model, faster output, premium price. */
-    val fastMode: Boolean = true,
+    val model: String = "claude-sonnet-5-5",
+    /** Fast mode (`speed: "fast"`): same model, faster output, premium price. Only Opus 5.5 / Fable 5.2 support it. */
+    val fastMode: Boolean = false,
     /** `low | medium | high | xhigh | max`: how much the model thinks (latency). */
     val effort: String = "low",
     /** Model calls per question, tool turns included. */
@@ -118,7 +118,7 @@ fun buildAssistant(
 }
 
 /**
- * The passenger assistant's back office: an agent loop on Claude (Opus 5.5, fast mode) over [AssistantTools].
+ * The passenger assistant's back office: an agent loop on Claude (Sonnet 5.5 by default) over [AssistantTools].
  * Prefetches what the context makes predictable, runs the tool calls of one turn in parallel, caps the loop at
  * [AssistantConfig.maxModelCalls] calls, and turns the `respond` tool + drawing tools into an [AskResponse].
  */
@@ -142,6 +142,12 @@ class AssistantAgent(
 
     suspend fun ask(request: AskRequest): AskResponse {
         val started = System.currentTimeMillis()
+        // Only about something there is no data for (platforms, fares, ...): a fixed answer, no model call.
+        Scope.onlyOutOfScope(request.question)?.let { topics ->
+            val answer = Scope.answer(request.question, topics)
+            log.info("assistant: out of scope {}, no model call, q=\"{}\"", topics, request.question.take(120))
+            return AskResponse(answer, null, emptyList(), emptyList(), emptyList(), null, System.currentTimeMillis() - started, topics)
+        }
         val turn = TurnState(request, started)
         val visuals = ArrayList<VisualCommand>()
         val stats = Stats()
@@ -312,7 +318,8 @@ class AssistantAgent(
             // the explicit focus wins; otherwise fit everything drawn
             (unique.lastOrNull { it is FocusVisual } ?: tools.autoFocus(unique + markers))?.let { add(it) }
         }
-        return AskResponse(answer, r?.summary, situation, options, visuals, r?.followUp, System.currentTimeMillis() - started)
+        val unavailable = (r?.unavailable.orEmpty() + Scope.topicsOf(turn.request.question)).toSet().let { u -> Scope.TOPICS.filter { it in u } }
+        return AskResponse(answer, r?.summary, situation, options, visuals, r?.followUp, System.currentTimeMillis() - started, unavailable)
     }
 
     private class Stats {
@@ -337,8 +344,12 @@ class AssistantAgent(
             "I'm sorry, I couldn't check the live timetable just now. Please try again in a moment, or check the SBB app."
         private const val REFUSED = "I'm sorry, I can't help with that. I can help with your train journey."
 
-        fun loadSystemPrompt(): String =
-            AssistantAgent::class.java.getResource("/assistant/system-prompt.md")?.readText()?.trim()
-                ?: error("missing resource assistant/system-prompt.md")
+        /** The instructions followed by the knowledge pack (general railway background), one cached text block. */
+        fun loadSystemPrompt(): String {
+            fun res(name: String) = AssistantAgent::class.java.getResource("/assistant/$name")?.readText()?.trim()
+            val instructions = res("system-prompt.md") ?: error("missing resource assistant/system-prompt.md")
+            val knowledge = res("knowledge.md") ?: return instructions
+            return "$instructions\n\n---\n\n$knowledge"
+        }
     }
 }

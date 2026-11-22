@@ -49,6 +49,7 @@ data class RespondInput(
     val followUp: String?,
     /** null = not given (the backend picks), empty = nothing worth showing. */
     val situationIds: List<String>?,
+    val unavailable: List<String> = emptyList(),
 )
 
 /** What one ask gathers while the agent works. Tool calls of one turn run in parallel, so this is thread-safe. */
@@ -172,6 +173,18 @@ class AssistantTools(
             prop("toStopId", "string", "Trip destination: $STOP")
         },
         tool(
+            "bulletins",
+            "The official SBB disruption bulletins (VIA) of the control centre, latest version of each, active first: title, " +
+                "lifecycle (INFO = active, ENDED = service resumed), the description lines, the latest messages (Replacement " +
+                "bus, Recovery prognosis, Impact on train services, End of disruption, ...), effect, cause, until and " +
+                "durationType, measures and replacement-bus stops. Use it for what happened and how long, in the bulletin's " +
+                "plain words. Optional filters: stopId (a station on or at the edge of the section) and line.",
+            required = emptyList(),
+        ) {
+            prop("stopId", "string", "Only bulletins touching this station: $STOP")
+            prop("line", "string", "Only bulletins affecting this line, e.g. IC8, S3.")
+        },
+        tool(
             "show_route",
             "Draw a journey from plan_journey on the passenger's map (the real track geometry is added for you). The journeys " +
                 "in respond's options are drawn automatically: use this only for another journey or a custom label.",
@@ -252,6 +265,11 @@ class AssistantTools(
                     putJsonArray("required") { add("label"); add("recommended") }
                 }
             })
+            put("unavailable", jsonOf {
+                put("type", "array")
+                put("description", "The out-of-scope topics the passenger asked about (you have no data on them); empty otherwise.")
+                putJsonObject("items") { put("type", "string"); putJsonArray("enum") { Scope.TOPICS.forEach { add(it) } } }
+            })
             prop("followUp", "string", "One short question for the passenger, only if it really helps (otherwise leave it out).")
             put("situationIds", jsonOf {
                 put("type", "array")
@@ -272,6 +290,7 @@ class AssistantTools(
                 "train_status" -> trainStatus(input, turn)
                 "plan_journey" -> planJourney(input, turn)
                 "situation" -> situation(input, turn)
+                "bulletins" -> bulletins(input, turn)
                 "show_route" -> showRoute(input, turn)
                 "show_section" -> showSection(input)
                 "highlight_train" -> highlightTrain(input)
@@ -737,6 +756,84 @@ class AssistantTools(
         return ok(out)
     }
 
+    private suspend fun bulletins(input: JsonObject, turn: TurnState): ToolOutcome = coroutineScope {
+        val st = input.str("stopId")?.let { station(it, "stopId") }
+        val line = input.str("line")?.replace(" ", "")?.uppercase()
+        val bulletinsCall = async { twin.bulletins() }
+        val disruptions = runCatching { twin.disruptions() }.getOrNull()?.arr()?.mapNotNull { it.obj() }.orEmpty()
+            .associateBy { it.str("id") ?: "" }
+        val all = bulletinsCall.await().arr()?.mapNotNull { it.obj() }.orEmpty()
+        fun stopIds(d: JsonObject?): Set<String> {
+            if (d == null) return emptySet()
+            val ids = HashSet<String>()
+            d.obj("scope")?.let { sc -> listOf("from", "to", "station").forEach { k -> sc.str(k)?.let(ids::add) } }
+            d.obj("section")?.let { sec ->
+                sec.obj("a")?.str("id")?.let(ids::add); sec.obj("b")?.str("id")?.let(ids::add)
+                sec.objects("inside").forEach { o -> o.str("id")?.let(ids::add) }
+            }
+            d.objects("busRoute").forEach { o -> o.str("id")?.let(ids::add) }
+            return ids
+        }
+        val kept = all.filter { b ->
+            val d = disruptions[b.str("id")]
+            val ended = b.str("lifecycle") == "ENDED"
+            val endedAt = d?.long("endedAt") ?: b.long("ts")
+            if (ended && endedAt != null && turn.now - endedAt > 30 * 60_000L) return@filter false
+            if (st != null && st.stopId !in stopIds(d)) return@filter false
+            if (line != null && b.strings("lines").none { it.replace(" ", "").uppercase() == line }) return@filter false
+            true
+        }.sortedWith(compareBy<JsonObject>({ if (it.str("lifecycle") == "ENDED") 1 else 0 }, { -(it.long("ts") ?: 0L) }))
+
+        val text = buildString {
+            val scope = listOfNotNull(st?.let { "station ${it.name}" }, line?.let { "line $it" }).joinToString(", ")
+            if (kept.isEmpty()) {
+                append("No disruption bulletins").append(if (scope.isEmpty()) "." else " for $scope.")
+                return@buildString
+            }
+            append(kept.size).append(" bulletin(s)").append(if (scope.isEmpty()) "" else " for $scope").appendLine(", active first.")
+            kept.take(6).forEach { b ->
+                val id = b.str("id") ?: ""
+                val d = disruptions[id]
+                val title = b.str("title") ?: d?.str("summary") ?: "Disruption"
+                val active = b.str("lifecycle") != "ENDED"
+                turn.note(SituationItem(id, title, d?.str("where"), if (!active) "info" else if (d?.str("effect") == "limited") "major" else "critical", "sbb"))
+                appendLine()
+                append("[").append(id).append("] ").append(title)
+                append(" (").append(if (active) "active" else "ended, service resumed").append(", version ").append(b.int("version") ?: 1).appendLine(")")
+                if (d != null) {
+                    val facts = listOfNotNull(
+                        d.str("effect")?.let { "effect: $it" },
+                        d.obj("cause")?.str("label")?.let { "cause: $it" },
+                        if (active) d.long("until")?.let { "until: ${untilText(it, turn.now)}" } else d.long("endedAt")?.let { "resumed at ${hhmm(it)}" },
+                        if (active) d.str("durationType")?.let { "durationType: $it" } else null,
+                    )
+                    if (facts.isNotEmpty()) appendLine("  " + facts.joinToString("; "))
+                    val measures = d.objects("measures").filter { (it.str("status") ?: it.str("state")) in setOf("active", "planned") }
+                        .mapNotNull { it.str("label") ?: it.str("type") }.distinct()
+                    if (active && measures.isNotEmpty()) appendLine("  measures: " + measures.joinToString(", "))
+                    val bus = d.objects("busRoute").mapNotNull { it.str("name") }
+                    if (active && bus.isNotEmpty()) appendLine("  replacement bus stops: " + bus.joinToString(" – "))
+                }
+                b.str("description")?.lines()?.map { it.trim() }?.filter { it.isNotEmpty() }?.forEach { l ->
+                    appendLine("  | " + shortenLines(l))
+                }
+                b.objects("messages").sortedByDescending { it.long("ts") ?: 0L }.take(3).forEach { m ->
+                    appendLine("  message ${hhmm(m.long("ts")) ?: ""} ${m.str("title") ?: ""}: ${m.str("text")?.take(400) ?: ""}".replace("  :", ":"))
+                }
+                val lines = b.strings("lines")
+                if (lines.isNotEmpty()) appendLine("  lines: " + (if (lines.size > 12) lines.take(12).joinToString(", ") + " and ${lines.size - 12} more" else lines.joinToString(", ")))
+            }
+        }
+        ToolOutcome(text.trim())
+    }
+
+    /** "Lines IC1, IC3, ... and S29 are affected." with dozens of lines -> the first ones and a count. */
+    private fun shortenLines(line: String): String {
+        if (!line.startsWith("Lines ") || line.length < 160) return line.take(400)
+        val names = line.removePrefix("Lines ").substringBefore(" are affected").replace(" and ", ", ").split(", ").map { it.trim() }
+        return "Lines " + names.take(10).joinToString(", ") + " and ${names.size - 10} more are affected."
+    }
+
 
     private fun localStation(stopId: String, into: MutableMap<String, JsonObject>, turn: TurnState) {
         runCatching { queries.stationIncidents(stopId) }.getOrNull()?.let { addLocal(it, into, turn) }
@@ -877,7 +974,8 @@ class AssistantTools(
             RespondOption(o.str("journeyId"), o.str("label") ?: "", o.bool("recommended") ?: false, o.str("why"))
         }
         val ids = if (input.containsKey("situationIds")) input.strings("situationIds") else null
-        turn.respond = RespondInput(answer.trim(), input.str("summary"), options, input.str("followUp"), ids)
+        val unavailable = input.strings("unavailable").map { it.trim().lowercase() }.filter { it in Scope.TOPICS }
+        turn.respond = RespondInput(answer.trim(), input.str("summary"), options, input.str("followUp"), ids, unavailable)
         return ToolOutcome("ok")
     }
 

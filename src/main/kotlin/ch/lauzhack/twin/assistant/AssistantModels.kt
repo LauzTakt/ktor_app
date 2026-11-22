@@ -43,6 +43,11 @@ data class AskResponse(
     /** Optional question for the passenger. */
     val followUp: String?,
     val elapsedMs: Long,
+    /**
+     * Topics the passenger asked about that the assistant has no data for (passed as is to the voice agent):
+     * `platforms | accessibility | fares | tickets | refunds | occupancy | luggage | bikes | bus_stop_location | local_transport`.
+     */
+    val unavailable: List<String> = emptyList(),
 )
 
 @Serializable

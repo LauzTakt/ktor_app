@@ -163,9 +163,10 @@ written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lau
 ## Passenger assistant (`POST /assistant/ask`)
 
 Back office of the passenger web app (contract: `ASSISTANT_CONTRACT.md`, section 2, in the team workspace). An agent
-loop on **Claude Opus 5.5 in fast mode** (`src/main/kotlin/ch/lauzhack/twin/assistant/`) investigates with tools over our
+loop on **Claude Sonnet 5.5** (effort `low`, no fast mode; `src/main/kotlin/ch/lauzhack/twin/assistant/`) investigates with tools over our
 own data (trains, boards, incidents, staff reports) and sbb-twin (`/plan`, `/situation`, `/geometry/…`), then returns a
-spoken answer, the options and map commands. Typical answer time: 1.5–3 s with one model call, 3.5–5 s with two.
+spoken answer, the options and map commands. Measured: 2.5–6 s (one model call for most questions, two when the
+model needs another lookup); a question only about an out-of-scope topic is answered in ~1 ms without a model call.
 
 ```jsonc
 // Request. question: required, ≤ 2000 chars. context fields: stopIds (station names also work), all optional.
@@ -183,7 +184,8 @@ spoken answer, the options and map commands. Typical answer time: 1.5–3 s with
                  "transfers": 0, "recommended": true, "why": "arrives first", "journeyId": "j-fd856db851" } ],
   "visuals": [ { "type": "clear" }, { "type": "route", … }, … ],
   "followUp": null,
-  "elapsedMs": 2310 }
+  "elapsedMs": 2310,
+  "unavailable": [] }                                                             // out-of-scope topics asked about
 ```
 
 - `options`: the recommended journey (first) and at most one alternative. `departure`, `arrival` and `transfers` are
@@ -195,17 +197,33 @@ spoken answer, the options and map commands. Typical answer time: 1.5–3 s with
   recommended route adds its origin, transfers and destination), `timer` (`label`, `until`: only a departure the tools
   returned) and `focus` (`bbox` `[w, s, e, n]`, fits everything drawn). Geometry is GeoJSON from sbb-twin, simplified
   to ~8 m.
+- `unavailable`: the topics the passenger asked about that the assistant has no data for, passed as is to the voice
+  agent. Values: `platforms`, `accessibility`, `fares`, `tickets`, `refunds`, `occupancy`, `luggage`, `bikes`,
+  `bus_stop_location`, `local_transport`. Filled by the model (`respond.unavailable`) and by a keyword check on the
+  question. If the question is only about such topics (no timetable/disruption cue), the backend answers at once
+  without a model call, e.g. "I'm sorry, I don't have information on platforms. The station staff or the SBB app can
+  tell you." (EN/DE/FR/IT).
+- Scope (fixed, in the system prompt and the knowledge pack). CAN: timetables and live delays; cancelled,
+  short-turned and held trains; disruptions with cause, section, expected end and the official bulletin text;
+  replacement buses (route, stops, departures); alternatives. CANNOT: the `unavailable` topics above. The model never
+  mentions a limitation the passenger did not ask about.
 - How it works: the backend first runs the lookups the context or the question makes predictable (a trip named in the
   question or the context → `plan_journey` + `situation`; the passenger's train → `train_status`), so most questions
-  need one model call. Tools: `find_station`, `station_board`, `train_status`, `plan_journey`, `situation` (data);
+  need one model call. Tools: `find_station`, `station_board`, `train_status`, `plan_journey`, `situation`, `bulletins` (data: the twin's
+  SBB/VIA bulletins, latest version each, joined with `/disruptions` for effect, cause, until, durationType, measures and
+  bus stops; filters `stopId`, `line`; active first, ENDED ones older than 30 min skipped);
   `show_route`, `show_section`, `highlight_train`, `mark_station`, `start_timer`, `focus_on` (drawing); `respond`
   (final answer). Independent tool calls of one turn run in parallel; at most 6 model calls. A journey whose geometry
-  the twin no longer has (404) is planned again once. System prompt: `src/main/resources/assistant/system-prompt.md`.
+  the twin no longer has (404) is planned again once. System prompt: `src/main/resources/assistant/system-prompt.md`, followed in the same
+  cached system block (1 h TTL) by the knowledge pack `src/main/resources/assistant/knowledge.md` (~3k tokens: train
+  categories, bulletin lifecycle and vocabulary, interrupted vs limited, short turns, holds, EV buses, prognosis types,
+  typical durations per cause from 520 SBB incidents, transfer rules). General questions are answered from it with no
+  data tool; today's data comes only from the tools.
 - Errors: `400 bad_question` (missing or too long), `400 bad_request` (body is not JSON), `503 assistant_unavailable`
   (no `ANTHROPIC_API_KEY`). If the model or the twin fails midway, the answer is still `200`, with a short apology the
   voice agent can speak.
 - Config (env): `ANTHROPIC_API_KEY` (required), `SBB_TWIN_URL` (default `http://127.0.0.1:8787`), `ASSISTANT_MODEL`
-  (`claude-opus-5-5`), `ASSISTANT_FAST_MODE` (`true`), `ASSISTANT_EFFORT` (`low`), `ASSISTANT_MAX_MODEL_CALLS` (`6`).
+  (`claude-sonnet-5-5`), `ASSISTANT_FAST_MODE` (`false`; only Opus 5.5 / Fable 5.2 support `speed: fast`), `ASSISTANT_EFFORT` (`low`), `ASSISTANT_MAX_MODEL_CALLS` (`6`).
 
 ```sh
 curl -s localhost:8080/api/v1/assistant/ask -H 'Content-Type: application/json' \

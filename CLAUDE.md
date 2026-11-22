@@ -26,7 +26,7 @@ The prediction model also reads "modified data" from the broker on its own; it i
 | SQLite: incident history + station catalog | **done** | `db/Database.kt` |
 | REST API v1 (read: trains, stations, boards, incidents, status) | **done** — see docs/API.md | `api/v1/` |
 | Staff incident reports (REST + SQLite `staff_report`, local only, not published) | **done** | `api/v1/Reports.kt` |
-| Passenger assistant `POST /api/v1/assistant/ask` (Claude Opus 5.5 fast mode agent: tools over our data + sbb-twin planner/situation/geometry; system prompt in `resources/assistant/system-prompt.md`) | **done** — see docs/API.md | `assistant/` |
+| Passenger assistant `POST /api/v1/assistant/ask` (Claude Sonnet 5.5 agent, effort low, knowledge pack in `resources/assistant/knowledge.md`: tools over our data + sbb-twin planner/situation/geometry; system prompt in `resources/assistant/system-prompt.md`) | **done** — see docs/API.md | `assistant/` |
 | Swagger UI (`/swagger`) | **done** — OpenAPI spec, hand-written: update it with every API change | `resources/openapi/documentation.yaml` |
 | REST API for predictions (model pushes to us) | todo | |
 | WebSocket `/api/v1/ws`: subscribe to trains/stations (`frequencySec` updates + immediate incident pushes) | **done** — see docs/API.md | `api/v1/LiveUpdates.kt` (incident events via `Database.addIncidentListener`) |
