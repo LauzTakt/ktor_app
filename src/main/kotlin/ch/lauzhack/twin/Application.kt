@@ -1,12 +1,10 @@
 package ch.lauzhack.twin
 
-import ch.lauzhack.twin.assistant.AnthropicLlm
 import ch.lauzhack.twin.assistant.AssistantAgent
 import ch.lauzhack.twin.assistant.AssistantConfig
 import ch.lauzhack.twin.twinapi.JourneyCache
-import ch.lauzhack.twin.twinapi.SbbTwinClient
 import ch.lauzhack.twin.assistant.assistantV1
-import ch.lauzhack.twin.assistant.buildAssistant
+import ch.lauzhack.twin.assistant.assistantFactory
 import ch.lauzhack.twin.api.v1.apiV1
 import ch.lauzhack.twin.api.v1.LiveUpdates
 import ch.lauzhack.twin.api.v1.installApiErrors
@@ -34,10 +32,8 @@ import ch.lauzhack.twin.query.JourneyQueries
 import ch.lauzhack.twin.query.TwinQueries
 import ch.lauzhack.twin.report.ReportService
 import ch.lauzhack.twin.state.LiveState
-import ch.lauzhack.twin.wallet.TripWatchJourneys
-import ch.lauzhack.twin.wallet.TripWatchService
-import ch.lauzhack.twin.wallet.TripWatchStore
 import ch.lauzhack.twin.wallet.TripWatchConfig
+import ch.lauzhack.twin.wallet.startTripWatch
 import ch.lauzhack.twin.wallet.tripWatchRoutes
 import ch.lauzhack.twin.web.AppLinksConfig
 import ch.lauzhack.twin.query.FleetFeed
@@ -63,15 +59,6 @@ import io.ktor.server.websocket.pingPeriod
 import io.ktor.server.websocket.timeout
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Duration.Companion.seconds
 
 @Serializable
@@ -108,16 +95,7 @@ fun Application.module() {
         tokenTtlHours = conf.propertyOrNull("auth.tokenTtlHours")?.getString()?.toLongOrNull() ?: 12,
     )
     // Passenger assistant (POST /api/v1/assistant/ask): Claude API key from ANTHROPIC_API_KEY, the rest from assistant.*
-    val assistantCfg = AssistantConfig.from(conf)
-    val llm = AnthropicLlm.fromEnv(assistantCfg)
-    if (llm == null) log.warn("ANTHROPIC_API_KEY is not set: /api/v1/assistant/ask will answer 503")
-    else log.info("Assistant: model {} (fast mode {}, effort {}), sbb-twin at {}", assistantCfg.model, assistantCfg.fastMode, assistantCfg.effort, assistantCfg.twinUrl)
-    llm?.keepWarm(assistantCfg.model)
-    val assistant = llm?.let { l ->
-        { q: TwinQueries ->
-            buildAssistant(assistantCfg, l, q, state, IncidentQueries(db.incidents), ReportService(db.reports, state), journeys).also { a -> Thread({ Thread.sleep(8_000); a.warmUp() }, "assistant-warm-up").apply { isDaemon = true }.start() }
-        }
-    }
+    val assistant = assistantFactory(AssistantConfig.from(conf), state, IncidentQueries(db.incidents), ReportService(db.reports, state), journeys)
 
     // Passenger voice app (brief, voice session, twin proxy): ELEVENLABS_API_KEY from env, the rest from passenger.*
     val passengerCfg = PassengerConfig.from(conf)
@@ -172,36 +150,7 @@ fun Application.configureHttp(
     val agent = assistant?.invoke(queries)
     val pushService = PushService(PushStore(db.sqlite), queries, state, push, pushSenders).also { it.start(db.incidents::addListener) }
     monitor.subscribe(ApplicationStopped) { pushService.close() }
-    val tripWatch = if (tripWatchConfig.enabled) {
-        val apple = tripWatchConfig.apple()
-        val google = tripWatchConfig.google()
-        val store = TripWatchStore(tripWatchConfig.path)
-        TripWatchService(
-            store, TripWatchJourneys(queries, journeys, SbbTwinClient(passenger.twinUrl)),
-            tripWatchConfig.site.trimEnd('/'), apple, google,
-            fresh = { mqttConnected() && queries.status(true).twin?.online == true },
-        ).also { service ->
-            val changes = Channel<Unit>(Channel.CONFLATED)
-            db.incidents.addListener { _, _ -> changes.trySend(Unit) }
-            val worker = CoroutineScope(Dispatchers.IO).launch {
-                while (isActive) {
-                    try {
-                        service.refresh()
-                    } catch (error: CancellationException) {
-                        throw error
-                    } catch (error: Exception) {
-                        log.warn("Trip Watch update deferred ({})", error.javaClass.simpleName)
-                    }
-                    withTimeoutOrNull(20_000) { changes.receive() }
-                }
-            }
-            monitor.subscribe(ApplicationStopped) {
-                runBlocking { worker.cancelAndJoin() }
-                changes.close()
-                store.close()
-            }
-        }
-    } else null
+    val tripWatch = startTripWatch(tripWatchConfig, queries, journeys, passenger.twinUrl, db.incidents, mqttConnected)
     routing {
         get("/health") { call.respond(Health("ok")) }
         appLinks(appLinks) // /.well-known/ files: QR codes and links open the mobile app (web/AppLinks.kt)

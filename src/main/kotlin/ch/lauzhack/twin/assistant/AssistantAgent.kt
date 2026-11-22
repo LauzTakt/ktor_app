@@ -111,6 +111,32 @@ class AnthropicLlm(private val client: AnthropicClient) : LlmClient {
     }
 }
 
+/**
+ * The assistant for [cfg] with the Claude API key from `ANTHROPIC_API_KEY`, built once the HTTP layer has its
+ * [ch.lauzhack.twin.query.TwinQueries]; warmed up 8 s after start. Null (the route answers 503) without a key.
+ */
+fun assistantFactory(
+    cfg: AssistantConfig,
+    state: ch.lauzhack.twin.state.LiveState,
+    incidents: ch.lauzhack.twin.query.IncidentQueries,
+    reports: ch.lauzhack.twin.report.ReportService,
+    journeys: JourneyCache,
+): ((ch.lauzhack.twin.query.TwinQueries) -> AssistantAgent)? {
+    val log = LoggerFactory.getLogger("assistant")
+    val llm = AnthropicLlm.fromEnv(cfg)
+    if (llm == null) {
+        log.warn("ANTHROPIC_API_KEY is not set: /api/v1/assistant/ask will answer 503")
+        return null
+    }
+    log.info("Assistant: model {} (fast mode {}, effort {}), sbb-twin at {}", cfg.model, cfg.fastMode, cfg.effort, cfg.twinUrl)
+    llm.keepWarm(cfg.model)
+    return { q ->
+        buildAssistant(cfg, llm, q, state, incidents, reports, journeys).also { a ->
+            Thread({ Thread.sleep(8_000); a.warmUp() }, "assistant-warm-up").apply { isDaemon = true }.start()
+        }
+    }
+}
+
 /** Builds the assistant over ktor_app's own data (live state, SQLite) and sbb-twin. */
 fun buildAssistant(
     cfg: AssistantConfig,
