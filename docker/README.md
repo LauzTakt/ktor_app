@@ -20,6 +20,7 @@ Read by the compose file from the environment (Coolify shows them in the app's *
 | `SBB_TWIN_URL` | no | `http://127.0.0.1:8787` | sbb-twin HTTP API (planner, situation, geometry, brief, `/twin/*` proxy) |
 | `ELEVENLABS_API_KEY` | no | empty | voice of the passenger assistant at `/assistant/` (text only without it); mark as secret |
 | `PASSENGER_AGENT_ID` | no | empty | ElevenLabs agent id (`cd client && npm run agent` creates it) |
+| `TRIP_WATCH_ENABLED` | no | `true` | Set to `false` to turn off trip monitoring. Falls back to `WALLET_ENABLED` when unset. |
 | `JAVA_OPTS` | no | `-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError` | |
 | `KTOR_APP_IMAGE` | no | `ktor-app:latest` | image tag (build output / pull target) |
 

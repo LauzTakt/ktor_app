@@ -4,7 +4,9 @@ Trip Watch follows an itinerary the passenger selects in the app. It stores the 
 
 ## Run it
 
-Set `WALLET_ENABLED=true` in the Ktor service environment. With live data configured, choose a connection as usual, open **Watch this trip**, and confirm the selection. The watch works in the browser before either issuer is configured. **Watched trips** lists watches created by that browser. A pass links back to a read view that also shows management controls in the owning browser. [Environment example](../.env.example) · [API](API.md#endpoints)
+Trip Watch is enabled by default. With live data configured, choose a connection, tap **Watch this trip**, and confirm. **Watched trips** lists the watches saved in that browser and shows the latest instructions. Apple Wallet and Google Wallet are optional delivery channels. A pass links back to the watch page, which also shows management controls in the owning browser.
+
+Set `TRIP_WATCH_ENABLED=false` in the Ktor service environment to turn it off. `WALLET_ENABLED` is accepted as a fallback when `TRIP_WATCH_ENABLED` is unset. After deployment, `GET /api/v1/trip-watches/availability` reports whether monitoring is enabled. [Environment example](../.env.example) · [API](API.md#endpoints)
 
 When using a Wallet issuer, set `WALLET_PUBLIC_BASE_URL` to the public HTTPS origin of the app. Set `WALLET_DB_PATH` if the service should store watch state elsewhere. By default Ktor puts `.wallet.sqlite` beside the main database. Use a persistent volume for both. The issuer settings take file paths to mounted credentials.
 
