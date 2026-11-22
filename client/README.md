@@ -40,6 +40,10 @@ npm run agent:chat -- "My IC to Bern was cancelled at Zürich HB"   # talk to it
 Both read `ELEVENLABS_API_KEY` from `~/.config/lauzhack/.env` and save `PASSENGER_AGENT_ID` there. The server needs
 both as environment variables (`ELEVENLABS_API_KEY`, `PASSENGER_AGENT_ID`); without them the app works in text only.
 
+## Leave-by timer
+
+Select a journey under **Your options**, open **Set leave-by timer**, and enter your walk to its boarding point in minutes. The assistant subtracts that walk and one boarding minute from the expected departure. The timer stays visible while you compare other options and follows timetable changes for the same journey. Open the time beneath the journey to edit or remove the timer. Until you enter a walk, the assistant shows the departure countdown.
+
 ## How a question is answered (fast path first)
 
 1. **Out of scope** (platforms, accessibility, fares, tickets, …): the agent says so at once (`src/scope.ts`).

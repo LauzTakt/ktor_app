@@ -8,9 +8,17 @@ import { MapController, type DrawnItem, type Pick as MapPick, type Timer } from 
 import { MapLegend, PickCard, TrackChip, type PickInfo, type Tracking } from "./mapui";
 import { CheckingPill, Dock, OptionsCard, SituationCard, TimerChip, Transcript, Welcome, type Item } from "./ui";
 import { prefetchVoice, Voice, type AskBackendParams, type GetBriefParams, type VoiceStatus } from "./voice";
+import { findJourneyOption, refreshWalkingPlan, type WalkingPlan } from "./walking";
 
 type Located = { id: string; name: string; lon: number; lat: number; userLon: number; userLat: number };
-type Cards = { id: number; situation: SituationItem[]; options: Option[]; summary: string | null };
+type Cards = { id: number; situation: SituationItem[]; options: Option[]; summary: string | null; walking: WalkingPlan | null };
+type DepartureTimer = Timer & { option?: Option };
+
+function timerForOption(option: Option): DepartureTimer | null {
+  if (!(option.departure > Date.now())) return null;
+  const line = /^(?:Wait for the |Take the )?((?:IC|IR|ICE|EC|EN|NJ|TGV|RJX?|RE|PE|IRE|R|S|SN)\s?\d{0,3})\b/.exec(option.label)?.[1];
+  return { label: line ? `${line} leaves in` : "Departure in", until: option.departure, option };
+}
 
 const sessionId = crypto.randomUUID?.() ?? String(Math.random()).slice(2);
 const hold = new HoldMusic();
@@ -103,7 +111,9 @@ export function App() {
   const [cards, setCards] = useState<Cards | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
-  const [timer, setTimer] = useState<Timer | null>(null);
+  const [timer, setTimer] = useState<DepartureTimer | null>(null);
+  const cardsRef = useRef(cards);
+  cardsRef.current = cards;
   const [located, setLocated] = useState<Located | null>(null);
   const [locating, setLocating] = useState(false);
   const [fleet, setFleet] = useState<{ count: number; source: "live" | "poll" } | null>(null);
@@ -123,7 +133,7 @@ export function App() {
   /** What the passenger tapped last: context for the next question ("and from here?") */
   const picked = useRef<{ stationId?: string; stationName?: string; sectionId?: string; sectionTitle?: string; routeId?: string } | null>(null);
   /** The place the current picture is about, re-checked live (see the watch below). */
-  const watching = useRef<{ params: Record<string, string>; signature: string } | null>(null);
+  const watching = useRef<{ params: Record<string, string>; signature: string; offered: Set<string> } | null>(null);
 
   const itemsRef = useRef(items);
   itemsRef.current = items;
@@ -151,7 +161,8 @@ export function App() {
     ctl.current = c;
     c.onTimer = (t) => {
       timerOn.current = Boolean(t);
-      setTimer(t);
+      const matches = t && cardsRef.current?.options.filter((o) => o.departure === t.until);
+      setTimer(t && matches?.length === 1 ? { ...t, option: matches[0] } : t);
     };
     c.onChange = setDrawn;
     c.onTrack = (t) => startTrackRef.current(t.trainId, t.stopId, t.label ?? undefined);
@@ -233,7 +244,8 @@ export function App() {
       // keep this trip under live watch
       const ids = lastIds.current;
       const params: Record<string, string | null> = ids.fromStopId && ids.toStopId ? { from: ids.fromStopId, to: ids.toStopId } : { station: ids.fromStopId };
-      void fetchBrief(params).then((b) => b && watchRef.current(params, b));
+      const answerId = cardSeq.current;
+      void fetchBrief(params).then((b) => b && cardSeq.current === answerId && watchRef.current(params, b));
       return res;
     } finally {
       setChecking(false);
@@ -247,8 +259,15 @@ export function App() {
       const fresh = visuals.some((v) => v.type === "clear");
       if (fresh || res.options?.length || res.situation?.length) {
         const id = ++cardSeq.current;
-        const next: Cards = { id, situation: res.situation ?? [], options: res.options ?? [], summary: res.summary ?? null };
-        setCards((prev) => (fresh || !prev ? next : { ...next, situation: next.situation.length ? next.situation : prev.situation, options: next.options.length ? next.options : prev.options }));
+        if (fresh || res.options?.length) watching.current = null;
+        setCards((prev) => {
+          const options = fresh || res.options?.length ? res.options ?? [] : prev?.options ?? [];
+          return {
+            id, options, summary: res.summary ?? null,
+            situation: fresh || res.situation?.length ? res.situation ?? [] : prev?.situation ?? [],
+            walking: refreshWalkingPlan(prev?.walking ?? null, options),
+          };
+        });
         setItems((list) => [...list.filter((i) => i.kind !== "cards"), { kind: "cards", key: `c${id}` }]);
         const rec = res.options?.find((o) => o.recommended) ?? res.options?.[0];
         if (rec || fresh) setSelected(rec?.journeyId ?? rec?.id ?? null);
@@ -356,7 +375,7 @@ export function App() {
   const signature = (b: Brief) => b.disruptions.filter((d) => d.active).map((d) => `${d.id}:${d.effect}:${d.until}:${d.replacementBus}`).sort().join("|");
   const watch = (params: Record<string, string | null | undefined>, b: Brief) => {
     const clean = Object.fromEntries(Object.entries(params).filter((e): e is [string, string] => Boolean(e[1])));
-    watching.current = { params: clean, signature: signature(b) };
+    watching.current = { params: clean, signature: signature(b), offered: new Set(b.options.flatMap((o) => o.journeyId ? [o.journeyId] : [])) };
   };
   const watchRef = useRef(watch);
   watchRef.current = watch;
@@ -369,7 +388,26 @@ export function App() {
       if (!b || watching.current !== w) return;
       // live times on the option cards (same journeys, new expected times)
       const fresh = new Map(b.options.filter((o) => o.journeyId).map((o) => [o.journeyId!, o]));
-      setCards((c) => (c && c.options.some((o) => o.journeyId && fresh.has(o.journeyId)) ? { ...c, options: c.options.map((o) => { const n = o.journeyId ? fresh.get(o.journeyId) : undefined; return n ? { ...o, departure: n.departure, arrival: n.arrival } : o; }) } : c));
+      // A completed route search includes visuals even when it finds no journeys. A failed lookup has none.
+      const withdrawn = new Set<string>();
+      const newlyOffered: Option[] = [];
+      if (b.from && b.to && b.visuals.length) {
+        for (const id of w.offered) if (!fresh.has(id)) withdrawn.add(id);
+        for (const [id, option] of fresh) if (!w.offered.has(id)) newlyOffered.push(option);
+        w.offered = new Set(fresh.keys());
+      }
+      const timedId = cardsRef.current?.walking?.option.journeyId;
+      if (timedId && withdrawn.has(timedId)) showToast("Your timed departure is no longer listed.");
+      setCards((c) => {
+        if (!c || (!fresh.size && !withdrawn.size)) return c;
+        const options = c.options.filter((o) => !o.journeyId || !withdrawn.has(o.journeyId)).map((o) => {
+          const n = o.journeyId && fresh.get(o.journeyId);
+          if (!n || (o.departure === n.departure && o.arrival === n.arrival)) return o;
+          return { ...o, departure: n.departure, arrival: n.arrival };
+        });
+        for (const option of newlyOffered) if (!findJourneyOption(option, options)) options.push(option);
+        return { ...c, options, walking: refreshWalkingPlan(c.walking, options) };
+      });
       const sig = signature(b);
       if (sig === w.signature) return;
       const before = w.signature;
@@ -561,6 +599,7 @@ export function App() {
     const b = await fetchBrief({ q: text, from: origin && /\b(to|towards|nach|à|a|para)\s+\p{Lu}/u.test(text) && !/\bfrom\b/i.test(text) ? origin : null });
     if (b?.related && !/\b(how does|how do .* work|what is|what does|explain|why|where is|which trains?|track)\b/i.test(text)) {
       await show(b, { fromStopId: b.from?.id ?? b.station?.id ?? null, toStopId: b.to?.id ?? null });
+      if (b.from && b.to) watch({ from: b.from.id, to: b.to.id }, b);
       log("text answer from brief", Math.round(performance.now() - t0));
       return say("assistant", b.say, "Would you like me to look for another way?");
     }
@@ -577,17 +616,37 @@ export function App() {
   const choose = async (o: Option) => {
     const id = o.journeyId ?? o.id;
     setSelected(id);
-    const c = ctl.current;
-    if (!c) return;
-    if (o.journeyId && !c.selectRoute(o.journeyId)) await c.showJourney(o.journeyId, o.label).catch(() => false);
-    if (o.journeyId) c.fitRoute(o.journeyId);
-    const line = /^(?:Wait for the |Take the )?((?:IC|IR|ICE|EC|EN|NJ|TGV|RJX?|RE|PE|IRE|R|S|SN)\s?\d{0,3})\b/.exec(o.label)?.[1];
-    if (o.departure > Date.now()) {
-      timerOn.current = true;
-      setTimer({ label: line ? `${line} leaves in` : "Departure in", until: o.departure });
-    }
+    setTimer(timerForOption(o));
     voice.current?.context(`[App] The passenger tapped option ${o.id} on the screen: ${o.label}, leaving ${hhmm(o.departure)}, arriving ${hhmm(o.arrival)}.`);
+    const c = ctl.current;
+    if (c && o.journeyId) {
+      if (!c.selectRoute(o.journeyId)) await c.showJourney(o.journeyId, o.label).catch(() => false);
+      c.fitRoute(o.journeyId);
+    }
   };
+
+  const setWalk = (plan: WalkingPlan | null) => {
+    setCards((c) => c && { ...c, walking: refreshWalkingPlan(plan, c.options) });
+    if (!plan) {
+      const option = cards?.options.find((o) => (o.journeyId ?? o.id) === selected);
+      if (option) setTimer(timerForOption(option));
+    }
+  };
+  const walking = cards?.walking;
+  const walkingDeparture = walking?.option.departure;
+  useEffect(() => {
+    if (!walkingDeparture) return;
+    const expire = () => {
+      if (Date.now() >= walkingDeparture) setCards((c) =>
+        c?.walking?.option.departure === walkingDeparture ? { ...c, walking: null } : c);
+    };
+    const timeout = window.setTimeout(expire, Math.max(0, walkingDeparture - Date.now()));
+    document.addEventListener("visibilitychange", expire);
+    return () => {
+      window.clearTimeout(timeout);
+      document.removeEventListener("visibilitychange", expire);
+    };
+  }, [walkingDeparture]);
 
   // ---------- location ----------
   const locate = (quiet = false) => {
@@ -624,6 +683,8 @@ export function App() {
 
   const restart = () => {
     voice.current?.stop();
+    watching.current = null;
+    cardSeq.current++;
     setItems([]);
     setCards(null);
     setSelected(null);
@@ -643,6 +704,9 @@ export function App() {
   const drag = useRef<{ y: number; moved: boolean } | null>(null);
 
   const empty = items.length === 0;
+  const timedOption = timer?.option && findJourneyOption(timer.option, cards?.options ?? []);
+  const departureTimer = timer?.option ? timedOption?.departure && { label: timer.label, until: timedOption.departure } : timer;
+  timerOn.current = !walking && Boolean(departureTimer);
   return (
     <main className="app" data-sheet={sheet}>
       <div ref={mapEl} className="map" aria-label="Map of the Swiss railway with live trains" />
@@ -671,7 +735,7 @@ export function App() {
       <MapLegend items={drawn} onRemove={(k) => ctl.current?.remove(k)} onToggle={(k) => ctl.current?.toggle(k)} onClear={() => ctl.current?.clear()} onUndo={() => ctl.current?.undo()} />
       {pick && <PickCard info={pick} onClose={() => setPick(null)} onAction={pickAction} />}
       {tracking && !pick && <TrackChip t={tracking} onClose={stopTrack} onFollow={() => setTracking((t) => (t ? { ...t, follow: !t.follow } : t))} />}
-      <div className="overlays">{checking ? <CheckingPill /> : timer ? <TimerChip timer={timer} /> : null}</div>
+      <div className="overlays">{checking ? <CheckingPill /> : !walking && departureTimer ? <TimerChip timer={departureTimer} /> : null}</div>
 
       <section ref={sheetRef} className="sheet" data-state={sheet} data-empty={empty}>
         <button
@@ -695,6 +759,7 @@ export function App() {
         >
           <span />
         </button>
+        {walking && <TimerChip walking={walking} />}
         <div ref={bodyRef} className="sheet-body">
           {empty ? (
             <Welcome suggestions={chips} onPick={(s) => void submitText(s)} voiceReady={voiceStatus !== "connecting"} place={located?.name ?? null} onLocate={() => locate()} locating={locating} />
@@ -706,7 +771,7 @@ export function App() {
                 cards && (
                   <>
                     {cards.situation.length > 0 && <SituationCard items={cards.situation} />}
-                    {cards.options.length > 0 && <OptionsCard options={cards.options} selected={selected} onChoose={(o) => void choose(o)} />}
+                    {cards.options.length > 0 && <OptionsCard options={cards.options} selected={selected} walking={cards.walking} onChoose={(o) => void choose(o)} onWalk={setWalk} />}
                   </>
                 )
               }

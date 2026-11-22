@@ -143,6 +143,57 @@ button:not(:disabled) { cursor: pointer; }
 .opt-times .arrow { margin: 0 2px; font-weight: 400; color: var(--metal); }
 .opt-label { font-size: 14px; line-height: 1.35; color: var(--charcoal); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .opt-meta { font-size: 12.5px; line-height: 1.35; color: var(--metal); }
+.walk-settings { padding: 0 12px; }
+.walk-settings summary {
+  min-height: 44px; display: flex; align-items: center; gap: 8px;
+  list-style: none; cursor: pointer; color: var(--iron); font-size: 14px;
+}
+.walk-settings summary::-webkit-details-marker { display: none; }
+.walk-settings summary > svg { flex: none; }
+.walk-settings summary > span { flex: 1; }
+.walk-settings summary b, .walk-number { font-variant-numeric: tabular-nums; }
+.walk-settings[open] .walk-chevron { transform: rotate(180deg); }
+.walk-form { padding: 2px 0 8px; }
+.walk-form label { display: block; margin-bottom: 6px; font-weight: 700; }
+.walk-entry, .walk-number, .walk-actions { display: flex; align-items: center; gap: 8px; }
+.walk-number {
+  flex: 1; min-width: 0; padding: 0 12px; gap: 4px;
+  border: 1px solid var(--granite); border-radius: 6px; color: var(--granite);
+}
+.walk-number:focus-within { outline: 2px solid var(--sky); outline-offset: 1px; }
+.walk-number input {
+  width: 100%; min-width: 0; height: 44px; padding: 0; border: 0; outline: 0;
+  background: transparent; color: var(--charcoal); font: inherit; font-size: 16px;
+}
+.walk-save {
+  min-height: 44px; padding: 0 16px; border: 0; border-radius: 6px;
+  background: var(--red); color: #fff; font-weight: 700;
+}
+.walk-form p { margin: 6px 0 0; color: var(--granite); font-size: 13px; }
+.walk-actions { justify-content: flex-end; flex-wrap: wrap; }
+.walk-actions button { min-height: 44px; padding: 0 8px; background: transparent; border: 0; color: var(--iron); }
+.walk-settings summary:active, .walk-actions button:active { background: var(--milk); }
+.walk-save:active { background: var(--red125); }
+@media (hover: hover) {
+  .walk-settings summary:hover span, .walk-actions button:hover { text-decoration: underline; }
+  .walk-save:hover { background: var(--red125); }
+}
+
+/* Keep the walking deadline in view when the passenger folds the conversation or looks at another route. */
+.walk-timer {
+  flex: none; display: flex; align-items: center; gap: 12px; padding: 8px 16px 12px;
+  background: var(--white); border-bottom: 1px solid var(--cloud);
+}
+.walk-timer > svg { flex: none; color: var(--granite); }
+.walk-timer-text { flex: 1; min-width: 0; }
+.walk-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 2px 12px; }
+.walk-head strong { font-size: 16px; line-height: 1.3; }
+.walk-head b { font-size: 22px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.walk-timer p { margin: 3px 0 0; font-size: 13px; color: var(--granite); overflow-wrap: anywhere; }
+.walk-timer:is([data-phase="go"], [data-phase="tight"]) > svg { color: var(--red); }
+.walk-timer:is([data-phase="go"], [data-phase="tight"]) strong { color: var(--red125); }
+[data-theme="dark"] .walk-timer:is([data-phase="go"], [data-phase="tight"]) strong { color: var(--charcoal); }
+@media (min-width: 900px) { .walk-timer { padding: 14px 16px; } }
 .pill { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
 .pill--rec { background: var(--green); color: #fff; }
 

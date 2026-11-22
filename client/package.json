@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "test": "node --test tests/*.test.mjs",
     "agent": "node scripts/create-agent.mjs",
     "agent:chat": "node scripts/agent-chat.mjs",
     "typecheck": "tsc --noEmit"
