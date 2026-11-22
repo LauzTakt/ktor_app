@@ -1,5 +1,8 @@
 package ch.lauzhack.twin.passenger
 
+import ch.lauzhack.twin.assistant.CachedJourney
+import ch.lauzhack.twin.assistant.JourneyCache
+import ch.lauzhack.twin.assistant.PlanQuery
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -67,6 +70,7 @@ class PlaceBrief(
     private val twin: TwinHttp,
     private val catalog: StationCatalog,
     private val now: () -> Long = System::currentTimeMillis,
+    private val journeyCache: JourneyCache? = null,
 ) {
     private val log = LoggerFactory.getLogger("brief")
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -333,7 +337,16 @@ class PlaceBrief(
                 val tj = tb?.get("journeys") as? JsonArray
                 tj ?: try { twin.json("/api/plan?$qs&limit=4", 4_000).obj().a("journeys") } catch (e: Exception) { EMPTY_ARRAY }
             }
-            val extrasD = async { try { routeExtras(twin, from, to) } catch (e: CancellationException) { throw e } catch (e: Exception) { null } }
+            val extrasD = async {
+                try {
+                    routeExtras(twin, from, to) { journey ->
+                        journeyCache?.put(
+                            CachedJourney(journey, PlanQuery(from.id, to.id, null, 4, null), null, now()),
+                            preferExisting = true,
+                        )
+                    }
+                } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+            }
             val sitD = async { try { twin.json("/api/situation?$qs", 3_000).obj() } catch (e: Exception) { null } }
             val plan = planD.await().objs()
             val extras = extrasD.await()

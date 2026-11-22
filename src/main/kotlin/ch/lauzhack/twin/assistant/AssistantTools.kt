@@ -91,9 +91,11 @@ data class CachedJourney(val journey: JsonObject, val query: PlanQuery, val geom
 class JourneyCache(private val ttlMs: Long = 30 * 60_000L) {
     private val map = ConcurrentHashMap<String, CachedJourney>()
 
-    fun put(entry: CachedJourney) {
+    fun put(entry: CachedJourney, preferExisting: Boolean = false) {
         if (entry.id.isEmpty()) return
-        map[entry.id] = entry
+        map.compute(entry.id) { _, previous ->
+            if (preferExisting && previous != null && entry.at - previous.at <= ttlMs) previous else entry
+        }
         if (map.size > 300) {
             val now = System.currentTimeMillis()
             map.entries.removeIf { now - it.value.at > ttlMs }
