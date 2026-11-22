@@ -11,6 +11,7 @@
       document.documentElement.dataset.theme = localStorage.getItem("twin-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
     </script>
     <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/station-qr.css" />
     <script src="https://unpkg.com/maplibre-gl@5.24.1/dist/maplibre-gl.js"></script>
   </head>
   <body class="map-page">
@@ -22,7 +23,11 @@
         <span><b id="lateCount">–</b> late ≥ 3′</span>
         <span>twin time <b id="twinClock">–</b></span>
       </div>
-      <nav><button class="btn" id="themeToggle" type="button">☾ Dark</button> <a class="btn primary" href="/admin/report.html">Report an incident</a></nav>
+      <nav>
+        <button class="btn" id="themeToggle" type="button">☾ Dark</button>
+        <button class="btn" id="stationQrToggle" type="button" aria-haspopup="dialog">Station QR</button>
+        <a class="btn primary" href="/admin/report.html">Report an incident</a>
+      </nav>
     </header>
     <main>
       <div id="map"></div>
@@ -46,6 +51,34 @@
         </section>
       </aside>
     </main>
+    <dialog class="station-qr" id="stationQrDialog" aria-labelledby="stationQrTitle">
+      <div class="station-qr__header">
+        <h2 id="stationQrTitle">Station QR</h2>
+        <button class="btn" id="stationQrClose" type="button">Close</button>
+      </div>
+      <div class="station-qr__body" id="stationQrPicker">
+        <label for="stationQrSearch">Search for a station</label>
+        <input id="stationQrSearch" type="search" placeholder="Name or station ID" autocomplete="off" aria-controls="stationQrResults" />
+        <p class="muted station-qr__status" id="stationQrStatus" role="status"></p>
+        <ul id="stationQrResults" class="station-qr__results" aria-label="Station search results"></ul>
+      </div>
+      <div class="station-qr__body" id="stationQrPreview" hidden>
+        <div class="station-qr__sign">
+          <h3 id="stationQrName"></h3>
+          <p>Scan for travel updates from here</p>
+          <div class="station-qr__code" id="stationQrCode" role="img" aria-label="Station QR code"></div>
+        </div>
+        <div class="station-qr__actions">
+          <button class="btn primary" id="stationQrPrint" type="button">Print sign</button>
+          <a class="btn" id="stationQrDownload" download>Download QR</a>
+        </div>
+        <div class="station-qr__links">
+          <button class="station-qr__link" id="stationQrChange" type="button">Change station</button>
+          <a class="station-qr__link" id="stationQrPassenger" target="_blank" rel="noopener">Open passenger link</a>
+        </div>
+      </div>
+    </dialog>
+    <script type="module" src="/station-qr.js"></script>
     <script type="module" src="/map.js"></script>
   </body>
 </html>

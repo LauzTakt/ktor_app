@@ -219,19 +219,24 @@ function showIncidentPopup(i, at) {
 async function showStationPopup(stopId, name, coords) {
   popup = new maplibregl.Popup({ maxWidth: "340px" })
     .setLngLat(coords)
-    .setHTML(`<div class="pop"><b>${esc(name)}</b><div class="muted">loading departures…</div></div>`)
+    .setHTML(
+      `<div class="pop"><b>${esc(name)}</b>
+       <table class="board"><tbody><tr><td class="muted">Loading departures…</td></tr></tbody></table>
+       <div class="row">
+         <a class="btn primary small" href="/admin/report.html?scope=station&stopId=${encodeURIComponent(stopId)}">Report an incident here</a>
+         <button class="btn small" type="button" aria-haspopup="dialog" data-station-qr="${esc(stopId)}" data-station-name="${esc(name)}">Station QR</button>
+       </div></div>`,
+    )
     .addTo(map);
   const p = popup;
   const board = await api(`/stations/${encodeURIComponent(stopId)}/board?windowMin=60&limit=8`).catch(() => null);
-  if (p !== popup) return;
+  if (p !== popup || !p.isOpen()) return;
   const rows = (board?.entries ?? [])
     .map((e) => `<tr><td>${time(e.plannedTime)}</td><td class="late">${esc(delayText(e.delaySec))}</td><td><b>${esc(e.line ?? "")}</b></td><td>${esc(e.headsign ?? e.destination?.name ?? "")}</td></tr>`)
     .join("");
-  p.setHTML(
-    `<div class="pop"><b>${esc(name)}</b>
-     <table class="board">${rows || `<tr><td class="muted">No departures in the next hour.</td></tr>`}</table>
-     <a class="btn primary small" href="/admin/report.html?scope=station&stopId=${encodeURIComponent(stopId)}">Report an incident here</a></div>`,
-  );
+  p.getElement().querySelector(".board tbody").innerHTML =
+    rows || `<tr><td class="muted">No departures in the next hour.</td></tr>`;
+  p.setLngLat(coords);
 }
 
 let trainTimer;

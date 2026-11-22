@@ -30,7 +30,7 @@ written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lau
 | `GET /trains/{trainId}/position` | `Position` |
 | `GET /trains/{trainId}/stops` | `Stop[]` |
 | `GET /trains/{trainId}/incidents` | `Incident[]` (with `match`) |
-| `GET /stations` | `Station[]` |
+| `GET /stations` | `Station[]`: station catalog restored from SQLite at startup and updated from the feed |
 | `GET /stations/{stopId}` | `StationDetail` |
 | `GET /stations/{stopId}/board` | `Board`: trains that will still call at / pass through the station |
 | `GET /stations/{stopId}/incidents` | `Incident[]` (with `match`) |
@@ -39,6 +39,7 @@ written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lau
 | `GET /stations/{stopId}/destinations` | `Destination[]`: stations reachable from here with a train in service, most served first |
 | `GET /stations/{stopId}/connections` | `Connections`: trains in service going from this station to `?to=`, by departure |
 | `GET /stations/{stopId}/screen` | `Screen`: compact view for small displays (next departures + related incidents) |
+| `GET /stations/{stopId}/screen.txt` | the same view as plain text for microcontrollers (ETag, 304 when unchanged) |
 | `GET /lines` | `Line[]`: lines of the trains in service (`?q=` filters by name), with trains and incidents counts |
 | `GET /lines/{line}` | `LineDetail`: its trains in service + the incidents concerning it (`match` as for line alerts) |
 | `GET /push/config`, `POST /push/devices`, ... | Push notifications (web + Android app), see [Push notifications](#push-notifications) |
@@ -50,6 +51,16 @@ written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lau
 | `GET /reports/{id}` | `Report` |
 | `POST /reports/{id}/resolve` | `{ "resolution": "text" \| null }` (optional body) → resolved `Report`; `409 already_resolved` if not open |
 | `POST /assistant/ask` | `AskResponse`: the passenger assistant's answer (see [Passenger assistant](#passenger-assistant-post-assistantask)) |
+| `GET /trip-watches/availability` | `{ "enabled": boolean }` |
+| `GET /trip-watches` | Active watches for the calling browser |
+| `POST /trip-watches` | Resolve a selected departure or plan and start watching. Returns the watch and sets its owner cookie. |
+| `GET /trip-watches/{id}` | Read the watch from its opaque link |
+| `PATCH /trip-watches/{id}` | Apply `boarded`, `alighted` or `wait`. The owner's cookie is required. |
+| `DELETE /trip-watches/{id}` | Stop watching. The owner's cookie is required. The response describes the ended watch. |
+| `GET /trip-watches/{id}/apple.pkpass` | Signed pass for the owner when Apple Wallet is configured |
+| `POST /trip-watches/{id}/google` | `{ "url": "…" }` for the owner when Google Wallet is configured |
+
+Trip Watch accepts a `journeyId` from a server-cached planner result, or `trainId`, `fromStopId` and `toStopId` from the live connection screen. Set the optional `onBoard` flag after the passenger confirms they have boarded. Expired or changed selections return 409 with a prompt to select a connection again. The remaining access routes require the feature to be enabled. A watch's `pass` object holds the face both Wallet passes show (departure, route, line, changes, next step and the QR link), which the watch page previews. [Trip Watch](WALLET_TRIP_WATCH.md)
 
 ### Query parameters
 
@@ -83,6 +94,8 @@ written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lau
 | | `windowMin`, `limit` | 180 (1…1440), 10 (max 100) | departures within the window (trains at the station always included) |
 | `/stations/{id}/screen` | `limit` | 6 (max 20) | number of departures |
 | | `windowMin` | 120 (1…1440) | departures window |
+| `/stations/{id}/screen.txt` | `limit`, `windowMin` | as `/screen` | |
+| | `incidents` | 3 (0…5) | number of incidents |
 | `/incidents` | `all` | `false` | `true` = also removed incidents |
 | | `severity` | | `info`, `minor`, `major`, `critical` |
 | | `scopeKind` | | `section`, `station`, `train`, `line`, `network` |
@@ -147,6 +160,18 @@ written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lau
                     "to": "St. Gallen", "cancelled": false, "atStation": false } ],
   "incidents": [ { "id": "i-4d5811f3", "severity": "major", "title": "Overhead line fault: Lausanne – Fribourg",
                    "where": "Lausanne – Fribourg", "atStation": true, "trains": 3, "updatedAt": 1795294200000 } ] }
+
+// Screen, text form (GET /stations/{id}/screen.txt): for microcontrollers (ESP32 station screen), ~250 B.
+// text/plain UTF-8, one item per line, fields separated by "|" (never inside a value), Swiss local times, delays in
+// whole minutes (early = 0). Titles ≤ 96 chars, `where` ≤ 48, destinations ≤ 40. Header `ETag` covers everything but
+// the clock: send it back in `If-None-Match` and an unchanged board answers 304 with no body.
+//   S|name|HH:MM now|now epoch s
+//   D|HH:MM planned|delay min|line|category|to|cancelled 0/1|atStation 0/1     (departures, in board order)
+//   I|severity|atStation 0/1|trains|title|where                               (incidents, worst first)
+S|Lausanne|23:27|1795294228
+D|23:34|2|IC1|IC|St. Gallen|0|0
+D|23:36|0|S1|S|Villeneuve|0|1
+I|major|1|3|Overhead line fault: Lausanne – Fribourg|Lausanne – Fribourg
 
 // IncidentEvent (history, oldest first)
 { "seq": 1, "kind": "created", "receivedAt": ..., "updatedAt": ..., "status": "active", "severity": "critical" }
@@ -388,6 +413,7 @@ curl localhost:8080/api/v1/trains/20261121_ojp-91-1-D.1.TA.2207.j26 # one train,
 curl "localhost:8080/api/v1/trains?bbox=8.4,47.3,8.6,47.45"          # trains around Zürich
 curl localhost:8080/api/v1/incidents/i-4d5811f3/history
 curl "localhost:8080/api/v1/stations/8501120/screen?limit=6"         # compact view for a small display
+curl -i "localhost:8080/api/v1/stations/8501120/screen.txt"         # same as text, with ETag
 websocat ws://localhost:8080/api/v1/ws   # then: {"op":"subscribe","topic":"station","id":"8507000","frequencySec":5}
 ```
 
@@ -477,5 +503,8 @@ Responses are gzip-compressed (Ktor `Compression`).
 - `/login.html` (public): staff login; `?next=/admin/report.html` returns there after login (default `/admin/`). Pages show the user + "Log out".
 - `/admin/`: staff overview map (stripped-down sbb-twin viewer): live trains (`/ws/fleet`), stations, twin incidents,
   open staff reports. Click a train for its stops; click a station for departures; right-click to report at a point.
+  **Station QR** opens a station search from the toolbar or selects the current station from its map popup.
+  Print the sign or download the QR as an SVG. Generate signs from the public HTTPS address passengers will use.
+  The QR opens `/?station=<stopId>` on that address with the origin already selected.
 - `/admin/report.html` (old `/report.html` redirects here): report form (station / section / train / map point) and the list of reports (resolve them).
   Accepts `?scope=station&stopId=…`, `?scope=train&trainId=…`, `?scope=point&lat=…&lon=…` to pre-fill.

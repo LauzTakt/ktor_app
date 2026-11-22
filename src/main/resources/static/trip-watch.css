@@ -1,0 +1,89 @@
+#passenger-app.watch-page { padding-top: 24px; }
+.watch-layout { display: grid; gap: 16px; }
+.watch-layout h1 { font-size: clamp(1.5rem, 5vw, 2rem); overflow-wrap: anywhere; }
+.watch-brand, .watch-nav { display: inline-flex; align-items: center; min-height: 44px; color: var(--charcoal); }
+.watch-brand { font-size: 19px; font-weight: 700; text-decoration: none; }
+.watch-nav { font-size: 14px; text-underline-offset: 3px; }
+.watch-panel { display: grid; gap: 8px; padding: 16px; }
+.watch-panel h2, .watch-panel p { margin: 0; }
+.watch-panel h2 { font-size: 18px; line-height: 1.25; }
+.watch-panel .state { color: var(--iron); font-weight: 700; }
+.watch-panel .state .dot { background: var(--blue); }
+.watch-panel[data-state="check"] .state .dot { background: var(--orange); }
+.watch-panel[data-state="ended"] .state .dot { background: var(--cement); }
+.watch-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.watch-page .btn { min-height: 44px; height: auto; padding-block: 8px; text-decoration: none; touch-action: manipulation; }
+.watch-page a.btn { color: var(--charcoal); }
+.watch-page a.btn.primary { color: #fff; }
+.watch-page .btn:active { transform: scale(.985); }
+.watch-page .btn.primary:active { background: var(--red125); }
+.watch-page .btn.primary:disabled { background: var(--cement); border-color: var(--cement); }
+.watch-page .note { margin: 0; }
+.watch-feedback:empty { display: none; }
+.watch-feedback { color: var(--charcoal); margin: 12px 0; }
+.watch-list-item { display: grid; justify-items: start; gap: 4px; color: var(--charcoal); min-height: 56px; text-decoration: none; }
+.watch-list-item:hover { background: var(--milk); }
+.watch-list-item strong { overflow-wrap: anywhere; font-size: 16px; }
+.watch-list-item span { color: var(--iron); }
+.watch-option { display: flex; align-items: center; gap: 12px; min-height: 44px; font-size: 15px; }
+.watch-option input { width: 20px; height: 20px; accent-color: var(--red); }
+@media (max-width: 480px) {
+  .watch-actions .btn { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .watch-page .btn { transition: none; }
+  .watch-page .btn:active { transform: none; }
+}
+
+/* ---------- Wallet pass preview ----------
+   An HTML replica of the pass as Apple Wallet shows it: a white train boarding pass with side notches. It stays white
+   in dark mode, like in Wallet. Measured on a 312 × 398 pt rail ticket; --u is 1/358 of the card width, so the card
+   scales like the real pass. System font: SF on iPhone, the font Wallet uses. */
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.pass { container-type: inline-size; width: 100%; max-width: 390px; margin: 0 auto;
+  filter: drop-shadow(0 0 0.6px rgba(0, 0, 0, .42)) drop-shadow(0 10px 22px rgba(0, 0, 0, .10)); }
+:root[data-theme="dark"] .pass { filter: none; }
+.pass-card { --u: calc(100cqw / 358); --notch: calc(71 * var(--u)); --notch-r: calc(5 * var(--u));
+  display: flex; flex-direction: column; aspect-ratio: 312 / 398; padding: 0 calc(16 * var(--u)) calc(14 * var(--u));
+  background: #fff; color: #000; border-radius: calc(13 * var(--u)); color-scheme: light;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums;
+  -webkit-mask: radial-gradient(circle at 0 var(--notch), transparent var(--notch-r), #000 calc(var(--notch-r) + .5px)) 0 0 / 51% 100% no-repeat,
+    radial-gradient(circle at 100% var(--notch), transparent var(--notch-r), #000 calc(var(--notch-r) + .5px)) 100% 0 / 51% 100% no-repeat;
+  mask: radial-gradient(circle at 0 var(--notch), transparent var(--notch-r), #000 calc(var(--notch-r) + .5px)) 0 0 / 51% 100% no-repeat,
+    radial-gradient(circle at 100% var(--notch), transparent var(--notch-r), #000 calc(var(--notch-r) + .5px)) 100% 0 / 51% 100% no-repeat;
+  transition: opacity 250ms var(--ease); }
+.pass-card[data-state="ended"] { opacity: .55; }
+.pass-card span { display: block; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.pass-label { font-size: calc(12 * var(--u)); line-height: calc(15 * var(--u)); font-weight: 700; }
+.pass-value { font-size: calc(14 * var(--u)); line-height: calc(18 * var(--u)); }
+
+.pass-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: calc(12 * var(--u));
+  height: calc(72 * var(--u)); padding-top: calc(3 * var(--u)); }
+.pass-logo { display: flex; align-items: center; gap: calc(7 * var(--u)); min-width: 0; }
+.pass-card .pass-bar { flex: none; width: calc(51 * var(--u)); height: calc(17 * var(--u)); background: #eb0000; }
+.pass-brand { font-size: calc(17 * var(--u)); line-height: 1.2; font-weight: 700; letter-spacing: -.01em; }
+.pass-header-field { flex: none; text-align: right; }
+.pass-header-field .pass-value { font-size: calc(18 * var(--u)); line-height: calc(22 * var(--u)); }
+
+.pass-primary { flex: none; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center;
+  gap: calc(8 * var(--u)); height: calc(34 * var(--u)); margin-top: calc(28 * var(--u)); }
+.pass-station { font-size: calc(31 * var(--u)); line-height: calc(34 * var(--u)); letter-spacing: -.01em; }
+.pass-station + .pass-glyph + .pass-station { text-align: right; }
+.pass-glyph { width: calc(25.3 * var(--u)); height: calc(33 * var(--u)); fill: currentColor; }
+
+.pass-secondary { flex: none; display: flex; justify-content: space-between; gap: calc(10 * var(--u)); margin-top: calc(30 * var(--u));
+  font-size: calc(14 * var(--u)); line-height: calc(18 * var(--u)); }
+.pass-secondary span:last-child { flex: none; }
+.pass-aux { flex: none; margin-top: calc(16 * var(--u)); }
+
+.pass-code { margin-top: auto; display: grid; justify-items: center; gap: calc(7 * var(--u)); }
+.pass-qr { display: block; width: calc(149 * var(--u)); height: calc(149 * var(--u)); fill: #000; }
+.pass-alt { font-size: calc(11 * var(--u)); line-height: calc(14 * var(--u)); color: #6e6e73; }
+
+/* "Add to … Wallet": black, like the issuers' own badges, with a light edge on the dark page. */
+.wallet-buttons { display: grid; gap: 8px; width: 100%; max-width: 390px; margin: 4px auto 0; }
+.watch-page .btn.wallet { width: 100%; min-height: 48px; background: #000; border-color: #000; color: #fff; font-size: 15px; }
+.watch-page .btn.wallet:hover { background: #262626; border-color: #262626; }
+.watch-page .btn.wallet:disabled { background: var(--cement); border-color: var(--cement); }
+:root[data-theme="dark"] .watch-page .btn.wallet { border-color: var(--cement); }

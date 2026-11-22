@@ -1,5 +1,6 @@
 package ch.lauzhack.twin.passenger
 
+import ch.lauzhack.twin.assistant.JourneyCache
 import ch.lauzhack.twin.web.FleetFeed
 import io.ktor.http.ContentType
 import io.ktor.http.HttpMethod
@@ -44,12 +45,13 @@ import kotlin.math.roundToLong
 class PassengerService(
     val config: PassengerConfig,
     private val fleet: FleetFeed? = null,
+    journeys: JourneyCache? = null,
     localStations: () -> List<Station> = { emptyList() },
 ) {
     private val log = LoggerFactory.getLogger("passenger")
     val twin = TwinHttp(config.twinUrl)
     val catalog = StationCatalog(twin, local = localStations)
-    val brief = PlaceBrief(twin, catalog)
+    val brief = PlaceBrief(twin, catalog, journeyCache = journeys)
     private val http = HttpClient.newBuilder().connectTimeout(Duration.ofMillis(3_000)).build()
 
     /** One-time ElevenLabs conversation credentials: WebRTC token (best echo cancelling on phones) + signed WebSocket URL. */

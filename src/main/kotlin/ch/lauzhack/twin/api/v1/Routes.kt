@@ -1,13 +1,19 @@
 package ch.lauzhack.twin.api.v1
 
 import ch.lauzhack.twin.db.Database
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.withCharset
 import io.ktor.http.Parameters
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.plugins.statuspages.StatusPages
+import io.ktor.server.request.header
+import io.ktor.server.response.header
 import io.ktor.server.response.respond
+import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.RoutingCall
 import io.ktor.server.routing.get
@@ -131,6 +137,22 @@ fun Route.apiV1(q: TwinQueries, db: Database, mqttConnected: () -> Boolean) = ro
                     windowMin = p.int("windowMin", min = 1, max = 24 * 60) ?: 120,
                 ),
             )
+        }
+        // Same view as plain text for microcontrollers (ESP32 station screen); ETag + 304 when nothing changed.
+        get("/{stopId}/screen.txt") {
+            val p = call.request.queryParameters
+            val text = ScreenText.render(
+                q.screen(
+                    stopId = call.path("stopId"),
+                    limit = p.limit(default = 6, max = LiveUpdates.MAX_SCREEN_LIMIT),
+                    windowMin = p.int("windowMin", min = 1, max = 24 * 60) ?: 120,
+                    maxIncidents = p.int("incidents", min = 0, max = 5) ?: 3,
+                ),
+            )
+            call.response.header(HttpHeaders.ETag, text.etag)
+            call.response.header(HttpHeaders.CacheControl, "no-cache")
+            if (call.request.header(HttpHeaders.IfNoneMatch) == text.etag) call.respond(HttpStatusCode.NotModified)
+            else call.respondText(text.body, ContentType.Text.Plain.withCharset(Charsets.UTF_8))
         }
     }
 

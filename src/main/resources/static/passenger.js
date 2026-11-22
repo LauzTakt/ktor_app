@@ -39,6 +39,7 @@ async function api(path) {
   }
   return r.json();
 }
+const tripWatchAvailable = api("/trip-watches/availability").then((config) => config.enabled).catch(() => false);
 const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 
 // Lucide icons (one family, stroke 2), inlined.
@@ -702,7 +703,10 @@ function connectionsScreen(from, to) {
           <div class="l2">Arrival ${hhmm(c.arrivalTime)}${c.durationMin != null ? ` · ${c.durationMin} min` : ""} · ${c.stopsBetween ? `${c.stopsBetween} stop${c.stopsBetween > 1 ? "s" : ""}` : "Direct"}${c.incidents.length ? ` · <span class="warn">${c.incidents.length} incident${c.incidents.length > 1 ? "s" : ""}</span>` : ""}</div>
         </button>`;
       }).join("");
-      list.querySelectorAll(".conn").forEach((el) => (el.onclick = () => { buzz(15); onTracksScreen(el.dataset.id); }));
+      list.querySelectorAll(".conn").forEach((el) => (el.onclick = () => {
+        buzz(15);
+        onTracksScreen(el.dataset.id, { fromStopId: from.stopId, toStopId: to.stopId });
+      }));
     };
     const refresh = () => api(`/stations/${encodeURIComponent(from.stopId)}/connections?to=${encodeURIComponent(to.stopId)}&windowMin=240&limit=12`)
       .then(draw).catch(() => toast("Connection problem. Retrying…"));
@@ -720,8 +724,8 @@ function connectionsScreen(from, to) {
 
 // ------------------------------------------------------------------ 5. on tracks (on a train)
 
-function onTracksScreen(trainId) {
-  setUrl({ train: trainId });
+function onTracksScreen(trainId, trip = null) {
+  setUrl(trip ? { train: trainId, from: trip.fromStopId, to: trip.toStopId } : { train: trainId });
   show((s) => {
     s.innerHTML = `
       <div id="alerts" class="list"></div>
@@ -730,8 +734,15 @@ function onTracksScreen(trainId) {
       </div>
       <div class="nextstop card" id="next"></div>
       <div class="follow card" id="follow"></div>
+      ${trip ? '<a id="watch-train" class="btn block watch-entry" hidden>Watch this trip</a>' : ''}
       <h2>Route</h2>
       <div class="route" id="route">${placeholders(4)}</div>`;
+    if (trip) tripWatchAvailable.then((available) => {
+      const link = $("#watch-train", s);
+      if (!available || !link?.isConnected) return;
+      link.href = `/trip-watch.html?${new URLSearchParams({ trainId, ...trip })}`;
+      link.hidden = false;
+    });
     const incidents = new Map();
     let last = null;
     const scene = trainScene($("#scene", s));
@@ -1232,6 +1243,9 @@ live.connect();
 push.init({ onForeground: (n) => { buzz([20, 40, 20]); toast(n.body ? `${n.title} · ${n.body}` : n.title, 6000); } });
 $("#alerts-btn").innerHTML = ic("bell");
 $("#alerts-btn").addEventListener("click", () => { buzz(); const back = location.search; alertsScreen(() => routeFromUrl(back, { back: true })); });
+tripWatchAvailable.then((available) => {
+  $(".watched-trips-nav").hidden = !available;
+});
 routeFromUrl(location.search);
 
 function routeFromUrl(search, opts = {}) {
@@ -1239,7 +1253,11 @@ const params = new URLSearchParams(search);
 const qrTrain = params.get("train");
 const qrStation = params.get("station");
 const qrLine = params.get("line");
-if (qrTrain) onTracksScreen(qrTrain);
+if (qrTrain) {
+  const from = params.get("from");
+  const to = params.get("to");
+  onTracksScreen(qrTrain, from && to ? { fromStopId: from, toStopId: to } : null);
+}
 else if (qrLine) lineScreen(qrLine, () => alertsScreen(() => detectScreen({ back: true })));
 else if (qrStation) {
   api(`/stations/${encodeURIComponent(qrStation)}`).then((d) => {
