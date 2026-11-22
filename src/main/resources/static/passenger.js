@@ -1,7 +1,7 @@
 // Passenger view (`/`). Look and feel: docs/STYLE.md. All train / station / incident data comes from /api/v1.
 //
 // Flow:
-//   QR: `/?train=<trainId>` -> on tracks · `/?station=<stopId>` -> pick destination
+//   QR: `/?train=<trainId>` -> on tracks · `/?station=<stopId>` -> pick destination · `/?stop=<stopId>` -> station view
 //   Location: train within 200 m -> "Are you on this train?" (Yes / No / other trains nearby)
 //             else station within 200 m -> "Are you at this station?" (Yes / No)
 //             else (or No) -> browsing: pick origin and destination by text or on the map
@@ -53,6 +53,7 @@ const ICONS = {
   list: '<path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/>',
   swap: '<path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/>',
   moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+  chat: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
   bell: '<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
 };
@@ -320,7 +321,7 @@ function detectScreen(opts = {}) {
       }
       await minShow;
       if (!alive) return;
-      if (!fix) return browseScreen({ note: `${geoText()} Choose where you start and where you go.` });
+      if (!fix) return browseScreen({ note: `${geoText()} Ask the travel assistant, or choose where you start and where you go.`, noLocation: true });
       if (trains.length) return askTrainScreen(trains);
       return askStationOrBrowse(fix);
     })();
@@ -483,13 +484,14 @@ function destinationScreen(from) {
   show((s) => {
     s.innerHTML = `
       ${backBtn("Start again")}
-      <div class="step">At ${esc(from.name)}</div>
+      <div class="step-row"><span class="step">At ${esc(from.name)}</span><button class="link" type="button" id="info">Station info${ic("chevron")}</button></div>
       <div class="deps-head"><h2>Next departures</h2><span class="note" id="deps-note"></span></div>
       <div class="deps card" id="deps">${placeholders(3)}</div>
       <h1>Where are you going?</h1>
       <div id="picker"></div>`;
     $("[data-back]", s).onclick = () => restartBtn.click();
-    departuresBoard($("#deps", s), $("#deps-note", s), from);
+    $("#info", s).onclick = () => { buzz(15); stationScreen(from, () => destinationScreen(from)); };
+    departuresBoard($("#deps", s), $("#deps-note", s), from, { onTrain: (id) => onTracksScreen(id, null, () => destinationScreen(from)) });
     api(`/stations/${encodeURIComponent(from.stopId)}/destinations?limit=500`).catch(() => []).then((dests) => {
       const reachable = new Map(dests.map((d) => [d.station.stopId, { trains: d.trains, nextArrival: d.nextArrival }]));
       onLeave(stationPicker($("#picker", s), {
@@ -505,7 +507,12 @@ function destinationScreen(from) {
  * countdown, and a mark on trains with an incident. Tapping a row opens it: incidents, the next stops with their
  * ETA, and a link to the train. Live: refreshed every 20 s and right away when an incident changes.
  */
-function departuresBoard(box, note, from) {
+/**
+ * [onTrain] (optional): open this train. [direct] = a tap on a row opens the train right away instead of expanding it.
+ * [onIncident] (optional): called when an incident at the station changes (same WebSocket subscription).
+ * [onEntries] (optional): called with the board entries after every refresh.
+ */
+function departuresBoard(box, note, from, { onTrain = (id) => onTracksScreen(id), direct = false, onIncident = null, onEntries = null } = {}) {
   const SHOW = 5, MAX = 12;
   const open = new Set();          // expanded trainIds (kept across refreshes)
   const details = new Map();       // trainId -> { stops } (fetched on first expand)
@@ -539,7 +546,7 @@ function departuresBoard(box, note, from) {
       const isOpen = open.has(e.trainId);
       const cancelled = e.status === "cancelled";
       return `<div class="dep${isOpen ? " open" : ""}${cancelled ? " cancelled" : ""}">
-        <button class="dep-row" type="button" data-id="${esc(e.trainId)}" aria-expanded="${isOpen}">
+        <button class="dep-row" type="button" data-id="${esc(e.trainId)}"${direct ? "" : ` aria-expanded="${isOpen}"`}>
           <span class="dep-time">${timeHtml(e.plannedTime, e.time, cancelled)}</span>
           <span class="dep-main">
             <span class="dep-l1">${lineLabel(e)}<span class="h">${esc(e.headsign || e.destination?.name || "?")}</span></span>
@@ -547,7 +554,7 @@ function departuresBoard(box, note, from) {
           </span>
           ${ic("chevron", "chev")}
         </button>
-        ${isOpen ? `<div class="dep-more">
+        ${isOpen && !direct ? `<div class="dep-more">
           ${n ? `<div class="list">${e.incidents.map(alertHtml).join("")}</div>` : ""}
           ${stopsHtml(e)}
           <button class="btn" type="button" data-train="${esc(e.trainId)}">Follow this train</button>
@@ -558,6 +565,7 @@ function departuresBoard(box, note, from) {
 
     box.querySelectorAll(".dep-row").forEach((b) => (b.onclick = () => {
       const id = b.dataset.id;
+      if (direct) { buzz(15); onTrain(id); return; }
       buzz(8);
       if (open.has(id)) open.delete(id); else {
         open.add(id);
@@ -565,7 +573,7 @@ function departuresBoard(box, note, from) {
       }
       draw();
     }));
-    box.querySelectorAll("[data-train]").forEach((b) => (b.onclick = () => { buzz(15); onTracksScreen(b.dataset.train); }));
+    box.querySelectorAll("[data-train]").forEach((b) => (b.onclick = () => { buzz(15); onTrain(b.dataset.train); }));
     const all = $(".dep-all", box);
     if (all) all.onclick = () => { showAll = !showAll; draw(); };
   };
@@ -574,6 +582,7 @@ function departuresBoard(box, note, from) {
     .then((b) => {
       fails = 0;
       entries = b.entries;
+      onEntries?.(entries);
       const late = entries.filter((e) => (e.delaySec ?? 0) >= LATE_SEC).length;
       const inc = entries.filter((e) => e.incidents.length).length;
       note.textContent = [late && `${late} late`, inc && `${inc} with incidents`].filter(Boolean).join(" · ");
@@ -587,13 +596,94 @@ function departuresBoard(box, note, from) {
   const clock = setInterval(draw, 15_000);       // countdowns
   onLeave(() => { clearInterval(poll); clearInterval(clock); });
   onLeave(live.subscribe("station", from.stopId, { frequencySec: 3600, windowMin: 120 }, (m) => {
-    if (m.type === "incident" && m.event !== "active") refresh();
+    if (m.type === "incident" && m.event !== "active") { refresh(); onIncident?.(m); }
   }));
+}
+
+// ------------------------------------------------------------------ 3a. station view: next departures + incidents
+
+/**
+ * Station info: incidents at the station (collapsible, only when there are some) and the next departures. Tap a
+ * departure to open the train. [onBack] returns to the previous screen (default: start again).
+ */
+function stationScreen(st, onBack = null) {
+  setUrl({ stop: st.stopId });
+  const self = () => stationScreen(st, onBack);
+  show((s) => {
+    s.innerHTML = `
+      ${backBtn(onBack ? "Back" : "Start again")}
+      <div class="step">Station</div>
+      <h1>${esc(st.name)}</h1>
+      <p class="lead" id="ssum">&nbsp;</p>
+      <details class="incidents card" id="sinc" hidden>
+        <summary><span class="dot"></span><span class="t" id="sinc-t"></span>${ic("chevron", "chev")}</summary>
+        <div class="list" id="sinc-list"></div>
+      </details>
+      <div class="deps-head"><h2>Next departures</h2><span class="note" id="deps-note"></span></div>
+      <div class="deps card" id="deps">${placeholders(4)}</div>
+      <div class="actions"><button class="btn primary block" id="plan">Plan a trip from here</button></div>`;
+    $("[data-back]", s).onclick = () => (onBack ? onBack() : restartBtn.click());
+    $("#plan", s).onclick = () => { buzz(15); destinationScreen(st); };
+
+    // Incidents = those at the station + those of the trains leaving from it (one row each, worst first).
+    const rank = { critical: 0, major: 1, minor: 2, info: 3 };
+    let detail = null, trainInc = [];
+    const draw = () => {
+      const d = detail;
+      if (!d) return;
+      st = { stopId: d.station.stopId, name: d.station.name };
+      const all = new Map([...d.incidents, ...trainInc].map((i) => [i.id, i]));
+      const inc = [...all.values()].sort((a, b) => (rank[a.severity] ?? 4) - (rank[b.severity] ?? 4));
+      const n = inc.length;
+      $("#ssum", s).innerHTML = [
+        d.trainsPresent ? `<b>${d.trainsPresent}</b> train${d.trainsPresent === 1 ? "" : "s"} at the station` : "",
+        `<b>${d.trainsUpcoming}</b> train${d.trainsUpcoming === 1 ? "" : "s"} coming`,
+        n ? "" : "No incidents",
+      ].filter(Boolean).join(" · ");
+      const box = $("#sinc", s);
+      box.hidden = !n;
+      if (!n) return;
+      box.className = `incidents card sev-${esc(inc[0].severity || "info")}`;
+      $("#sinc-t", s).textContent = `${n} incident${n === 1 ? "" : "s"} at this station or its trains`;
+      $("#sinc-list", s).innerHTML = inc.map(alertHtml).join("");
+    };
+    const refresh = () => api(`/stations/${encodeURIComponent(st.stopId)}`).then((d) => { detail = d; draw(); }).catch((e) => {
+      if (e.status === 404) $("#ssum", s).textContent = "This station is not known.";
+    });
+    refresh();
+    const poll = setInterval(refresh, 30_000);
+    onLeave(() => clearInterval(poll));
+    departuresBoard($("#deps", s), $("#deps-note", s), st, {
+      direct: true,
+      onTrain: (id) => onTracksScreen(id, null, self),
+      onIncident: (m) => { if (m.event === "created") { buzz([20, 40, 20]); toast(m.incident.title); } refresh(); },
+      onEntries: (entries) => { trainInc = entries.flatMap((e) => e.incidents); draw(); },
+    });
+  });
+}
+
+/** Search a station by name or on the map, then open its station view. */
+function stationSearchScreen(onBack) {
+  setUrl({});
+  show((s) => {
+    s.innerHTML = `
+      ${backBtn()}
+      <h1>Station departures</h1>
+      <p class="lead">Find a station to see its next departures and incidents.</p>
+      <div id="picker"></div>`;
+    $("[data-back]", s).onclick = () => onBack();
+    onLeave(stationPicker($("#picker", s), {
+      placeholder: "Station",
+      onPick: (st) => { buzz(15); stationScreen(st, () => stationSearchScreen(onBack)); },
+    }));
+    setTimeout(() => $("#picker input", s)?.focus({ preventScroll: true }), 250);
+  });
 }
 
 // ------------------------------------------------------------------ 3b. just browsing: origin + destination
 
-function browseScreen({ note = null, back = false } = {}) {
+/** [noLocation]: we could not locate the user, so the travel assistant is the main action (card on top, red button). */
+function browseScreen({ note = null, back = false, noLocation = false } = {}) {
   const pick = { from: null, to: null };
   const hint = { from: "Where do you start?", to: "Where do you go?" };
   show((s) => {
@@ -603,13 +693,21 @@ function browseScreen({ note = null, back = false } = {}) {
       <div class="illus-box small">${ILLUSTRATION.search}</div>
       <h1>Plan a trip</h1>
       <p class="lead">${esc(note || "Choose where you start and where you go.")}</p>
+      ${noLocation ? `<div class="assistant-card card">
+        <span class="fic">${ic("chat")}</span>
+        <div class="main"><div class="t">Ask the travel assistant</div>
+          <div class="m">Tell it where you are and where you go, by voice or chat. It finds your train.</div></div>
+        <button class="btn primary block" type="button" id="ask">Ask the assistant</button>
+      </div>
+      <h2>Or plan it yourself</h2>` : ""}
       <div class="od card">
         ${field$("from")}
         <button class="icon-btn swap" type="button" title="Swap" aria-label="Swap">${ic("swap")}</button>
         ${field$("to")}
       </div>
+      <button class="link" type="button" id="board">Departures and incidents at a station${ic("chevron")}</button>
       <div id="picker"></div>
-      <div class="actions"><button class="btn primary block" id="go" disabled>Show trains</button></div>`;
+      <div class="actions"><button class="btn${noLocation ? "" : " primary"} block" id="go" disabled>Show trains</button></div>`;
     const inputOf = (f) => $(`.od-field[data-f="${f}"] input`, s);
     let field = "from";
     let close = null;
@@ -662,9 +760,19 @@ function browseScreen({ note = null, back = false } = {}) {
       if (close) openPicker(); // the destination list depends on the origin
     };
     $("#go", s).onclick = () => { buzz(15); connectionsScreen(pick.from, pick.to); };
+    $("#board", s).onclick = () => { buzz(15); stationSearchScreen(() => browseScreen({ note, back: true, noLocation })); };
+    const ask = $("#ask", s);
+    if (ask) ask.onclick = () => {
+      buzz(15);
+      const fab = $("#assistant-fab");
+      if (fab?.getAttribute("aria-expanded") !== "true") fab?.click();
+    };
     render();
-    openPicker();
-    setTimeout(() => inputOf("from")?.focus({ preventScroll: true }), 250);
+    // Without location the assistant comes first: no keyboard popping up over it.
+    if (!noLocation) {
+      openPicker();
+      setTimeout(() => inputOf("from")?.focus({ preventScroll: true }), 250);
+    }
   }, { back });
 }
 
@@ -704,7 +812,7 @@ function connectionsScreen(from, to) {
       }).join("");
       list.querySelectorAll(".conn").forEach((el) => (el.onclick = () => {
         buzz(15);
-        onTracksScreen(el.dataset.id, { fromStopId: from.stopId, toStopId: to.stopId });
+        onTracksScreen(el.dataset.id, { fromStopId: from.stopId, toStopId: to.stopId }, () => connectionsScreen(from, to));
       }));
     };
     const refresh = () => api(`/stations/${encodeURIComponent(from.stopId)}/connections?to=${encodeURIComponent(to.stopId)}&windowMin=240&limit=12`)
@@ -723,10 +831,12 @@ function connectionsScreen(from, to) {
 
 // ------------------------------------------------------------------ 5. on tracks (on a train)
 
-function onTracksScreen(trainId, trip = null) {
+function onTracksScreen(trainId, trip = null, onBack = null) {
   setUrl(trip ? { train: trainId, from: trip.fromStopId, to: trip.toStopId } : { train: trainId });
+  const self = () => onTracksScreen(trainId, trip, onBack);
   show((s) => {
     s.innerHTML = `
+      ${onBack ? backBtn() : ""}
       <div id="alerts" class="list"></div>
       <div class="scene card"><canvas id="scene" aria-hidden="true"></canvas>
         <div class="scene-cap"><span id="line"></span><div class="main"><div class="t" id="to"></div><div class="m" id="where"></div></div><span id="state"></span></div>
@@ -735,7 +845,13 @@ function onTracksScreen(trainId, trip = null) {
       <div class="follow card" id="follow"></div>
       ${trip ? '<a id="watch-train" class="btn block watch-entry" hidden>Watch this trip</a>' : ''}
       <h2>Route</h2>
-      <div class="route" id="route">${placeholders(4)}</div>`;
+      <div class="route" id="route">${placeholders(4)}</div>
+      <p class="note">Tap a stop to see its departures and incidents.</p>`;
+    if (onBack) $("[data-back]", s).onclick = () => onBack();
+    $("#route", s).addEventListener("click", (e) => {
+      const b = e.target.closest("[data-stop]");
+      if (b) { buzz(15); stationScreen({ stopId: b.dataset.stop, name: b.dataset.name }, self); }
+    });
     if (trip) tripWatchAvailable.then((available) => {
       const link = $("#watch-train", s);
       if (!available || !link?.isConnected) return;
@@ -783,10 +899,10 @@ function onTracksScreen(trainId, trip = null) {
         const cls = `stop ${x.state}${i === 0 ? " first" : ""}${i === stops.length - 1 ? " last" : ""}${x.skipped ? " skipped" : ""}`;
         const between = i === k && x.state === "next" && prev
           ? `<div class="between"><span class="pin-train" style="--p:${progress}">${ic("train")}</span></div>` : "";
-        return `${between}<div class="${cls}">
+        return `${between}<button class="${cls}" type="button" data-stop="${esc(x.stopId)}" data-name="${esc(x.name)}">
           <span class="n">${esc(x.name)}${x.skipped ? ' <span class="nostop">Does not stop</span>' : ""}</span>
           <span class="tm"><span>${x.skipped ? "" : timeHtml(x.plannedArr ?? x.plannedDep, x.expectedArr ?? x.expectedDep, cancelled)}</span>
-            ${x.state === "passed" || x.skipped ? "" : `<small>${x.state === "current" ? "Now" : untilText(t)}</small>`}</span></div>`;
+            ${x.state === "passed" || x.skipped ? "" : `<small>${x.state === "current" ? "Now" : untilText(t)}</small>`}</span></button>`;
       }).join("");
       const box = $("#route", s);
       if (box.dataset.sig !== html) {
@@ -1252,10 +1368,16 @@ const params = new URLSearchParams(search);
 const qrTrain = params.get("train");
 const qrStation = params.get("station");
 const qrLine = params.get("line");
+const qrStop = params.get("stop");
 if (qrTrain) {
   const from = params.get("from");
   const to = params.get("to");
   onTracksScreen(qrTrain, from && to ? { fromStopId: from, toStopId: to } : null);
+}
+else if (qrStop) {
+  api(`/stations/${encodeURIComponent(qrStop)}`)
+    .then((d) => stationScreen({ stopId: d.station.stopId, name: d.station.name }))
+    .catch(() => browseScreen({ note: "This station code is not known. Choose where you start and where you go." }));
 }
 else if (qrLine) lineScreen(qrLine, () => alertsScreen(() => detectScreen({ back: true })));
 else if (qrStation) {

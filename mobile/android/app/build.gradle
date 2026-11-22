@@ -10,6 +10,8 @@ android {
         // CI passes -PversionCode=<n> -PversionName=<tag without "v">
         versionCode((project.findProperty("versionCode") ?: "1") as Integer)
         versionName((project.findProperty("versionName") ?: "1.0") as String)
+        // Deep links (AndroidManifest.xml): host of the server the app loads. CI passes -PdeepLinkHost=<host of MOBILE_SERVER_URL>.
+        manifestPlaceholders = [deepLinkHost: (project.findProperty("deepLinkHost") ?: "te3uiwccllmbqi32ye5jpxx6.94.130.67.179.sslip.io") as String]
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

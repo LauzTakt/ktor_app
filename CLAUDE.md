@@ -41,6 +41,7 @@ The prediction model also reads "modified data" from the broker on its own; it i
 | Static web UI: passenger view (`/`, mobile, public) + staff panel behind login (`/admin/` map, `/admin/report.html`), light/dark toggle | **done** (plain JS, no build; MapLibre from unpkg) | `resources/static/` |
 | Passenger voice assistant web app at `/assistant/` (React + Vite, migrated from `lauzhack2026/sbb-client`; ElevenLabs voice agent + map). Built by Gradle (`buildClient`: npm) into the jar; Docker builds it in a Node stage. `-PskipClient=true` skips npm | **done** — see `client/README.md` | `client/` |
 | Mobile apps: Capacitor WebView loading the deployed web UI (`server.url`); on tag `v*` on main CI attaches the Android APK and the iOS .ipa (unsigned unless Apple signing secrets are set) to the GitHub Release | **done** | `mobile/`, `.github/workflows/android-release.yml`, `.github/workflows/ios-release.yml` |
+| Deep links into the app: Android App Links (`/.well-known/assetlinks.json` from `ANDROID_CERT_SHA256`, needs the stable release key), iOS Universal Links (`/.well-known/apple-app-site-association` from `IOS_APP_ID`, needs a paid Apple account), custom scheme `traintwin://open/?…`; "Open in the app" bar on phone browsers | **done** — see `mobile/README.md` "Deep links" | `web/AppLinks.kt`, `static/app-links.js` |
 
 ## Data model (step 1: ingest)
 
@@ -120,7 +121,8 @@ HTTP) -> `query/ReadModels.kt` (public contract, decoupled from MQTT payloads). 
   `ASSISTANT_FAST_MODE`, `ASSISTANT_EFFORT`, `ASSISTANT_MAX_MODEL_CALLS`. Passenger voice app: `ELEVENLABS_API_KEY`
   (env only), `PASSENGER_AGENT_ID`, `ELEVENLABS_API_URL` (`https://api.elevenlabs.io`). Push: `VAPID_PUBLIC_KEY` /
   `VAPID_PRIVATE_KEY` (optional, generated otherwise), `VAPID_SUBJECT`, `PUSH_ARRIVAL_LEAD_SEC` (120),
-  `FCM_SERVICE_ACCOUNT_JSON` (env only; raw JSON or base64; Android app push).
+  `FCM_SERVICE_ACCOUNT_JSON` (env only; raw JSON or base64; Android app push). Deep links (env only):
+  `ANDROID_CERT_SHA256`, `IOS_APP_ID`, `ANDROID_PACKAGE` (`ch.lauzhack.twin`).
 - **Never commit `.env`** or any broker credential.
 - Tests (`src/test`) run with `mqtt.enabled=false` and a temp SQLite file.
 

@@ -46,6 +46,30 @@ With a paid Apple Developer account, add these secrets and CI produces a signed 
   Team, bundle id and export method (ad hoc / development / App Store / enterprise) are read from it; override the
   method with the variable `IOS_EXPORT_METHOD`. An ad hoc profile installs on the devices registered in it.
 
+## Deep links (QR codes and links open the app)
+
+- **Android App Links**: links and QR codes to `https://<server host>/` (`/`, `/index.html`, `/trip-watch.html`, with
+  any query such as `?stop=` / `?train=`) open the app directly once Android has verified the domain. The server
+  publishes `/.well-known/assetlinks.json` from the env var `ANDROID_CERT_SHA256` (comma-separated SHA-256
+  fingerprints of the signing certificate). This needs the **stable release key** (secrets above): with the
+  throwaway debug key every build has a new fingerprint, verification fails and Android opens the browser
+  (the user can still enable it in Settings -> Apps -> Train Twin -> Open by default). Fingerprint:
+
+  ```sh
+  keytool -list -v -keystore release.jks -alias twin | grep SHA256
+  ```
+
+  Set it in Coolify (`ANDROID_CERT_SHA256=AA:BB:…`), reinstall the app, then check with
+  `adb shell pm get-app-links ch.lauzhack.twin` (`verified`). The host comes from `server.url` (CI passes
+  `-PdeepLinkHost`).
+- **Custom scheme** `traintwin://open/?stop=…` (Android and iOS, no verification): used by the "Open in the app"
+  bar that the website shows on phone browsers (`static/app-links.js`). A web page cannot open an app without a tap.
+- **iOS Universal Links** need the Associated Domains entitlement (paid Apple Developer account): then set
+  `IOS_APP_ID=<TEAMID>.ch.lauzhack.twin` on the server (`/.well-known/apple-app-site-association`) and add
+  `applinks:<host>` to the app's entitlements. Until then iPhones open QR codes in Safari, and the bar there
+  offers the app.
+- In the app, `@capacitor/app` (`appUrlOpen`, `getLaunchUrl`) loads the linked page in the WebView.
+
 ## Push notifications (Android)
 
 The app uses `@capacitor/push-notifications` (FCM); the web UI asks for the token when the user taps "Notify me"

@@ -38,7 +38,9 @@ import ch.lauzhack.twin.wallet.TripWatchService
 import ch.lauzhack.twin.wallet.TripWatchStore
 import ch.lauzhack.twin.wallet.WalletConfig
 import ch.lauzhack.twin.wallet.tripWatchRoutes
+import ch.lauzhack.twin.web.AppLinksConfig
 import ch.lauzhack.twin.web.FleetFeed
+import ch.lauzhack.twin.web.appLinks
 import ch.lauzhack.twin.web.fleetSocket
 import io.ktor.server.http.content.staticResources
 import io.ktor.serialization.kotlinx.json.json
@@ -143,6 +145,7 @@ fun Application.configureHttp(
     wallet: WalletConfig = WalletConfig(),
     push: PushConfig = PushConfig(),
     pushSenders: Map<String, PushSender>? = null,
+    appLinks: AppLinksConfig = AppLinksConfig.fromEnvironment(),
     mqttConnected: () -> Boolean,
 ): PushService {
     install(CallLogging) {
@@ -200,6 +203,7 @@ fun Application.configureHttp(
     } else null
     routing {
         get("/health") { call.respond(Health("ok")) }
+        appLinks(appLinks) // /.well-known/ files: QR codes and links open the mobile app (web/AppLinks.kt)
         // Swagger UI at /swagger, spec at /swagger/documentation.yaml (keep in sync with docs/API.md and api/v1/).
         swaggerUI(path = "swagger", swaggerFile = "openapi/documentation.yaml")
         apiV1(queries, journeyQueries, IncidentQueries(db), mqttConnected)

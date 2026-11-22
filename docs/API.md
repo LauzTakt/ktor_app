@@ -487,10 +487,23 @@ All pages follow [`docs/STYLE.md`](STYLE.md) (SBB look: SBB Web font, SBB palett
   - Location: a train within 200 m (`/trains/nearby`, with the phone's speed/heading) -> "Are you on this train?"
     (Yes / No / other trains nearby); else a station within 200 m (`/stations/nearby`) -> "Are you at X?"; else, or
     on No, "Plan a trip": origin and destination by text or on the map.
+    When the user cannot be located (blocked, no HTTPS, timeout), "Plan a trip" puts the travel assistant first: a
+    card on top with the red main button opening the assistant panel; "Show trains" becomes secondary and the
+    keyboard does not open on its own.
   - On tracks: a Three.js scene (always the same train on the same track; it moves with the real speed), the whole
     route with the ETA of every stop and where the train is, incidents on top. Live over the WebSocket `train` topic.
   - At a station: destination by text or map (reachable stations from `/stations/{id}/destinations` highlighted),
     then `/stations/{id}/connections?to=`; tap a train to follow it on tracks.
+  - Station view (`/?stop=<stopId>`; also from "Station info" on the destination screen, from "Departures and
+    incidents at a station" on "Plan a trip", and by tapping any stop in a train's route): a collapsible list of
+    incidents (those of the station from `/stations/{id}` plus those of its departing trains, worst first; hidden
+    when there are none) and the next departures (`/stations/{id}/board`); tap a departure to open the train.
+    Live: board every 20 s and on incident events over the WebSocket `station` topic.
+
+- Mobile app deep links: `GET /.well-known/assetlinks.json` (Android App Links; 404 unless `ANDROID_CERT_SHA256`)
+  and `GET /.well-known/apple-app-site-association` (iOS Universal Links; 404 unless `IOS_APP_ID`). On phone
+  browsers `app-links.js` shows an "Open in the app" bar (`intent://` on Android, `traintwin://open/?…` on iOS). See
+  `mobile/README.md` "Deep links".
 
 ## Staff web UI
 

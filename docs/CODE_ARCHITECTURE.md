@@ -52,7 +52,7 @@ same object graph over a seeded state and a temporary SQLite file.
 | `passenger` | Server side of the voice app: ElevenLabs session, place brief, nearest station, fleet snapshot, read-only `/twin/*` proxy | `twinapi`, `common`, `web` (`FleetFeed`) |
 | `wallet` | Trip Watch: Apple / Google Wallet passes kept up to date for a planned journey (own SQLite file) | `query`, `twinapi`, `common` |
 | `push` | Push notifications (Web Push + FCM for the Android app): follow a train (arrival at your stop + incidents) or a line (incidents). `PushStore` = its tables in the shared SQLite file (through `Database.withConnection`), `Senders` = Web Push / FCM HTTP clients | `query`, `state`, `db`, `common` |
-| `web` | `FleetFeed` + `/ws/fleet`: whole fleet once per tick for the staff map | `state` |
+| `web` | `FleetFeed` + `/ws/fleet`: whole fleet once per tick for the staff map; `AppLinks`: `/.well-known/` files for mobile deep links (env config, no data) | `state` |
 
 ### Dependency rules
 
