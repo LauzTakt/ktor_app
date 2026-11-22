@@ -483,10 +483,13 @@ function destinationScreen(from) {
   show((s) => {
     s.innerHTML = `
       ${backBtn("Start again")}
-      <div class="step">From ${esc(from.name)}</div>
+      <div class="step">At ${esc(from.name)}</div>
+      <div class="deps-head"><h2>Next departures</h2><span class="note" id="deps-note"></span></div>
+      <div class="deps card" id="deps">${placeholders(3)}</div>
       <h1>Where are you going?</h1>
       <div id="picker"></div>`;
     $("[data-back]", s).onclick = () => restartBtn.click();
+    departuresBoard($("#deps", s), $("#deps-note", s), from);
     api(`/stations/${encodeURIComponent(from.stopId)}/destinations?limit=500`).catch(() => []).then((dests) => {
       const reachable = new Map(dests.map((d) => [d.station.stopId, { trains: d.trains, nextArrival: d.nextArrival }]));
       onLeave(stationPicker($("#picker", s), {
@@ -495,6 +498,97 @@ function destinationScreen(from) {
       }));
     });
   });
+}
+
+/**
+ * Next departures at [from] (station screen, above the destination picker): time + delay, line, destination,
+ * countdown, and a mark on trains with an incident. Tapping a row opens it: incidents, the next stops with their
+ * ETA, and a link to the train. Live: refreshed every 20 s and right away when an incident changes.
+ */
+function departuresBoard(box, note, from) {
+  const SHOW = 5, MAX = 12;
+  const open = new Set();          // expanded trainIds (kept across refreshes)
+  const details = new Map();       // trainId -> { stops } (fetched on first expand)
+  let entries = [], showAll = false, fails = 0;
+
+  const countdown = (e) => {
+    if (e.status === "cancelled") return '<span class="warn">Does not run</span>';
+    if (e.atStation) return "<b>At the platform</b>";
+    return untilText(e.time) === "now" ? "<b>Leaving now</b>" : esc(untilText(e.time));
+  };
+  const stopsHtml = (e) => {
+    const d = details.get(e.trainId);
+    if (!d) return '<div class="placeholder"></div>';
+    const k = d.stops.findIndex((x) => x.stopId === from.stopId && x.state !== "passed");
+    const next = d.stops.slice(k + 1).filter((x) => !x.skipped);
+    if (!next.length) return "";
+    const pick = next.length > 4 ? [...next.slice(0, 3), null, next.at(-1)] : next;
+    return `<ol class="dep-stops">${pick.map((x) => x ? `<li><span class="n">${esc(x.name)}</span>
+        <span class="tm">${timeHtml(x.plannedArr ?? x.plannedDep, x.expectedArr ?? x.expectedDep, e.status === "cancelled")}</span></li>`
+      : `<li class="gap"><span class="n">${next.length - 4} more stop${next.length - 4 === 1 ? "" : "s"}</span></li>`).join("")}</ol>`;
+  };
+
+  const draw = () => {
+    if (!entries.length) {
+      box.innerHTML = `<p class="empty">No departures in the next 2 hours from trains already running.</p>`;
+      return;
+    }
+    const list = showAll ? entries : entries.slice(0, SHOW);
+    box.innerHTML = list.map((e) => {
+      const n = e.incidents.length;
+      const isOpen = open.has(e.trainId);
+      const cancelled = e.status === "cancelled";
+      return `<div class="dep${isOpen ? " open" : ""}${cancelled ? " cancelled" : ""}">
+        <button class="dep-row" type="button" data-id="${esc(e.trainId)}" aria-expanded="${isOpen}">
+          <span class="dep-time">${timeHtml(e.plannedTime, e.time, cancelled)}</span>
+          <span class="dep-main">
+            <span class="dep-l1">${lineLabel(e)}<span class="h">${esc(e.headsign || e.destination?.name || "?")}</span></span>
+            <span class="dep-l2">${countdown(e)}${n ? ` · <span class="inc"><span class="dot"></span>${n} incident${n === 1 ? "" : "s"}</span>` : ""}</span>
+          </span>
+          ${ic("chevron", "chev")}
+        </button>
+        ${isOpen ? `<div class="dep-more">
+          ${n ? `<div class="list">${e.incidents.map(alertHtml).join("")}</div>` : ""}
+          ${stopsHtml(e)}
+          <button class="btn" type="button" data-train="${esc(e.trainId)}">Follow this train</button>
+        </div>` : ""}
+      </div>`;
+    }).join("") + (entries.length > SHOW
+      ? `<button class="dep-all" type="button">${showAll ? "Fewer departures" : `${entries.length - SHOW} more departure${entries.length - SHOW === 1 ? "" : "s"}`}</button>` : "");
+
+    box.querySelectorAll(".dep-row").forEach((b) => (b.onclick = () => {
+      const id = b.dataset.id;
+      buzz(8);
+      if (open.has(id)) open.delete(id); else {
+        open.add(id);
+        if (!details.has(id)) api(`/trains/${encodeURIComponent(id)}/stops`).then((stops) => { details.set(id, { stops }); draw(); }).catch(() => {});
+      }
+      draw();
+    }));
+    box.querySelectorAll("[data-train]").forEach((b) => (b.onclick = () => { buzz(15); onTracksScreen(b.dataset.train); }));
+    const all = $(".dep-all", box);
+    if (all) all.onclick = () => { showAll = !showAll; draw(); };
+  };
+
+  const refresh = () => api(`/stations/${encodeURIComponent(from.stopId)}/board?type=departures&windowMin=120&limit=${MAX}&includeSkipped=false`)
+    .then((b) => {
+      fails = 0;
+      entries = b.entries;
+      const late = entries.filter((e) => (e.delaySec ?? 0) >= LATE_SEC).length;
+      const inc = entries.filter((e) => e.incidents.length).length;
+      note.textContent = [late && `${late} late`, inc && `${inc} with incidents`].filter(Boolean).join(" · ");
+      details.clear();     // stop times change: refetch for the open rows
+      open.forEach((id) => api(`/trains/${encodeURIComponent(id)}/stops`).then((stops) => { details.set(id, { stops }); draw(); }).catch(() => {}));
+      draw();
+    })
+    .catch(() => { if (++fails === 1 && !entries.length) box.innerHTML = '<p class="empty">Departures could not be loaded. Retrying…</p>'; });
+  refresh();
+  const poll = setInterval(refresh, 20_000);
+  const clock = setInterval(draw, 15_000);       // countdowns
+  onLeave(() => { clearInterval(poll); clearInterval(clock); });
+  onLeave(live.subscribe("station", from.stopId, { frequencySec: 3600, windowMin: 120 }, (m) => {
+    if (m.type === "incident" && m.event !== "active") refresh();
+  }));
 }
 
 // ------------------------------------------------------------------ 3b. just browsing: origin + destination

@@ -136,6 +136,8 @@ data class BoardEntryDto(
     val atStation: Boolean,
     val startsHere: Boolean,
     val terminatesHere: Boolean,
+    /** Active incidents concerning this train (with `match`, same as `/trains/{id}/incidents`), worst first. */
+    val incidents: List<IncidentDto> = emptyList(),
 )
 
 @Serializable

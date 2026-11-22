@@ -856,7 +856,7 @@ components:
 
     BoardEntry:
       type: object
-      required: [trainId, line, category, number, operator, headsign, status, origin, destination, stop, time, plannedTime, delaySec, atStation, startsHere, terminatesHere]
+      required: [trainId, line, category, number, operator, headsign, status, origin, destination, stop, time, plannedTime, delaySec, atStation, startsHere, terminatesHere, incidents]
       properties:
         trainId: { type: string }
         line: { type: string, nullable: true }
@@ -874,6 +874,7 @@ components:
         atStation: { type: boolean }
         startsHere: { type: boolean }
         terminatesHere: { type: boolean }
+        incidents: { type: array, items: { $ref: "#/components/schemas/Incident" }, description: "Active incidents concerning this train (with `match`), worst first" }
 
     Board:
       type: object

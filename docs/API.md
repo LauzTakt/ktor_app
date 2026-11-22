@@ -127,7 +127,8 @@ written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lau
                  "stop": Stop,               // the train's call at this station
                  "time": 1795294440000,      // expected (else planned) dep/arr depending on type; sort key
                  "plannedTime": 1795293150000, "delaySec": 1290,
-                 "atStation": true, "startsHere": false, "terminatesHere": false } ] }
+                 "atStation": true, "startsHere": false, "terminatesHere": false,
+                 "incidents": Incident[] } ] }   // incidents concerning that train (with `match`), worst first
 // sorted: trains standing at the station first, then by time
 
 // Incident

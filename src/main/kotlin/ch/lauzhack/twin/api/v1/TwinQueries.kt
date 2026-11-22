@@ -120,6 +120,7 @@ class TwinQueries(
         val s = state.station(stopId) ?: throw notFound("station", stopId)
         val now = state.now()
         val until = now + windowMin * 60_000L
+        val incidents = activeIncidents()
         val entries = state.trainsCallingAt(stopId).mapNotNull { t ->
             val info = t.info ?: return@mapNotNull null
             val idx = upcomingIndexAt(t, stopId) ?: return@mapNotNull null
@@ -143,6 +144,8 @@ class TwinQueries(
                 stop = call.toDto(idx, stateOf(t, idx)), time = time, plannedTime = planned,
                 delaySec = if (time != null && planned != null) ((time - planned) / 1000).toInt() else null,
                 atStation = atStation, startsHere = startsHere, terminatesHere = terminatesHere,
+                incidents = incidents.mapNotNull { inc -> trainIncidentMatch(inc, t)?.let { inc.toDto(it) } }
+                    .sortedWith(compareBy({ severityRank(it.severity) }, { -it.updatedAt })),
             )
         }.sortedWith(compareBy({ !it.atStation }, { it.time ?: Long.MAX_VALUE })).take(limit)
         return BoardDto(s.toDto(), type, now, windowMin, entries)
