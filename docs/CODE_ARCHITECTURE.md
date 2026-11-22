@@ -184,6 +184,11 @@ backend API (the contract both consume), the shared `/theme.css` (fonts, palette
 passenger view's floating button (`assistant-launcher.js`) opens `/assistant/` in a panel. The Android/iOS shell
 (Capacitor) loads the same deployed pages.
 
+Inside `static/`, every page shares `common.js` (escaping, time and delay formatting, `api` / `publicApi`, the
+theme: `setTheme`, `onTheme`, `toggleTheme`, the base map and `MAP_COLOURS`) and `theme-init.js` (theme before the first
+paint). The passenger view is split into ES modules under `static/passenger/` (`ui`, `location`, `stations`,
+`screens`, `alerts`, `train-scene`, entry `main.js`).
+
 Costs to keep in mind: two map integrations (MapLibre 5 from the CDN, MapLibre 6 from npm), small formatting
 helpers written twice (JS and TS), Node needed to build the jar (or `-PskipClient=true`). If the project continues,
 the natural next step is one Vite build with several entry points (passenger, staff, assistant) sharing components,

@@ -5,8 +5,8 @@ import type { Map as LibreMap } from "maplibre-gl";
 import type { FleetRow } from "./feed";
 
 type T = { id: string; from: [number, number]; to: [number, number]; bearing: number; motion: string; delay: number; line: string; atStop: string | null; continuity: number };
-export const TRAIN_COLOURS = { moving: "#00973b", late: "#f27e00", station: "#2d327d", stoppedOnLine: "#eb0000", cancelled: "#8d8d8d" };
-export function trainColour(motion: string, delay: number, atStop: string | null) {
+const TRAIN_COLOURS = { moving: "#00973b", late: "#f27e00", station: "#2d327d", stoppedOnLine: "#eb0000", cancelled: "#8d8d8d" };
+function trainColour(motion: string, delay: number, atStop: string | null) {
   if (motion === "cancelled") return TRAIN_COLOURS.cancelled;
   if (motion === "stopped" && !atStop) return TRAIN_COLOURS.stoppedOnLine;
   if (delay >= 180) return TRAIN_COLOURS.late;

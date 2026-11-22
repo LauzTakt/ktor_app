@@ -1,6 +1,8 @@
 // Every train drawn on one canvas above the map, interpolated between the 1 Hz fleet snapshots (60 fps).
 // Stripped-down port of the sbb-twin viewer's viewer/src/trains.ts (no 3D, no simulated-train markers, light theme).
 
+import { LATE_SEC } from "./common.js";
+
 // SBB palette: green on time, orange late, blue at a station, red stopped on the line, grey cancelled, charcoal selected
 export const COLOURS = { moving: "#00973b", late: "#f27e00", station: "#2d327d", stoppedOnLine: "#eb0000", cancelled: "#8d8d8d", selected: "#212121" };
 // On the dark map the dark SBB blue and charcoal lose contrast: lighter equivalents there.
@@ -10,7 +12,7 @@ export const DARK_COLOURS = { ...COLOURS, station: "#8f9cff", cancelled: "#a3a9b
 export function colourOf(motion, delay, atStop, pal = COLOURS) {
   if (motion === "cancelled") return pal.cancelled;
   if (motion === "stopped" && !atStop) return pal.stoppedOnLine;
-  if (delay >= 180) return pal.late;
+  if (delay >= LATE_SEC) return pal.late;
   return motion === "moving" ? pal.moving : pal.station;
 }
 

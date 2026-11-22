@@ -261,7 +261,7 @@ model needs another lookup); a question only about an out-of-scope topic is answ
 - `context.onScreen`: what the passenger has open in the passenger view (`/`) behind the assistant panel, so "this
   train", "this line" or "here" need no explanation. `screen` is `train` (`trainId`, optional trip `fromStopId`/`toStopId`),
   `line` (`line`), `station` (departure board, `stopId`), `destinations` ("where to?" from `stopId`) or `connections`
-  (`fromStopId` → `toStopId`); `label` is the text the page shows. The page publishes it (`static/passenger.js`
+  (`fromStopId` → `toStopId`); `label` is the text the page shows. The page publishes it (`static/passenger/ui.js`
   `setView`), `static/assistant-launcher.js` posts it to the `/assistant/` frame (`postMessage` `twin-view`, same
   origin; the frame asks with `twin-view-request` at start), and the client sends it with every question and tells a
   live voice conversation when it changes. The backend adds it to the first message (names resolved) and prefetches
@@ -491,7 +491,7 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/api/v1/staff/users
 
 All pages follow [`docs/STYLE.md`](STYLE.md) (SBB look: SBB Web font, SBB palette, flat, Lucide icons).
 
-- `/` (public): **passenger view**, mobile first (`index.html`, `passenger.js`, `passenger.css`):
+- `/` (public): **passenger view**, mobile first (`index.html`, `passenger/*.js` from `passenger/main.js`, `passenger.css`):
   - QR codes: `/?train=<trainId>` opens "on tracks" for that train; `/?station=<stopId>` asks for the destination
     (`&to=<stopId>` goes straight to the trains between both).
   - Location: a train within 200 m (`/trains/nearby`, with the phone's speed/heading) -> "Are you on this train?"

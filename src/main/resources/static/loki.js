@@ -1,6 +1,8 @@
 // Loki, the mascot of the app (docs/STYLE.md "9. Mascot"). Styles: /loki.css. The same drawing lives in
 // client/src/Loki.tsx for the travel assistant: change both together.
 
+import { esc } from "./common.js";
+
 export const LOKI_SVG = `
 <svg class="loki-svg" viewBox="0 0 100 92" aria-hidden="true">
   <g class="loki-panto"><path d="M38 15 50 5 62 15" /><path d="M41 3h18" /></g>
@@ -23,7 +25,6 @@ export const LOKI_SVG = `
   </g>
 </svg>`;
 
-const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
 /** Loki rolling on a moving track: the loading scene. `mini` for cards and lists; `caption` is read out (role=status). */
 export function lokiLoading({ caption = "Loading…", sub = "", mini = false, mood = "" } = {}) {
