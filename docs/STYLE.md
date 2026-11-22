@@ -45,6 +45,8 @@ body { font-family: "SBB Web", "Helvetica Neue", Helvetica, Arial, sans-serif; -
 ## 3. Colours
 
 SBB palette names. Light values are SBB's; dark values are ours (same roles, readable on dark surfaces).
+For the passenger view and the travel assistant they live in one file, `src/main/resources/static/theme.css`
+(fonts + light / dark tokens, served at `/theme.css`): change colours there, not in the page CSS.
 
 | Token | Light | Dark | Role |
 |---|---|---|---|

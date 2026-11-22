@@ -71,7 +71,7 @@ Trip Watch accepts a `journeyId` from a server-cached planner result, or `trainI
 | | `bbox` | | position inside the box |
 | | `limit`, `offset` | 100 (max 2000), 0 | paging; sorted by `trainId` |
 | `/trains/{id}/stops` | `state` | | `passed`, `current`, `next`; `upcoming` = everything not passed |
-| `/stations` | `q` | | substring of the name, or exact `stopId`; prefix matches first |
+| `/stations` | `q` | | substring of the name (case- and accent-insensitive), or exact `stopId`; prefix matches first |
 | | `bbox` | | |
 | | `limit` | 50 (max 5000) | |
 | `/stations/{id}/board` | `type` | `departures` | `departures` (excludes trains ending here), `arrivals` (excludes trains starting here), `all` |
@@ -85,7 +85,7 @@ Trip Watch accepts a `journeyId` from a server-cached planner result, or `trainI
 | | `limit` | 5 (max 20) | |
 | `/stations/nearby` | `lat`, `lon` | required | |
 | | `radiusM`, `limit` | 5000 (max 50000), 8 (max 50) | |
-| `/stations/{id}/destinations` | `q`, `limit` | –, 30 (max 500) | name filter |
+| `/stations/{id}/destinations` | `q`, `limit` | –, 30 (max 500) | name filter (case- and accent-insensitive) |
 | `/stations/{id}/connections` | `to` | required | destination `stopId` |
 | | `windowMin`, `limit` | 180 (1…1440), 10 (max 100) | departures within the window (trains at the station always included) |
 | `/stations/{id}/screen` | `limit` | 6 (max 20) | number of departures |
