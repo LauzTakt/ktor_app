@@ -1,16 +1,29 @@
 // Shared helpers for every page: passenger view, staff pages (map + report), Trip Watch, the onboarding tour.
 // Plain ES module, no build. Keep page-specific code in the page's own module.
 
+// ---------------------------------------------------------------- languages (i18n.js, loaded before every module)
+const I18N = window.TwinI18n ?? { t: (k, v) => (v ? k.replace(/\{(\w+)\}/g, (m, x) => (x in v ? String(v[x]) : m)) : k), lang: "en", locale: "en-GB", apply() {}, picker: () => document.createElement("span") };
+/** Translated UI text; the key is the English text (see i18n.js). */
+export const t = I18N.t;
+/** Current UI language: `en` | `fr` | `es`. */
+export const lang = I18N.lang;
+/** Locale for Intl formatters. */
+export const locale = I18N.locale;
+/** Translates the data-i18n* attributes under [root] (for HTML built at runtime). */
+export const applyI18n = (root) => I18N.apply(root);
+/** Language <select>. */
+export const langPicker = (cls) => I18N.picker(cls);
+
 export const SEVERITY_COLOURS = { info: "#0079c7", minor: "#f27e00", major: "#eb0000", critical: "#a20013" };
 export const CATEGORIES = {
-  rolling_stock: "Train defect (rolling stock)",
-  infrastructure: "Track / overhead line",
-  signalling: "Signal / points / interlocking",
-  station: "Station problem",
-  person: "Person / medical / police",
-  obstacle: "Obstacle on the track",
-  weather: "Weather",
-  other: "Other",
+  rolling_stock: t("Train defect (rolling stock)"),
+  infrastructure: t("Track / overhead line"),
+  signalling: t("Signal / points / interlocking"),
+  station: t("Station problem"),
+  person: t("Person / medical / police"),
+  obstacle: t("Obstacle on the track"),
+  weather: t("Weather"),
+  other: t("Other"),
 };
 
 const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
@@ -28,7 +41,7 @@ export const LATE_SEC = 180;
 
 export const TZ = "Europe/Zurich";
 const hm = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-const dhm = new Intl.DateTimeFormat("de-CH", { timeZone: TZ, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+const dhm = new Intl.DateTimeFormat(locale === "en-GB" ? "de-CH" : locale, { timeZone: TZ, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 const hms = new Intl.DateTimeFormat("de-CH", { timeZone: TZ, hour: "2-digit", minute: "2-digit", second: "2-digit" });
 /** `HH:mm`, Swiss time; "–" when unknown. */
 export const time = (ms) => (ms ? hm.format(ms) : "–");
@@ -63,7 +76,7 @@ export const api = (path, init = {}) => request(path, init, toLogin);
 export const publicApi = (path, init = {}) => request(path, init, null);
 
 export function severityBadge(sev) {
-  return `<span class="severity-label" style="--signal:${SEVERITY_COLOURS[sev] ?? "#767676"}">${esc(sev ?? "?")}</span>`;
+  return `<span class="severity-label" style="--signal:${SEVERITY_COLOURS[sev] ?? "#767676"}">${esc(sev ? t(sev) : "?")}</span>`;
 }
 
 // ---------------------------------------------------------------- staff session (pages are staff-only, see auth/AuthRoutes.kt)
@@ -83,7 +96,7 @@ export async function initStaffSession() {
     const out = document.createElement("button");
     out.className = "btn btn-ghost";
     out.type = "button";
-    out.textContent = "Log out";
+    out.textContent = t("Log out");
     out.addEventListener("click", async () => {
       await fetch("/api/v1/auth/logout", { method: "POST" }).catch(() => {});
       toLogin();
@@ -113,8 +126,8 @@ export function setTheme(theme, save = true) {
   if (save) localStorage.setItem(THEME_KEY, theme);
   const btn = document.getElementById("themeToggle");
   if (btn) {
-    btn.textContent = theme === "dark" ? "☀ Light" : "☾ Dark";
-    btn.title = theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
+    btn.textContent = theme === "dark" ? `☀ ${t("Light")}` : `☾ ${t("Dark")}`;
+    btn.title = theme === "dark" ? t("Switch to light mode") : t("Switch to dark mode");
   }
   themeListeners.forEach((fn) => fn(theme));
 }
@@ -231,7 +244,7 @@ export function bboxOf(geometry) {
 /** Ago text for a past timestamp. */
 export function ago(ms) {
   const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
-  if (s < 60) return "just now";
-  if (s < 3600) return `${Math.round(s / 60)} min ago`;
-  return `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min ago`;
+  if (s < 60) return t("just now");
+  if (s < 3600) return t("{n} min ago", { n: Math.round(s / 60) });
+  return t("{h} h {m} min ago", { h: Math.floor(s / 3600), m: Math.round((s % 3600) / 60) });
 }

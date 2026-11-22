@@ -20,6 +20,8 @@ internal data class TripWatch(
     val revision: Long = 0,
     val alertRevision: Long = 0,
     val alertText: String? = null,
+    /** Incidents on the trip's trains already announced on the pass (each one notifies once). */
+    val announcedIncidents: List<String> = emptyList(),
 ) {
     val leg get() = legs[currentLeg]
     val destination get() = legs.last().to
@@ -62,7 +64,7 @@ internal class TripWatchStore(path: String) : AutoCloseable {
     }
 
     @Synchronized
-    fun put(watch: TripWatch, alert: Boolean): TripWatch {
+    fun put(watch: TripWatch, alert: Boolean, alertText: String? = null): TripWatch {
         connection.autoCommit = false
         try {
             val revision = connection.createStatement().use { st ->
@@ -71,7 +73,7 @@ internal class TripWatchStore(path: String) : AutoCloseable {
             val saved = watch.copy(
                 revision = revision,
                 alertRevision = if (alert) revision else watch.alertRevision,
-                alertText = if (alert) watch.instruction() else watch.alertText,
+                alertText = if (alert) alertText ?: watch.instruction() else watch.alertText,
             )
             connection.prepareStatement(
                 """INSERT INTO watch(id, owner, ended, revision, state) VALUES (?, ?, ?, ?, ?)

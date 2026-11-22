@@ -3,6 +3,7 @@ import { ChevronRight, Clock, ExternalLink, Eye, EyeOff, Layers, MapPin, Navigat
 import { useEffect, useState } from "react";
 import type { Arrival } from "./contract";
 import type { DrawnItem } from "./map/MapController";
+import { t } from "./i18n";
 
 export type PickRow = { label: string; detail: string; late: boolean; onTap: () => void };
 export type PickIncident = { id: string; title: string; severity: string; reason: string[]; since?: string; /** "at least until 12:25" */ end?: string };
@@ -18,45 +19,45 @@ export type PickInfo = {
 export type Tracking = { trainId: string; stopId: string; stationName: string; follow: boolean; arrival: Arrival | null; at: number; gone?: boolean };
 
 /** The train the passenger waits for, live: ETA ticking every second (red under 2 minutes), delay, stops away. */
-export function TrackChip({ t, onClose, onFollow }: { t: Tracking; onClose: () => void; onFollow: () => void }) {
+export function TrackChip({ t: tr, onClose, onFollow }: { t: Tracking; onClose: () => void; onFollow: () => void }) {
   const [, tick] = useState(0);
   useEffect(() => {
     const iv = window.setInterval(() => tick((x) => x + 1), 1000);
     return () => window.clearInterval(iv);
   }, []);
-  const a = t.arrival;
-  const left = a ? Math.max(0, a.etaSec - (Date.now() - t.at) / 1000) : null;
+  const a = tr.arrival;
+  const left = a ? Math.max(0, a.etaSec - (Date.now() - tr.at) / 1000) : null;
   const mmss = left == null ? "…" : `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, "0")}`;
-  const line = a ? a.line.replace(/^([A-Z]+)(\d)/, "$1 $2") : "Your train";
+  const line = a ? a.line.replace(/^([A-Z]+)(\d)/, "$1 $2") : t("Your train");
   return (
     <div className="track" data-soon={left != null && left < 120}>
       <div className="track-main">
         <small>
           {line}
           {a ? ` → ${a.headsign}` : ""}
-          {t.stationName ? ` · at ${t.stationName}` : ""}
+          {tr.stationName ? ` · ${t("at {station}", { station: tr.stationName })}` : ""}
         </small>
-        {t.gone ? (
-          <b>Has left the station</b>
+        {tr.gone ? (
+          <b>{t("Has left the station")}</b>
         ) : a?.status === "at_station" ? (
-          <b>At the station now</b>
+          <b>{t("At the station now")}</b>
         ) : (
           <b>
-            Arrives in <span className="track-eta">{mmss}</span>
+            {t("Arrives in")} <span className="track-eta">{mmss}</span>
           </b>
         )}
         {a && (
           <span className="track-meta">
-            {a.delaySec >= 60 ? <em>+{Math.round(a.delaySec / 60)} min late</em> : "on time"}
-            {a.status !== "at_station" && a.stopsAway > 0 ? ` · ${a.stopsAway} stop${a.stopsAway > 1 ? "s" : ""} away` : ""}
+            {a.delaySec >= 60 ? <em>{t("+{n} min late", { n: Math.round(a.delaySec / 60) })}</em> : t("on time")}
+            {a.status !== "at_station" && a.stopsAway > 0 ? ` · ${t(a.stopsAway > 1 ? "{n} stops away" : "{n} stop away", { n: a.stopsAway })}` : ""}
             {a.speedKmh > 0 ? ` · ${Math.round(a.speedKmh)} km/h` : ""}
           </span>
         )}
       </div>
-      <button type="button" className="btn btn-ghost btn-circle btn-sm track-btn" data-on={t.follow} aria-pressed={t.follow} onClick={onFollow} aria-label="Follow the train">
+      <button type="button" className="btn btn-ghost btn-circle btn-sm track-btn" data-on={tr.follow} aria-pressed={tr.follow} onClick={onFollow} aria-label={t("Follow the train")}>
         <Navigation size={16} />
       </button>
-      <button type="button" className="btn btn-ghost btn-circle btn-sm track-btn" onClick={onClose} aria-label="Stop tracking">
+      <button type="button" className="btn btn-ghost btn-circle btn-sm track-btn" onClick={onClose} aria-label={t("Stop tracking")}>
         <X size={16} />
       </button>
     </div>
@@ -67,22 +68,22 @@ export function MapLegend({ items, onRemove, onToggle, onClear, onUndo }: { item
   const [open, setOpen] = useState(false);
   return (
     <div className="legend" data-open={open}>
-      <button type="button" className="btn legend-btn" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label="What is on the map">
+      <button type="button" className="btn legend-btn" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label={t("What is on the map")}>
         <Layers size={17} />
         {items.length > 0 && <b>{items.length}</b>}
       </button>
       {open && (
         <div className="legend-panel">
           <div className="legend-head">
-            <span>On the map</span>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={onUndo} title="Undo the last change">
-              <RotateCcw size={15} /> Undo
+            <span>{t("On the map")}</span>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={onUndo} title={t("Undo the last change")}>
+              <RotateCcw size={15} /> {t("Undo")}
             </button>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={onClear} disabled={!items.length} title="Clear the map">
-              <Trash2 size={15} /> Clear
+            <button type="button" className="btn btn-ghost btn-sm" onClick={onClear} disabled={!items.length} title={t("Clear the map")}>
+              <Trash2 size={15} /> {t("Clear")}
             </button>
           </div>
-          {items.length === 0 && <p className="legend-empty">Nothing drawn yet.</p>}
+          {items.length === 0 && <p className="legend-empty">{t("Nothing drawn yet.")}</p>}
           <ul>
             {items.map((i) => (
               <li key={i.key} data-hidden={i.hidden}>
@@ -91,10 +92,10 @@ export function MapLegend({ items, onRemove, onToggle, onClear, onUndo }: { item
                   <small>{i.kind}</small>
                   {i.label}
                 </span>
-                <button type="button" onClick={() => onToggle(i.key)} aria-label={i.hidden ? "Show" : "Hide"}>
+                <button type="button" onClick={() => onToggle(i.key)} aria-label={i.hidden ? t("Show") : t("Hide")}>
                   {i.hidden ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
-                <button type="button" onClick={() => onRemove(i.key)} aria-label="Remove">
+                <button type="button" onClick={() => onRemove(i.key)} aria-label={t("Remove")}>
                   <X size={16} />
                 </button>
               </li>
@@ -112,7 +113,7 @@ export function PickCard({ info, onClose, onAction }: { info: PickInfo; onClose:
     <div className="pick" role="dialog" aria-label={info.title}>
       <div className="pick-head">
         <strong>{info.title}</strong>
-        <button type="button" onClick={onClose} aria-label="Close">
+        <button type="button" onClick={onClose} aria-label={t("Close")}>
           <X size={18} />
         </button>
       </div>
@@ -138,8 +139,8 @@ export function PickCard({ info, onClose, onAction }: { info: PickInfo; onClose:
                 <ChevronRight size={16} className="more" aria-hidden="true" />
               </summary>
               <div className="why">
-                {(i.reason.length ? i.reason : ["No reason given yet."]).map((l, k) => <p key={k}>{l}</p>)}
-                {i.since && <p className="since">Since {i.since}</p>}
+                {(i.reason.length ? i.reason : [t("No reason given yet.")]).map((l, k) => <p key={k}>{l}</p>)}
+                {i.since && <p className="since">{t("Since {time}", { time: i.since })}</p>}
               </div>
             </details>
           ))}
@@ -152,7 +153,7 @@ export function PickCard({ info, onClose, onAction }: { info: PickInfo; onClose:
               <button type="button" onClick={r.onTap}>
                 <span>{r.label}</span>
                 <em data-late={r.late}>{r.detail}</em>
-                <small>Track</small>
+                <small>{t("Track")}</small>
               </button>
             </li>
           ))}
@@ -162,21 +163,21 @@ export function PickCard({ info, onClose, onAction }: { info: PickInfo; onClose:
         {place && info.stationId && (
           <>
             <button type="button" className="btn btn-sm" onClick={() => onAction("from")}>
-              <MapPin size={15} /> Start here
+              <MapPin size={15} /> {t("Start here")}
             </button>
             <button type="button" className="btn btn-sm" onClick={() => onAction("to")}>
-              <Navigation size={15} /> Go here
+              <Navigation size={15} /> {t("Go here")}
             </button>
           </>
         )}
         {info.onOpen && (
           <button type="button" className="btn btn-sm" onClick={info.onOpen}>
-            <ExternalLink size={15} /> Open train view
+            <ExternalLink size={15} /> {t("Open train view")}
           </button>
         )}
         {info.ask && (
           <button type="button" className="btn btn-primary btn-sm" onClick={() => onAction("ask")}>
-            {info.askLabel ?? "Ask about this"}
+            {info.askLabel ?? t("Ask about this")}
           </button>
         )}
       </div>

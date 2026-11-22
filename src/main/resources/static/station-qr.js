@@ -1,4 +1,4 @@
-import { api } from "./common.js";
+import { api, t } from "./common.js";
 import { qrcodegen } from "./vendor/qrcodegen-v1.8.0.js";
 
 const byId = (id) => document.getElementById(id);
@@ -47,7 +47,7 @@ function showSign({ kind, param, value, title, lead, note, label, file }) {
   passenger.searchParams.set(param, value);
   const svg = qrSvg(passenger.href);
 
-  byId("stationQrTitle").textContent = `${kind} QR`;
+  byId("stationQrTitle").textContent = kind === "Station" ? t("Station QR") : t("Train QR");
   byId("stationQrName").textContent = title;
   byId("stationQrLead").textContent = lead;
   const noteEl = byId("stationQrNote");
@@ -74,8 +74,8 @@ function showStation(station) {
     param: "station",
     value: station.stopId,
     title: station.name,
-    lead: "Scan for travel updates from here",
-    label: `Station QR code for ${station.name}`,
+    lead: t("Scan for travel updates from here"),
+    label: t("Station QR code for {name}", { name: station.name }),
     file: `station-${station.stopId}.svg`,
   });
 }
@@ -87,16 +87,16 @@ function runDay(trainId) {
 }
 
 function showTrain(train) {
-  const name = train.name || "Train";
+  const name = train.name || t("Train");
   const day = runDay(train.trainId);
   showSign({
     kind: "Train",
     param: "train",
     value: train.trainId,
     title: train.to ? `${name} → ${train.to}` : name,
-    lead: "Scan for live updates on this train",
-    note: day ? `Valid for this run on ${day}` : null,
-    label: `Train QR code for ${name}${train.to ? ` to ${train.to}` : ""}`,
+    lead: t("Scan for live updates on this train"),
+    note: day ? t("Valid for this run on {day}", { day }) : null,
+    label: train.to ? t("Train QR code for {name} to {to}", { name, to: train.to }) : t("Train QR code for {name}", { name }),
     file: `train-${train.trainId.replace(/[^\w.-]+/g, "_")}.svg`,
   });
 }
@@ -126,14 +126,14 @@ input.addEventListener("input", () => {
   searchTimer = setTimeout(async () => {
     search = new AbortController();
     const { signal } = search;
-    status.textContent = "Searching…";
+    status.textContent = t("Searching…");
     try {
       const stations = await api(`/stations?q=${encodeURIComponent(query)}&limit=8`, { signal });
       if (signal.aborted) return;
       results.replaceChildren(...stations.map(stationRow));
-      status.textContent = stations.length ? "" : "No stations found.";
+      status.textContent = stations.length ? "" : t("No stations found.");
     } catch {
-      if (!signal.aborted) status.textContent = "Couldn’t load stations. Try searching again.";
+      if (!signal.aborted) status.textContent = t("Couldn’t load stations. Try searching again.");
     }
   }, 150);
 });
@@ -154,7 +154,7 @@ function openStationQr(button, station) {
   input.value = "";
   status.textContent = "";
   results.replaceChildren();
-  byId("stationQrTitle").textContent = "Station QR";
+  byId("stationQrTitle").textContent = t("Station QR");
   showPicker();
   dialog.showModal();
   if (station) showStation(station);

@@ -1,7 +1,7 @@
 // Tikt, the mascot of the app (docs/STYLE.md "9. Mascot"). Styles: /tikt.css. The same drawing lives in
 // client/src/Tikt.tsx for the travel assistant: change both together.
 
-import { esc } from "./common.js";
+import { esc, t } from "./common.js";
 
 export const TIKT_SVG = `
 <svg class="tikt-svg" viewBox="0 0 100 92" aria-hidden="true">
@@ -27,7 +27,7 @@ export const TIKT_SVG = `
 
 
 /** Tikt rolling on a moving track: the loading scene. `mini` for cards and lists; `caption` is read out (role=status). */
-export function tiktLoading({ caption = "Loading…", sub = "", mini = false, mood = "" } = {}) {
+export function tiktLoading({ caption = t("Loading…"), sub = "", mini = false, mood = "" } = {}) {
   return `<div class="tikt-loading${mini ? " mini" : ""}" role="status">
     <span class="tikt"${mood ? ` data-mood="${esc(mood)}"` : ""}>${TIKT_SVG}</span>
     <svg class="tikt-track" viewBox="0 0 260 10" preserveAspectRatio="none" aria-hidden="true">

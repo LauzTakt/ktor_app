@@ -81,3 +81,4 @@
 .watch-page .btn.wallet:hover { background: #262626; border-color: #262626; }
 .watch-page .btn.wallet:disabled { background: var(--cement); border-color: var(--cement); }
 :root[data-theme="dark"] .watch-page .btn.wallet { border-color: var(--cement); }
+.topbar .lang-select { width: auto; min-width: 0; flex: none; }

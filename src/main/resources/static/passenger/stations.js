@@ -1,6 +1,6 @@
 // Station picker: text search over every station, or a MapLibre map.
 
-import { $, addRail, applyTheme as applyMapTheme, baseStyle, currentTheme, esc, MAP_COLOURS, onTheme, publicApi as api, reducedMotion, time as hhmm } from "../common.js";
+import { $, addRail, applyTheme as applyMapTheme, baseStyle, currentTheme, esc, MAP_COLOURS, onTheme, publicApi as api, reducedMotion, t, time as hhmm } from "../common.js";
 import { buzz, debounce, ic } from "./ui.js";
 
 // ------------------------------------------------------------------ station picker (text or map)
@@ -16,16 +16,16 @@ let pickerSequence = 0;
 export function stationPicker(container, { placeholder, reachable = null, onPick, input: external = null }) {
   const id = `station-picker-${++pickerSequence}`;
   container.innerHTML = `
-    <div class="tabs tabs-border" role="tablist" aria-label="Choose a station">
-      <button class="tab tab-active" type="button" role="tab" id="${id}-list" aria-controls="${id}-results" aria-selected="true" data-tab="text">${ic("list")}List</button>
-      <button class="tab" type="button" role="tab" id="${id}-map" aria-controls="${id}-map-panel" aria-selected="false" tabindex="-1" data-tab="map">${ic("map")}Map</button>
+    <div class="tabs tabs-border" role="tablist" aria-label="${esc(t("Choose a station"))}">
+      <button class="tab tab-active" type="button" role="tab" id="${id}-list" aria-controls="${id}-results" aria-selected="true" data-tab="text">${ic("list")}${esc(t("List"))}</button>
+      <button class="tab" type="button" role="tab" id="${id}-map" aria-controls="${id}-map-panel" aria-selected="false" tabindex="-1" data-tab="map">${ic("map")}${esc(t("Map"))}</button>
     </div>
     <div class="pane" id="${id}-results" role="tabpanel" aria-labelledby="${id}-list" data-pane="text">
       ${external ? "" : `<label class="input search">${ic("search")}<input type="text" placeholder="${esc(placeholder)}" aria-label="${esc(placeholder)}" autocomplete="off" enterkeyhint="search" />
-        <button class="clear" type="button" title="Clear" aria-label="Clear">${ic("x")}</button></label>`}
+        <button class="clear" type="button" title="${esc(t("Clear"))}" aria-label="${esc(t("Clear"))}">${ic("x")}</button></label>`}
       <div class="list stagger results"></div>
     </div>
-    <div class="pane" id="${id}-map-panel" role="tabpanel" aria-labelledby="${id}-map" data-pane="map" hidden><div class="map"></div><p class="note">Tap a station on the map.</p></div>`;
+    <div class="pane" id="${id}-map-panel" role="tabpanel" aria-labelledby="${id}-map" data-pane="map" hidden><div class="map"></div><p class="note">${esc(t("Tap a station on the map."))}</p></div>`;
   // `input` (optional): a text field owned by the caller (e.g. the From / To fields) instead of our own search box.
   const input = external ?? $("input", container), results = $(".results", container);
   const controller = new AbortController();
@@ -44,9 +44,9 @@ export function stationPicker(container, { placeholder, reachable = null, onPick
     results.innerHTML = list.length ? list.map((x, i) => {
       const r = reachable?.get(x.stopId);
       return `<button class="row" type="button" data-id="${esc(x.stopId)}" data-name="${esc(x.name)}" style="--i:${i}">
-        <span class="main"><span class="t">${esc(x.name)}</span>${r ? `<span class="m">${r.trains} train${r.trains > 1 ? "s" : ""} going there${r.nextArrival ? ` · first arrival ${hhmm(r.nextArrival)}` : ""}</span>` : reachable ? '<span class="m">No direct train running now</span>' : ""}</span>
+        <span class="main"><span class="t">${esc(x.name)}</span>${r ? `<span class="m">${esc(r.trains > 1 ? t("{n} trains going there", { n: r.trains }) : t("1 train going there"))}${r.nextArrival ? ` · ${esc(t("first arrival {time}", { time: hhmm(r.nextArrival) }))}` : ""}</span>` : reachable ? `<span class="m">${esc(t("No direct train running now"))}</span>` : ""}</span>
         <span class="chev">${ic("chevron")}</span></button>`;
-    }).join("") : q ? '<p class="empty">No station matches.</p>' : "";
+    }).join("") : q ? `<p class="empty">${esc(t("No station matches."))}</p>` : "";
     results.querySelectorAll(".row").forEach((el) => (el.onclick = () => { el.classList.add("selected"); onPick({ stopId: el.dataset.id, name: el.dataset.name }); }));
   };
   const onInput = debounce(rows, 180);
@@ -80,11 +80,11 @@ export function stationPicker(container, { placeholder, reachable = null, onPick
       const canvas = $(".map", pane);
       const note = $(".note", pane);
       canvas.hidden = false;
-      note.textContent = "Tap a station on the map.";
+      note.textContent = t("Tap a station on the map.");
       mapReady ??= stationMap(canvas, { reachable, onPick, signal }).catch(() => {
         mapReady = undefined;
         canvas.hidden = true;
-        note.textContent = "Map unavailable. Use the list to find a station.";
+        note.textContent = t("Map unavailable. Use the list to find a station.");
       });
       const map = await mapReady;
       if (!signal.aborted && !pane.hidden) map?.resize();
@@ -135,7 +135,7 @@ export async function stationMap(el, { reachable, onPick, signal }) {
       const p = e.features[0].properties;
       buzz();
       new maplibregl.Popup({ closeButton: false, offset: 10 }).setLngLat(e.lngLat)
-        .setHTML(`<div class="pop"><b>${esc(p.name)}</b><button class="btn btn-primary" type="button">Choose</button></div>`)
+        .setHTML(`<div class="pop"><b>${esc(p.name)}</b><button class="btn btn-primary" type="button">${esc(t("Choose"))}</button></div>`)
         .addTo(map).getElement().querySelector("button").onclick = () => onPick({ stopId: p.id, name: p.name });
     });
   });

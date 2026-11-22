@@ -3,8 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Takt · Your trip</title>
+    <title data-i18n>Takt · Your trip</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <script src="/i18n.js"></script>
+    <script src="/i18n-strings.js"></script>
     <script src="/theme-init.js"></script>
     <!-- Installable web app (needed for alerts on iPhone: Share > Add to Home Screen) -->
     <link rel="manifest" href="/manifest.json" />
@@ -27,25 +29,26 @@
         <img src="/favicon.svg" width="28" height="28" alt="" />
         Takt
       </div>
-      <span class="live" id="live">Live</span>
+      <span class="live" id="live" data-i18n>Live</span>
       <span class="spacer"></span>
-      <button class="btn btn-ghost btn-circle icon-btn" id="alerts-btn" type="button" title="Your alerts" aria-label="Your alerts"></button>
-      <button class="btn btn-ghost btn-circle icon-btn" id="tour-btn" type="button" title="Show the tour" aria-label="Show the tour"></button>
+      <button class="btn btn-ghost btn-circle icon-btn" id="alerts-btn" type="button" title="Your alerts" aria-label="Your alerts" data-i18n-title data-i18n-aria-label></button>
+      <button class="btn btn-ghost btn-circle icon-btn" id="tour-btn" type="button" title="Show the tour" aria-label="Show the tour" data-i18n-title data-i18n-aria-label></button>
+      <span data-lang-picker class="select select-ghost select-sm lang-select"></span>
       <button class="btn btn-ghost btn-circle icon-btn" id="theme" type="button" title="Dark mode" aria-label="Dark mode"></button>
     </header>
 
     <div id="passenger-app">
-      <nav class="trip-nav" aria-label="Journey tools">
-        <button class="btn btn-ghost btn-sm" id="restart" type="button" hidden>Change trip</button>
-        <a class="watched-trips-link" href="/trip-watch.html" hidden>Watched trips</a>
+      <nav class="trip-nav" aria-label="Journey tools" data-i18n-aria-label>
+        <button class="btn btn-ghost btn-sm" id="restart" type="button" hidden data-i18n>Change trip</button>
+        <a class="watched-trips-link" href="/trip-watch.html" hidden data-i18n>Watched trips</a>
       </nav>
       <main id="stage" aria-live="polite"></main>
     </div>
 
     <noscript><p style="padding: 16px">This page needs JavaScript.</p></noscript>
     <!-- Travel assistant (voice + chat, /assistant/): floating button, opens the chat in a panel over the page -->
-    <div class="assistant-panel" id="assistant-panel" role="dialog" aria-label="Travel assistant" tabindex="-1" hidden></div>
-    <button class="btn btn-circle assistant-fab" id="assistant-fab" type="button" title="Travel assistant" aria-label="Open the travel assistant" aria-expanded="false" aria-controls="assistant-panel">
+    <div class="assistant-panel" id="assistant-panel" role="dialog" aria-label="Travel assistant" data-i18n-aria-label tabindex="-1" hidden></div>
+    <button class="btn btn-circle assistant-fab" id="assistant-fab" type="button" title="Travel assistant" aria-label="Open the travel assistant" data-i18n-title data-i18n-aria-label aria-expanded="false" aria-controls="assistant-panel">
       <svg class="icon open" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>
       <svg class="icon close" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
     </button>

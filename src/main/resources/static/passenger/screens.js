@@ -1,6 +1,6 @@
 // The screens of the passenger flow: detect, are-you-here questions, station, destination, browse, connections, on tracks.
 
-import { $, esc, LATE_SEC, publicApi as api, reducedMotion, time as hhmm } from "../common.js";
+import { $, esc, LATE_SEC, publicApi as api, reducedMotion, t, time as hhmm } from "../common.js";
 import { tiktLoading } from "../tikt.js";
 import { ILLUSTRATION, NEAR_M, alertHtml, askAssistant, backBtn, buzz, clamp, distText, drawIncidents, ic, labelView, lineLabel, onLeave, placeholders, restartBtn, setUrl, setView, show, stateHtml, timeHtml, toast, googleWalletAvailable, tripWatchAvailable, untilText } from "./ui.js";
 import { geo, geoText, live, locate, nearbyStationsFor, nearbyTrainsFor } from "./location.js";
@@ -16,8 +16,8 @@ export function detectScreen(opts = {}) {
   setView(null);
   show((s) => {
     s.innerHTML = `
-      <div class="tikt-hero">${tiktLoading({ caption: "Finding where you are…", sub: `I look for a train or a station within ${NEAR_M} m of you.`, mood: "think" })}</div>
-      <div class="actions"><button class="btn btn-block" id="skip">Just browsing</button></div>`;
+      <div class="tikt-hero">${tiktLoading({ caption: t("Finding where you are…"), sub: t("I look for a train or a station within {m} m of you.", { m: NEAR_M }), mood: "think" })}</div>
+      <div class="actions"><button class="btn btn-block" id="skip">${t("Just browsing")}</button></div>`;
     let alive = true;
     onLeave(() => (alive = false));
     $("#skip", s).onclick = () => { alive = false; browseScreen(); };
@@ -42,7 +42,7 @@ export function detectScreen(opts = {}) {
 export async function askStationOrBrowse(fix) {
   const stations = fix ? await nearbyStationsFor(fix).catch(() => []) : [];
   if (stations.length) return askStationScreen(stations[0]);
-  browseScreen({ note: "No train or station nearby." });
+  browseScreen({ note: t("No train or station nearby.") });
 }
 
 // ------------------------------------------------------------------ 2a. are you on this train?
@@ -51,21 +51,21 @@ export function askTrainScreen(candidates) {
   setView(null);
   const [best, ...others] = candidates;
   show((s) => {
-    const t = best.train;
+    const tr = best.train;
     s.innerHTML = `
       <div class="illus-box">${ILLUSTRATION.train}</div>
-      <h1>Are you on this train?</h1>
+      <h1>${t("Are you on this train?")}</h1>
       <div class="card ask">
-        <div class="head">${lineLabel(t, true)}<div class="main"><div class="t">to ${esc(t.headsign || t.destination?.name || "?")}</div>
-          <div class="m">${esc(t.currentStop ? `At ${t.currentStop.name}` : t.nextStop ? `Next stop: ${t.nextStop.name}` : "")} · ${distText(best.distanceM)} from you</div></div></div>
-        <div>${stateHtml(t)}</div>
+        <div class="head">${lineLabel(tr, true)}<div class="main"><div class="t">${t("to {dest}", { dest: esc(tr.headsign || tr.destination?.name || "?") })}</div>
+          <div class="m">${esc(tr.currentStop ? t("At {stop}", { stop: tr.currentStop.name }) : tr.nextStop ? t("Next stop: {stop}", { stop: tr.nextStop.name }) : "")} · ${t("{distance} from you", { distance: distText(best.distanceM) })}</div></div></div>
+        <div>${stateHtml(tr)}</div>
       </div>
-      <div class="pair"><button class="btn" id="no">No</button><button class="btn btn-primary" id="yes">Yes</button></div>
-      ${others.length ? `<h2>Other trains near you</h2><div class="list stagger">${others.map((o, i) => `
+      <div class="pair"><button class="btn" id="no">${t("No")}</button><button class="btn btn-primary" id="yes">${t("Yes")}</button></div>
+      ${others.length ? `<h2>${t("Other trains near you")}</h2><div class="list stagger">${others.map((o, i) => `
         <button class="row" type="button" data-id="${esc(o.train.trainId)}" style="--i:${i}">${lineLabel(o.train)}
-          <span class="main"><span class="t">to ${esc(o.train.headsign || "?")}</span><span class="m">${distText(o.distanceM)} from you</span></span>
+          <span class="main"><span class="t">${t("to {dest}", { dest: esc(o.train.headsign || "?") })}</span><span class="m">${t("{distance} from you", { distance: distText(o.distanceM) })}</span></span>
           <span class="chev">${ic("chevron")}</span></button>`).join("")}</div>` : ""}`;
-    $("#yes", s).onclick = () => { buzz(15); onTracksScreen(t.trainId); };
+    $("#yes", s).onclick = () => { buzz(15); onTracksScreen(tr.trainId); };
     $("#no", s).onclick = () => { buzz(); askStationOrBrowse(geo.fix); };
     s.querySelectorAll("[data-id]").forEach((el) => (el.onclick = () => { buzz(15); onTracksScreen(el.dataset.id); }));
   });
@@ -78,9 +78,9 @@ export function askStationScreen(near) {
   show((s) => {
     s.innerHTML = `
       <div class="illus-box">${ILLUSTRATION.station}</div>
-      <h1>Are you at ${esc(near.station.name)}?</h1>
-      <p class="lead">${distText(near.distanceM)} from you · ${near.trainsUpcoming} train${near.trainsUpcoming === 1 ? "" : "s"} coming</p>
-      <div class="pair"><button class="btn" id="no">No</button><button class="btn btn-primary" id="yes">Yes</button></div>`;
+      <h1>${t("Are you at {station}?", { station: esc(near.station.name) })}</h1>
+      <p class="lead">${t("{distance} from you", { distance: distText(near.distanceM) })} · ${near.trainsUpcoming === 1 ? t("1 train coming") : t("{n} trains coming", { n: near.trainsUpcoming })}</p>
+      <div class="pair"><button class="btn" id="no">${t("No")}</button><button class="btn btn-primary" id="yes">${t("Yes")}</button></div>`;
     $("#yes", s).onclick = () => { buzz(15); destinationScreen(near.station); };
     $("#no", s).onclick = () => { buzz(); browseScreen(); };
   });
@@ -93,17 +93,17 @@ export function destinationScreen(from) {
   labelView(from.name);
   show((s) => {
     s.innerHTML = `
-      <div class="step-row"><span class="step">At ${esc(from.name)}</span><button class="link" type="button" id="info">Station info${ic("chevron")}</button></div>
-      <div class="deps-head"><h2>Next departures</h2><span class="note" id="deps-note"></span></div>
-      <div class="deps card" id="deps">${placeholders(3, "Looking for departures…")}</div>
-      <h1>Where are you going?</h1>
+      <div class="step-row"><span class="step">${t("At {stop}", { stop: esc(from.name) })}</span><button class="link" type="button" id="info">${t("Station info")}${ic("chevron")}</button></div>
+      <div class="deps-head"><h2>${t("Next departures")}</h2><span class="note" id="deps-note"></span></div>
+      <div class="deps card" id="deps">${placeholders(3, t("Looking for departures…"))}</div>
+      <h1>${t("Where are you going?")}</h1>
       <div id="picker"></div>`;
     $("#info", s).onclick = () => { buzz(15); stationScreen(from, () => destinationScreen(from)); };
     departuresBoard($("#deps", s), $("#deps-note", s), from, { onTrain: (id) => onTracksScreen(id, null, () => destinationScreen(from)) });
     api(`/stations/${encodeURIComponent(from.stopId)}/destinations?limit=500`).catch(() => []).then((dests) => {
       const reachable = new Map(dests.map((d) => [d.station.stopId, { trains: d.trains, nextArrival: d.nextArrival }]));
       onLeave(stationPicker($("#picker", s), {
-        placeholder: "Destination", reachable,
+        placeholder: t("Destination"), reachable,
         onPick: (to) => { buzz(15); connectionsScreen(from, to); },
       }));
     });
@@ -127,9 +127,9 @@ export function departuresBoard(box, note, from, { onTrain = (id) => onTracksScr
   let entries = [], showAll = false, fails = 0;
 
   const countdown = (e) => {
-    if (e.status === "cancelled") return '<span class="warn">Does not run</span>';
-    if (e.atStation) return "<b>At the platform</b>";
-    return untilText(e.time) === "now" ? "<b>Leaving now</b>" : esc(untilText(e.time));
+    if (e.status === "cancelled") return `<span class="warn">${t("Does not run")}</span>`;
+    if (e.atStation) return `<b>${t("At the platform")}</b>`;
+    return e.time && e.time - Date.now() < 45_000 ? `<b>${t("Leaving now")}</b>` : esc(untilText(e.time));
   };
   const stopsHtml = (e) => {
     const d = details.get(e.trainId);
@@ -140,12 +140,12 @@ export function departuresBoard(box, note, from, { onTrain = (id) => onTracksScr
     const pick = next.length > 4 ? [...next.slice(0, 3), null, next.at(-1)] : next;
     return `<ol class="dep-stops">${pick.map((x) => x ? `<li><span class="n">${esc(x.name)}</span>
         <span class="tm">${timeHtml(x.plannedArr ?? x.plannedDep, x.expectedArr ?? x.expectedDep, e.status === "cancelled")}</span></li>`
-      : `<li class="gap"><span class="n">${next.length - 4} more stop${next.length - 4 === 1 ? "" : "s"}</span></li>`).join("")}</ol>`;
+      : `<li class="gap"><span class="n">${next.length - 4 === 1 ? t("1 more stop") : t("{n} more stops", { n: next.length - 4 })}</span></li>`).join("")}</ol>`;
   };
 
   const draw = () => {
     if (!entries.length) {
-      box.innerHTML = `<p class="empty">No departures in the next 2 hours from trains already running.</p>`;
+      box.innerHTML = `<p class="empty">${t("No departures in the next 2 hours from trains already running.")}</p>`;
       return;
     }
     const list = showAll ? entries : entries.slice(0, SHOW);
@@ -158,18 +158,18 @@ export function departuresBoard(box, note, from, { onTrain = (id) => onTracksScr
           <span class="dep-time">${timeHtml(e.plannedTime, e.time, cancelled)}</span>
           <span class="dep-main">
             <span class="dep-l1">${lineLabel(e)}<span class="h">${esc(e.headsign || e.destination?.name || "?")}</span></span>
-            <span class="dep-l2">${countdown(e)}${n ? ` · <span class="inc"><span class="dot"></span>${n} incident${n === 1 ? "" : "s"}</span>` : ""}</span>
+            <span class="dep-l2">${countdown(e)}${n ? ` · <span class="inc"><span class="dot"></span>${n === 1 ? t("1 incident") : t("{n} incidents", { n })}</span>` : ""}</span>
           </span>
           ${ic("chevron", "chev")}
         </button>
         ${isOpen && !direct ? `<div class="dep-more">
           ${n ? `<div class="list">${e.incidents.map(alertHtml).join("")}</div>` : ""}
           ${stopsHtml(e)}
-          <button class="btn" type="button" data-train="${esc(e.trainId)}">Follow this train</button>
+          <button class="btn" type="button" data-train="${esc(e.trainId)}">${t("Follow this train")}</button>
         </div>` : ""}
       </div>`;
     }).join("") + (entries.length > SHOW
-      ? `<button class="dep-all" type="button">${showAll ? "Fewer departures" : `${entries.length - SHOW} more departure${entries.length - SHOW === 1 ? "" : "s"}`}</button>` : "");
+      ? `<button class="dep-all" type="button">${showAll ? t("Fewer departures") : entries.length - SHOW === 1 ? t("1 more departure") : t("{n} more departures", { n: entries.length - SHOW })}</button>` : "");
 
     box.querySelectorAll(".dep-row").forEach((b) => (b.onclick = () => {
       const id = b.dataset.id;
@@ -193,12 +193,12 @@ export function departuresBoard(box, note, from, { onTrain = (id) => onTracksScr
       onEntries?.(entries);
       const late = entries.filter((e) => (e.delaySec ?? 0) >= LATE_SEC).length;
       const inc = entries.filter((e) => e.incidents.length).length;
-      note.textContent = [late && `${late} late`, inc && `${inc} with incidents`].filter(Boolean).join(" · ");
+      note.textContent = [late && t("{n} late", { n: late }), inc && t("{n} with incidents", { n: inc })].filter(Boolean).join(" · ");
       details.clear();     // stop times change: refetch for the open rows
       open.forEach((id) => api(`/trains/${encodeURIComponent(id)}/stops`).then((stops) => { details.set(id, { stops }); draw(); }).catch(() => {}));
       draw();
     })
-    .catch(() => { if (++fails === 1 && !entries.length) box.innerHTML = '<p class="empty">Departures could not be loaded. Retrying…</p>'; });
+    .catch(() => { if (++fails === 1 && !entries.length) box.innerHTML = `<p class="empty">${t("Departures could not be loaded. Retrying…")}</p>`; });
   refresh();
   const poll = setInterval(refresh, 20_000);
   const clock = setInterval(draw, 15_000);       // countdowns
@@ -221,16 +221,16 @@ export function stationScreen(st, onBack = null) {
   show((s) => {
     s.innerHTML = `
       ${onBack ? backBtn() : ""}
-      <div class="step">Station</div>
+      <div class="step">${t("Station")}</div>
       <h1>${esc(st.name)}</h1>
       <p class="lead" id="ssum">&nbsp;</p>
       <details class="incidents card" id="sinc" hidden>
         <summary><span class="dot"></span><span class="t" id="sinc-t"></span>${ic("chevron", "chev")}</summary>
         <div class="list" id="sinc-list"></div>
       </details>
-      <div class="deps-head"><h2>Next departures</h2><span class="note" id="deps-note"></span></div>
-      <div class="deps card" id="deps">${placeholders(4, "Looking for departures…")}</div>
-      <div class="actions"><button class="btn btn-primary btn-block" id="plan">Plan a trip from here</button></div>`;
+      <div class="deps-head"><h2>${t("Next departures")}</h2><span class="note" id="deps-note"></span></div>
+      <div class="deps card" id="deps">${placeholders(4, t("Looking for departures…"))}</div>
+      <div class="actions"><button class="btn btn-primary btn-block" id="plan">${t("Plan a trip from here")}</button></div>`;
     if (onBack) $("[data-back]", s).onclick = onBack;
     $("#plan", s).onclick = () => { buzz(15); destinationScreen(st); };
 
@@ -245,19 +245,19 @@ export function stationScreen(st, onBack = null) {
       const inc = [...all.values()].sort((a, b) => (rank[a.severity] ?? 4) - (rank[b.severity] ?? 4));
       const n = inc.length;
       $("#ssum", s).innerHTML = [
-        d.trainsPresent ? `<b>${d.trainsPresent}</b> train${d.trainsPresent === 1 ? "" : "s"} at the station` : "",
-        `<b>${d.trainsUpcoming}</b> train${d.trainsUpcoming === 1 ? "" : "s"} coming`,
-        n ? "" : "No incidents",
+        d.trainsPresent ? (d.trainsPresent === 1 ? t("{n} train at the station", { n: "<b>1</b>" }) : t("{n} trains at the station", { n: `<b>${d.trainsPresent}</b>` })) : "",
+        d.trainsUpcoming === 1 ? t("{n} train coming", { n: "<b>1</b>" }) : t("{n} trains coming", { n: `<b>${d.trainsUpcoming}</b>` }),
+        n ? "" : t("No incidents"),
       ].filter(Boolean).join(" · ");
       const box = $("#sinc", s);
       box.hidden = !n;
       if (!n) return;
       box.className = `incidents card sev-${esc(inc[0].severity || "info")}`;
-      $("#sinc-t", s).textContent = `${n} incident${n === 1 ? "" : "s"} at this station or its trains`;
+      $("#sinc-t", s).textContent = n === 1 ? t("1 incident at this station or its trains") : t("{n} incidents at this station or its trains", { n });
       $("#sinc-list", s).innerHTML = inc.map(alertHtml).join("");
     };
     const refresh = () => api(`/stations/${encodeURIComponent(st.stopId)}`).then((d) => { detail = d; draw(); }).catch((e) => {
-      if (e.status === 404) $("#ssum", s).textContent = "This station is not known.";
+      if (e.status === 404) $("#ssum", s).textContent = t("This station is not known.");
     });
     refresh();
     const poll = setInterval(refresh, 30_000);
@@ -277,12 +277,12 @@ export function stationSearchScreen(onBack) {
   show((s) => {
     s.innerHTML = `
       ${backBtn()}
-      <h1>Station departures</h1>
-      <p class="lead">Find a station to see its next departures and incidents.</p>
+      <h1>${t("Station departures")}</h1>
+      <p class="lead">${t("Find a station to see its next departures and incidents.")}</p>
       <div id="picker"></div>`;
     $("[data-back]", s).onclick = () => onBack();
     onLeave(stationPicker($("#picker", s), {
-      placeholder: "Station",
+      placeholder: t("Station"),
       onPick: (st) => { buzz(15); stationScreen(st, () => stationSearchScreen(onBack)); },
     }));
     setTimeout(() => $("#picker input", s)?.focus({ preventScroll: true }), 250);
@@ -295,26 +295,26 @@ export function stationSearchScreen(onBack) {
 export function browseScreen({ note = null, back = false, noLocation = false } = {}) {
   setView(null);
   const pick = { from: null, to: null };
-  const hint = { from: "Where do you start?", to: "Where do you go?" };
+  const hint = { from: t("Where do you start?"), to: t("Where do you go?") };
   show((s) => {
-    const field$ = (f) => `<label class="od-field" data-f="${f}"><span class="k">${f === "from" ? "From" : "To"}</span>
+    const field$ = (f) => `<label class="od-field" data-f="${f}"><span class="k">${f === "from" ? t("From") : t("To")}</span>
       <input class="v" type="text" placeholder="${hint[f]}" aria-label="${hint[f]}" autocomplete="off" enterkeyhint="search" /></label>`;
     s.classList.add("planner");
     s.innerHTML = `
       <header class="planner-intro">
-        <h1>Plan a trip</h1>
+        <h1>${t("Plan a trip")}</h1>
         <p class="lead" hidden></p>
-        <button class="btn" type="button" id="ask" aria-haspopup="dialog" aria-controls="assistant-panel">${ic("chat")}Ask the travel assistant</button>
+        <button class="btn" type="button" id="ask" aria-haspopup="dialog" aria-controls="assistant-panel">${ic("chat")}${t("Ask the travel assistant")}</button>
       </header>
       <div class="planner-route">
         <div class="od">
           ${field$("from")}
-          <button class="btn btn-ghost btn-circle swap" type="button" title="Swap stations" aria-label="Swap stations">${ic("swap")}</button>
+          <button class="btn btn-ghost btn-circle swap" type="button" title="${t("Swap stations")}" aria-label="${t("Swap stations")}">${ic("swap")}</button>
           ${field$("to")}
         </div>
         <div id="picker"></div>
-        <button class="btn btn-block" id="go" disabled>Show trains</button>
-        <button class="station-link" type="button" id="board">${ic("list")} Station departures and incidents ${ic("chevron")}</button>
+        <button class="btn btn-block" id="go" disabled>${t("Show trains")}</button>
+        <button class="station-link" type="button" id="board">${ic("list")} ${t("Station departures and incidents")} ${ic("chevron")}</button>
       </div>`;
     const inputOf = (f) => $(`.od-field[data-f="${f}"] input`, s);
     const ask = $("#ask", s), go = $("#go", s);
@@ -331,7 +331,7 @@ export function browseScreen({ note = null, back = false, noLocation = false } =
         inp.classList.toggle("set", !!pick[f] && inp.value === pick[f].name);
       });
       go.disabled = !(pick.from && pick.to && pick.from.stopId !== pick.to.stopId);
-      const message = go.disabled ? note : "Results show direct trains already in service.";
+      const message = go.disabled ? note : t("Results show direct trains already in service.");
       guidance.textContent = message ?? "";
       guidance.hidden = !message;
       const highlightAssistant = noLocation && go.disabled;
@@ -380,7 +380,7 @@ export function browseScreen({ note = null, back = false, noLocation = false } =
     };
     go.onclick = () => { buzz(15); connectionsScreen(pick.from, pick.to); };
     $("#board", s).onclick = () => { buzz(15); stationSearchScreen(() => browseScreen({ note, back: true, noLocation })); };
-    restartBtn.textContent = "Find nearby";
+    restartBtn.textContent = t("Find nearby");
     const fab = $("#assistant-fab");
     const observer = new IntersectionObserver(([entry]) => fab.classList.toggle("has-inline-trigger", entry.isIntersecting));
     observer.observe(ask);
@@ -402,19 +402,19 @@ export function browseScreen({ note = null, back = false, noLocation = false } =
 
 export function connectionsScreen(from, to) {
   setUrl({ station: from.stopId, to: to.stopId });
-  labelView(`${from.name} to ${to.name}`);
+  labelView(t("{from} to {to}", { from: from.name, to: to.name }));
   show((s) => {
     s.innerHTML = `
       ${backBtn()}
-      <div class="step">From ${esc(from.name)}</div>
-      <h1>Trains to ${esc(to.name)}</h1>
+      <div class="step">${t("From {station}", { station: esc(from.name) })}</div>
+      <h1>${t("Trains to {station}", { station: esc(to.name) })}</h1>
       <div id="alerts" class="list"></div>
-      <h2>Best routes</h2>
-      <div class="list" id="routes">${placeholders(2, "Finding the best route…")}</div>
-      <p class="note">Ranked by the arrival you can count on: live delays, incidents and changes included.</p>
-      <h2>Direct trains in service</h2>
-      <div class="list" id="list">${placeholders(3, "Finding trains for you…")}</div>
-      <p class="note">Live data. Only trains already in service are shown.</p>`;
+      <h2>${t("Best routes")}</h2>
+      <div class="list" id="routes">${placeholders(2, t("Finding the best route…"))}</div>
+      <p class="note">${t("Ranked by the arrival you can count on: live delays, incidents and changes included.")}</p>
+      <h2>${t("Direct trains in service")}</h2>
+      <div class="list" id="list">${placeholders(3, t("Finding trains for you…"))}</div>
+      <p class="note">${t("Live data. Only trains already in service are shown.")}</p>`;
     $("[data-back]", s).onclick = () => destinationScreen(from);
     const list = $("#list", s);
     let firstDraw = true;
@@ -423,18 +423,18 @@ export function connectionsScreen(from, to) {
       data.entries.forEach((c) => c.incidents.forEach((i) => alerts.set(i.id, i)));
       $("#alerts", s).innerHTML = [...alerts.values()].map(alertHtml).join("");
       if (!data.entries.length) {
-        list.innerHTML = `<p class="empty">No train running now goes to ${esc(to.name)} from here. Trains are shown once they start their run.</p>`;
+        list.innerHTML = `<p class="empty">${t("No train running now goes to {station} from here. Trains are shown once they start their run.", { station: esc(to.name) })}</p>`;
         return;
       }
       list.classList.toggle("stagger", firstDraw);
       firstDraw = false;
       list.innerHTML = data.entries.map((c, i) => {
-        const t = c.train;
-        return `<button class="row conn" type="button" data-id="${esc(t.trainId)}" style="--i:${Math.min(i, 10)}">
-          <div class="dep">${timeHtml(c.plannedDepartureTime, c.departureTime, t.status === "cancelled")}<small data-until="${c.departureTime || ""}">${c.atStation ? "Now at the station" : untilText(c.departureTime)}</small></div>
-          <div class="l1">${lineLabel(t)}<span class="h">to ${esc(t.headsign || "?")}</span></div>
-          <div class="r">${stateHtml(t)}</div>
-          <div class="l2">Arrival ${hhmm(c.arrivalTime)}${c.durationMin != null ? ` · ${c.durationMin} min` : ""} · ${c.stopsBetween ? `${c.stopsBetween} stop${c.stopsBetween > 1 ? "s" : ""}` : "Direct"}${c.incidents.length ? ` · <span class="warn">${c.incidents.length} incident${c.incidents.length > 1 ? "s" : ""}</span>` : ""}</div>
+        const tr = c.train;
+        return `<button class="row conn" type="button" data-id="${esc(tr.trainId)}" style="--i:${Math.min(i, 10)}">
+          <div class="dep">${timeHtml(c.plannedDepartureTime, c.departureTime, tr.status === "cancelled")}<small data-until="${c.departureTime || ""}">${c.atStation ? t("Now at the station") : untilText(c.departureTime)}</small></div>
+          <div class="l1">${lineLabel(tr)}<span class="h">${t("to {dest}", { dest: esc(tr.headsign || "?") })}</span></div>
+          <div class="r">${stateHtml(tr)}</div>
+          <div class="l2">${t("Arrival {time}", { time: hhmm(c.arrivalTime) })}${c.durationMin != null ? ` · ${t("{n} min", { n: c.durationMin })}` : ""} · ${c.stopsBetween ? (c.stopsBetween > 1 ? t("{n} stops", { n: c.stopsBetween }) : t("1 stop")) : t("Direct")}${c.incidents.length ? ` · <span class="warn">${c.incidents.length > 1 ? t("{n} incidents", { n: c.incidents.length }) : t("1 incident")}</span>` : ""}</div>
         </button>`;
       }).join("");
       list.querySelectorAll(".conn").forEach((el) => (el.onclick = () => {
@@ -447,7 +447,7 @@ export function connectionsScreen(from, to) {
     const drawRoutes = (plan) => {
       shownRoutes = plan.routes;
       if (!plan.routes.length) {
-        routesEl.innerHTML = `<p class="empty">The planner found no route to ${esc(to.name)} in the next hours.</p>`;
+        routesEl.innerHTML = `<p class="empty">${t("The planner found no route to {station} in the next hours.", { station: esc(to.name) })}</p>`;
         return;
       }
       routesEl.innerHTML = plan.routes.map((r, i) => routeHtml(r, i)).join("");
@@ -463,16 +463,16 @@ export function connectionsScreen(from, to) {
     };
     const refreshRoutes = () => api(`/routes?from=${encodeURIComponent(from.stopId)}&to=${encodeURIComponent(to.stopId)}&limit=4`)
       .then(drawRoutes)
-      .catch(() => { if (!shownRoutes.length) routesEl.innerHTML = `<p class="empty">The route planner is not available right now. The direct trains below are live.</p>`; });
+      .catch(() => { if (!shownRoutes.length) routesEl.innerHTML = `<p class="empty">${t("The route planner is not available right now. The direct trains below are live.")}</p>`; });
     const refresh = () => api(`/stations/${encodeURIComponent(from.stopId)}/connections?to=${encodeURIComponent(to.stopId)}&windowMin=240&limit=12`)
-      .then(draw).catch(() => toast("Connection problem. Retrying…"));
+      .then(draw).catch(() => toast(t("Connection problem. Retrying…")));
     refresh();
     refreshRoutes();
     const poll = setInterval(refresh, 20_000);
     const pollRoutes = setInterval(refreshRoutes, 60_000);
     onLeave(() => clearInterval(pollRoutes));
     const clock = setInterval(() => list.querySelectorAll("[data-until]").forEach((el) => {
-      if (el.dataset.until && !el.textContent.startsWith("Now")) el.textContent = untilText(+el.dataset.until);
+      if (el.dataset.until && el.textContent !== t("Now at the station")) el.textContent = untilText(+el.dataset.until);
     }), 5_000);
     onLeave(() => { clearInterval(poll); clearInterval(clock); });
     onLeave(live.subscribe("station", from.stopId, { frequencySec: 3600, windowMin: 30 }, (m) => {
@@ -481,19 +481,19 @@ export function connectionsScreen(from, to) {
   });
 }
 
-const RISK = { low: "No known problems", medium: "Some risk", high: "At risk" };
+const RISK = { low: t("No known problems"), medium: t("Some risk"), high: t("At risk") };
 
 /** One planner route: times, legs as line badges, changes, the weightiest notes; the recommended one first. */
 function routeHtml(r, i) {
   const first = r.legs[0];
   const legs = r.legs.map((l, k) => `${lineLabel(l)}${k < r.legs.length - 1 ? ` <span class="via">${esc(l.to.name)}${l.changeMin != null ? ` ${l.changeMin}'` : ""}</span> ` : ""}`).join(" ");
-  const state = !r.feasible ? `<span class="warn">Not possible</span>` : r.recommended ? `<span class="rec">Recommended</span>` : "";
+  const state = !r.feasible ? `<span class="warn">${t("Not possible")}</span>` : r.recommended ? `<span class="rec">${t("Recommended")}</span>` : "";
   const notes = r.notes.slice(0, 2).map((n) => `<span class="${r.feasible ? "" : "warn"}">${esc(n)}</span>`).join(" · ");
   return `<button class="row conn route-opt risk-${esc(r.risk)}${r.feasible ? "" : " off"}" type="button" data-i="${i}" style="--i:${Math.min(i, 10)}">
     <div class="dep">${timeHtml(first.from.plannedTime ?? r.plannedDeparture, r.departure, first.cancelled)}<small data-until="${r.departure}">${untilText(r.departure)}</small></div>
     <div class="l1">${legs}</div>
     <div class="r">${state}</div>
-    <div class="l2">Arrival ${hhmm(r.arrival)}${r.arrivalDelayMin >= 1 ? ` <span class="delay">+${r.arrivalDelayMin}'</span>` : ""} · ${r.durationMin} min · ${r.transfers ? `${r.transfers} change${r.transfers > 1 ? "s" : ""}` : "Direct"}${r.feasible ? ` · ${RISK[r.risk] || ""}` : ""}</div>
+    <div class="l2">${t("Arrival {time}", { time: hhmm(r.arrival) })}${r.arrivalDelayMin >= 1 ? ` <span class="delay">+${r.arrivalDelayMin}'</span>` : ""} · ${t("{n} min", { n: r.durationMin })} · ${r.transfers ? (r.transfers > 1 ? t("{n} changes", { n: r.transfers }) : t("1 change")) : t("Direct")}${r.feasible ? ` · ${RISK[r.risk] || ""}` : ""}</div>
     ${r.why || notes ? `<div class="l3">${r.why ? esc(r.why) : notes}</div>` : ""}
   </button>`;
 }
@@ -511,19 +511,19 @@ export function onTracksScreen(trainId, trip = null, onBack = null) {
   show((s) => {
     s.innerHTML = `
       ${onBack ? backBtn() : ""}
-      ${legs && legs.length > 1 ? `<nav class="trip-path card" id="path" aria-label="Your trip">${pathHtml(trip)}</nav>` : ""}
+      ${legs && legs.length > 1 ? `<nav class="trip-path card" id="path" aria-label="${t("Your trip")}">${pathHtml(trip)}</nav>` : ""}
       <div id="alerts" class="list"></div>
-      <button class="btn btn-primary btn-block ask-alt" type="button" id="ask-alt" hidden>${ic("chat")} Ask Tikt about alternative routes</button>
+      <button class="btn btn-primary btn-block ask-alt" type="button" id="ask-alt" hidden>${ic("chat")} ${t("Ask Tikt about alternative routes")}</button>
       <div class="scene card"><canvas id="scene" aria-hidden="true"></canvas>
         <div class="scene-cap"><span id="line"></span><div class="main"><div class="t" id="to"></div><div class="m" id="where"></div></div><span id="state"></span></div>
       </div>
       <div class="nextstop card" id="next"></div>
       <div class="follow card" id="follow"></div>
-      ${trip ? '<a id="watch-train" class="btn btn-block watch-entry" hidden>Watch this trip</a>' : ''}
-      <button id="gwallet" class="btn btn-block wallet-add" type="button" hidden>${ic("wallet")} Add to Google Wallet</button>
-      <h2>Route</h2>
-      <div class="route" id="route">${placeholders(4, "Loading the route…")}</div>
-      <p class="note">Tap a stop to see its departures and incidents.</p>`;
+      ${trip ? `<a id="watch-train" class="btn btn-block watch-entry" hidden>${t("Watch this trip")}</a>` : ''}
+      <button id="gwallet" class="btn btn-block wallet-add" type="button" hidden>${ic("wallet")} ${t("Add to Google Wallet")}</button>
+      <h2>${t("Route")}</h2>
+      <div class="route" id="route">${placeholders(4, t("Loading the route…"))}</div>
+      <p class="note">${t("Tap a stop to see its departures and incidents.")}</p>`;
     if (onBack) $("[data-back]", s).onclick = () => onBack();
     // another train of the trip: look at it (the trip moves on by itself at each change)
     $("#path", s)?.addEventListener("click", (e) => {
@@ -553,7 +553,7 @@ export function onTracksScreen(trainId, trip = null, onBack = null) {
       try {
         location.assign(await addToGoogleWallet(walletSelection()));
       } catch (err) {
-        toast(err.message || "Google Wallet is unavailable. Try again shortly.");
+        toast(err.message || t("Google Wallet is unavailable. Try again shortly."));
       } finally {
         btn.disabled = false;
       }
@@ -566,7 +566,7 @@ export function onTracksScreen(trainId, trip = null, onBack = null) {
       const stops = last?.stops ?? [];
       const from = stops.find((x) => (x.state === "current" || x.state === "next") && !x.skipped);
       const to = [...stops].reverse().find((x) => !x.skipped);
-      if (!from || !to || from.stopId === to.stopId) throw new Error("This train has no stop ahead to put in Wallet.");
+      if (!from || !to || from.stopId === to.stopId) throw new Error(t("This train has no stop ahead to put in Wallet."));
       return [{ trainId, fromStopId: from.stopId, toStopId: to.stopId }];
     };
     const incidents = new Map();
@@ -581,12 +581,15 @@ export function onTracksScreen(trainId, trip = null, onBack = null) {
     // With incidents: straight to the assistant, asking whether to change (it also gets this screen as context).
     $("#ask-alt", s).onclick = () => {
       buzz(15);
-      const t = last?.train;
-      const name = t ? `the ${t.line || t.category || "train"} to ${t.headsign || t.destination?.name || "?"}` : "this train";
+      const tr = last?.train;
+      const name = tr ? t("the {line} to {dest}", { line: tr.line || tr.category || t("train"), dest: tr.headsign || tr.destination?.name || "?" }) : t("this train");
       const dest = trip?.toStopId && last?.stops.find((x) => x.stopId === trip.toStopId)?.name;
       const from = trip?.fromStopId && last?.stops.find((x) => x.stopId === trip.fromStopId)?.name;
       const titles = [...incidents.values()].slice(0, 3).map((i) => i.title).join("; ");
-      askAssistant(`I'm on ${name} (train id ${trainId})${dest ? `, going ${from ? `from ${from} ` : ""}to ${dest}` : ""}. It has incidents: ${titles}. Are there alternative routes? Should I change trains, and where?`);
+      const vars = { name, id: trainId, from, dest, titles };
+      askAssistant(dest && from ? t("I'm on {name} (train id {id}), going from {from} to {dest}. It has incidents: {titles}. Are there alternative routes? Should I change trains, and where?", vars)
+        : dest ? t("I'm on {name} (train id {id}), going to {dest}. It has incidents: {titles}. Are there alternative routes? Should I change trains, and where?", vars)
+          : t("I'm on {name} (train id {id}). It has incidents: {titles}. Are there alternative routes? Should I change trains, and where?", vars));
     };
     const follow = followCard($("#follow", s), () => last && { trainId, train: last.train, stops: last.stops });
 
@@ -601,14 +604,14 @@ export function onTracksScreen(trainId, trip = null, onBack = null) {
       if (at.state === "current" || at.state === "passed") {
         moved = true;
         buzz([30, 60, 30]);
-        toast(`Change here: take ${takeText(nextLeg)}.`, 6000);
+        toast(t("Change here: take {train}.", { train: takeText(nextLeg) }), 6000);
         const next = { ...trip, leg: trip.leg + 1, savedAt: Date.now() };
         saveTrip(next);
         setTimeout(() => onTracksScreen(nextLeg.trainId, next, onBack), 1200);
       } else if (!warned && at.state === "next" && k > 0 && stops[k - 1].state === "passed") {
         warned = true;
         buzz([20, 40, 20]);
-        toast(`Next stop: ${at.name}. Change to ${takeText(nextLeg)}.`, 7000);
+        toast(t("Next stop: {stop}. Change to {train}.", { stop: at.name, train: takeText(nextLeg) }), 7000);
       }
     };
     // Push (when this device has notifications on): the server sends "change at X" and follows the next trains itself.
@@ -620,12 +623,12 @@ export function onTracksScreen(trainId, trip = null, onBack = null) {
     // A later train of the trip that has not started its run yet: not "gone", just not running yet.
     const waiting = () => {
       $("#line", s).innerHTML = lineLabel(leg, true);
-      $("#to", s).textContent = `to ${leg.headsign || leg.to.name}`;
-      $("#where", s).textContent = "Not running yet";
-      $("#next", s).innerHTML = `<div class="k">${trip.leg > 0 ? "Your next train" : "Your train"}</div>
-        <div class="nrow"><b>Departs ${esc(leg.from.name)}</b><span class="eta-big">${untilText(leg.from.time) || hhmm(leg.from.time)}</span></div>
-        <div class="m">${timeHtml(leg.from.planned ?? leg.from.time, leg.from.time)} · live times as soon as it starts its run</div>`;
-      $("#route", s).innerHTML = `<p class="empty">Get off at ${esc(leg.to.name)} (${hhmm(leg.to.time)}).</p>`;
+      $("#to", s).textContent = t("to {dest}", { dest: leg.headsign || leg.to.name });
+      $("#where", s).textContent = t("Not running yet");
+      $("#next", s).innerHTML = `<div class="k">${trip.leg > 0 ? t("Your next train") : t("Your train")}</div>
+        <div class="nrow"><b>${t("Departs {station}", { station: esc(leg.from.name) })}</b><span class="eta-big">${untilText(leg.from.time) || hhmm(leg.from.time)}</span></div>
+        <div class="m">${timeHtml(leg.from.planned ?? leg.from.time, leg.from.time)} · ${t("live times as soon as it starts its run")}</div>`;
+      $("#route", s).innerHTML = `<p class="empty">${t("Get off at {station} ({time}).", { station: esc(leg.to.name), time: hhmm(leg.to.time) })}</p>`;
     };
 
     const draw = (train, stops) => {
@@ -633,8 +636,8 @@ export function onTracksScreen(trainId, trip = null, onBack = null) {
       changeStep(stops);
       const cancelled = train.status === "cancelled";
       $("#line", s).innerHTML = lineLabel(train, true);
-      $("#to", s).textContent = `to ${train.headsign || train.destination?.name || "?"}`;
-      if (window.twinView?.trainId === trainId) labelView(`${train.line || train.category || "Train"} to ${train.headsign || train.destination?.name || "?"}`);
+      $("#to", s).textContent = t("to {dest}", { dest: train.headsign || train.destination?.name || "?" });
+      if (window.twinView?.trainId === trainId) labelView(t("{line} to {dest}", { line: train.line || train.category || t("Train"), dest: train.headsign || train.destination?.name || "?" }));
       $("#state", s).innerHTML = stateHtml(train);
       const standing = train.position?.motion === "stopped" && train.position?.atStopId;
       scene.then((x) => x?.update({ speedKmh: standing ? 0 : train.position?.speedKmh ?? 0, atStation: standing ? (train.currentStop?.name || " ") : null }));
@@ -642,8 +645,8 @@ export function onTracksScreen(trainId, trip = null, onBack = null) {
       const k = stops.findIndex((x) => x.state === "current" || x.state === "next");
       const cur = k >= 0 ? stops[k] : null;
       const prev = k > 0 ? stops[k - 1] : null;
-      const where = !cur ? "Run completed"
-        : cur.state === "current" ? `At ${cur.name}` : prev ? `Between ${prev.name} and ${cur.name}` : `Before ${cur.name}`;
+      const where = !cur ? t("Run completed")
+        : cur.state === "current" ? t("At {stop}", { stop: cur.name }) : prev ? t("Between {a} and {b}", { a: prev.name, b: cur.name }) : t("Before {stop}", { stop: cur.name });
       const whereEl = $("#where", s);
       if (whereEl.textContent !== where) {
         const changed = !!whereEl.textContent;
@@ -654,9 +657,9 @@ export function onTracksScreen(trainId, trip = null, onBack = null) {
       // Next stop + ETA
       const next = cur && cur.state === "current" ? stops[k + 1] : cur;
       $("#next", s).innerHTML = next
-        ? `<div class="k">Next stop</div><div class="nrow"><b>${esc(next.name)}</b><span class="eta-big">${untilText(next.expectedArr ?? next.plannedArr) || "–"}</span></div>
+        ? `<div class="k">${t("Next stop")}</div><div class="nrow"><b>${esc(next.name)}</b><span class="eta-big">${untilText(next.expectedArr ?? next.plannedArr) || "–"}</span></div>
            <div class="m">${timeHtml(next.plannedArr ?? next.plannedDep, next.expectedArr ?? next.expectedDep, cancelled)}</div>`
-        : `<div class="k">This train has reached ${esc(train.destination?.name || "its destination")}</div>`;
+        : `<div class="k">${train.destination?.name ? t("This train has reached {station}", { station: esc(train.destination.name) }) : t("This train has reached its destination")}</div>`;
 
       // Whole route; the train sits between the last stop left and the next one.
       let progress = 0.5;
@@ -665,14 +668,14 @@ export function onTracksScreen(trainId, trip = null, onBack = null) {
         if (dep && arr && arr > dep) progress = clamp((Date.now() - dep) / (arr - dep), 0.05, 0.95);
       }
       const html = stops.map((x, i) => {
-        const t = x.expectedArr ?? x.expectedDep ?? x.plannedArr ?? x.plannedDep;
+        const tm = x.expectedArr ?? x.expectedDep ?? x.plannedArr ?? x.plannedDep;
         const cls = `stop ${x.state}${i === 0 ? " first" : ""}${i === stops.length - 1 ? " last" : ""}${x.skipped ? " skipped" : ""}`;
         const between = i === k && x.state === "next" && prev
           ? `<div class="between"><span class="pin-train" style="--p:${progress}">${ic("train")}</span></div>` : "";
         return `${between}<button class="${cls}" type="button" data-stop="${esc(x.stopId)}" data-name="${esc(x.name)}">
-          <span class="n">${esc(x.name)}${x.skipped ? ' <span class="nostop">Does not stop</span>' : ""}</span>
+          <span class="n">${esc(x.name)}${x.skipped ? ` <span class="nostop">${t("Does not stop")}</span>` : ""}</span>
           <span class="tm"><span>${x.skipped ? "" : timeHtml(x.plannedArr ?? x.plannedDep, x.expectedArr ?? x.expectedDep, cancelled)}</span>
-            ${x.state === "passed" || x.skipped ? "" : `<small>${x.state === "current" ? "Now" : untilText(t)}</small>`}</span></button>`;
+            ${x.state === "passed" || x.skipped ? "" : `<small>${x.state === "current" ? t("Now") : untilText(tm)}</small>`}</span></button>`;
       }).join("");
       const box = $("#route", s);
       if (box.dataset.sig !== html) {
@@ -728,7 +731,7 @@ async function addToGoogleWallet(selections) {
       body: body ? JSON.stringify(body) : undefined,
     });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw Object.assign(new Error(typeof j.error === "string" ? j.error : "Google Wallet is unavailable. Try again shortly."), { status: r.status });
+    if (!r.ok) throw Object.assign(new Error(typeof j.error === "string" ? j.error : t("Google Wallet is unavailable. Try again shortly.")), { status: r.status });
     return j;
   };
   let watch = null, error = null;

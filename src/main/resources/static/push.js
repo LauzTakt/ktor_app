@@ -8,7 +8,7 @@
 // The server returns a random deviceId on registration; it is kept in localStorage and is the only handle to the
 // device's subscriptions.
 
-import { publicApi } from "./common.js";
+import { publicApi, t } from "./common.js";
 
 const DEVICE_KEY = "twin-push-device";
 const cap = window.Capacitor;
@@ -30,17 +30,17 @@ const config = () => (configP ??= call("GET", "/config").then((c) => { leadSec =
 /** Whether this device can get notifications, and if not, what to tell the user. */
 export function support() {
   if (native && platform === "android") {
-    return NativePush ? { ok: true } : { ok: false, reason: "This version of the app cannot show notifications. Update the app." };
+    return NativePush ? { ok: true } : { ok: false, reason: t("This version of the app cannot show notifications. Update the app.") };
   }
   if (native) {
-    return { ok: false, reason: "Alerts are not available in the iPhone app yet. Open this site in Safari, tap Share, then Add to Home Screen, and turn alerts on from there." };
+    return { ok: false, reason: t("Alerts are not available in the iPhone app yet. Open this site in Safari, tap Share, then Add to Home Screen, and turn alerts on from there.") };
   }
-  if (!window.isSecureContext) return { ok: false, reason: "Alerts need a secure (https) connection." };
+  if (!window.isSecureContext) return { ok: false, reason: t("Alerts need a secure (https) connection.") };
   if (isIos && !standalone) {
-    return { ok: false, reason: "On iPhone, alerts work from the Home Screen app: tap Share, then Add to Home Screen, open it from there and turn alerts on." };
+    return { ok: false, reason: t("On iPhone, alerts work from the Home Screen app: tap Share, then Add to Home Screen, open it from there and turn alerts on.") };
   }
   if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
-    return { ok: false, reason: "This browser cannot show notifications. Try Chrome, Edge, Firefox or Safari." };
+    return { ok: false, reason: t("This browser cannot show notifications. Try Chrome, Edge, Firefox or Safari.") };
   }
   return { ok: true };
 }
@@ -59,7 +59,7 @@ async function registerWeb() {
   await navigator.serviceWorker.ready;
   if (Notification.permission !== "granted") {
     const p = await Notification.requestPermission();
-    if (p !== "granted") throw new Error("Notifications are blocked. Allow them in your browser settings for this site.");
+    if (p !== "granted") throw new Error(t("Notifications are blocked. Allow them in your browser settings for this site."));
   }
   let sub = await reg.pushManager.getSubscription();
   // A subscription made with another server key cannot be reused.
@@ -80,21 +80,21 @@ async function registerNative() {
   // 1. Permission first, so the user always sees the Android prompt (Android 13+; granted by default before).
   let perm = await NativePush.checkPermissions();
   if (perm.receive !== "granted") perm = await NativePush.requestPermissions();
-  if (perm.receive !== "granted") throw new Error("Notifications are blocked. Allow them in Settings > Apps > Takt > Notifications.");
+  if (perm.receive !== "granted") throw new Error(t("Notifications are blocked. Allow them in Settings > Apps > Takt > Notifications."));
   // 2. The APK must contain the Firebase config: without it register() crashes the app (TwinAppPlugin.java).
   const app = await cap.Plugins?.TwinApp?.info?.().catch(() => null);
   if (!app?.firebase) {
-    throw new Error("This version of the app was built without notification support. Install the latest version of the app.");
+    throw new Error(t("This version of the app was built without notification support. Install the latest version of the app."));
   }
   // 3. The server must accept app tokens (FCM_SERVICE_ACCOUNT_JSON).
   const cfg = await config();
-  if (!cfg.fcm) throw new Error("Notifications are not set up on the server yet (Firebase key missing). Ask the team.");
+  if (!cfg.fcm) throw new Error(t("Notifications are not set up on the server yet (Firebase key missing). Ask the team."));
   const handles = [];
   try {
     const token = await new Promise((resolve, reject) => {
-      setTimeout(() => reject(new Error("The phone did not answer. Try again.")), 15_000);
+      setTimeout(() => reject(new Error(t("The phone did not answer. Try again."))), 15_000);
       handles.push(NativePush.addListener("registration", (t) => resolve(t.value)));
-      handles.push(NativePush.addListener("registrationError", (e) => reject(new Error(e?.error || "Registration failed."))));
+      handles.push(NativePush.addListener("registrationError", (e) => reject(new Error(e?.error || t("Registration failed.")))));
       NativePush.register().catch(reject);
     });
     return await call("POST", "/devices", { kind: "fcm", token, platform });

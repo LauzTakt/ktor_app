@@ -14,6 +14,7 @@
   const TRIED_KEY = "twin-app-banner-tried";   // sessionStorage: already tried this session
   const LAUNCH_KEY = "twin-app-launch-url";    // sessionStorage: cold-start link already followed
   const cap = window.Capacitor;
+  const tr = window.TwinI18n?.t ?? ((k) => k);
 
   /** Same page and query on this origin, or null when [url] is not one of our links. */
   const target = (url) => {
@@ -58,11 +59,11 @@
     const bar = document.createElement("div");
     bar.className = "app-banner";
     bar.setAttribute("role", "region");
-    bar.setAttribute("aria-label", "Mobile app");
+    bar.setAttribute("aria-label", tr("Mobile app"));
     bar.innerHTML = `
-      <span class="t">Have the Takt app?</span>
-      <a class="btn" id="app-open" href="#">Open in the app</a>
-      <button class="btn btn-ghost btn-circle icon-btn" type="button" id="app-close" title="Close" aria-label="Close">
+      <span class="t">${tr("Have the Takt app?")}</span>
+      <a class="btn" id="app-open" href="#">${tr("Open in the app")}</a>
+      <button class="btn btn-ghost btn-circle icon-btn" type="button" id="app-close" title="${tr("Close")}" aria-label="${tr("Close")}">
         <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>`;
     const header = document.querySelector(".topbar");
     if (header) header.after(bar); else document.body.prepend(bar);

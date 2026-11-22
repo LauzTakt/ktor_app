@@ -1,12 +1,12 @@
 // The 3D train on its track (Three.js, loaded on demand) shown on the on-tracks screen.
 
-import { $, onTheme, reducedMotion } from "../common.js";
+import { $, esc, onTheme, reducedMotion, t } from "../common.js";
 import { THREE_URL, clamp, cssVar, restartBtn, setUrl } from "./ui.js";
 
 export function trainGone(s) {
   setUrl({});
-  s.innerHTML = `<div class="finish"><h1>This train has ended its run</h1><p class="lead">It is no longer in service.</p></div>
-    <div class="actions"><button class="btn btn-primary btn-block" id="again">Start again</button></div>`;
+  s.innerHTML = `<div class="finish"><h1>${esc(t("This train has ended its run"))}</h1><p class="lead">${esc(t("It is no longer in service."))}</p></div>
+    <div class="actions"><button class="btn btn-primary btn-block" id="again">${esc(t("Start again"))}</button></div>`;
   $("#again", s).onclick = () => restartBtn.click();
 }
 

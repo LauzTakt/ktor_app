@@ -1,10 +1,13 @@
 import { qrcodegen } from "./vendor/qrcodegen-v1.8.0.js";
+import { t } from "./common.js";
+
+document.title = t("Trip Watch · Takt");
 
 const root = document.querySelector("#watch-page-content");
 const feedback = document.querySelector("#watch-feedback");
 const params = new URLSearchParams(location.search);
 const base = "/api/v1/trip-watches";
-const actions = { boarded: "I’m on board", alighted: "I’ve got off", wait: "Wait for a departure" };
+const actions = { boarded: t("I’m on board"), alighted: t("I’ve got off"), wait: t("Wait for a departure") };
 let watchId = params.get("id");
 let watch = null;
 let busy = false;
@@ -35,7 +38,7 @@ async function json(path = "", options = {}) {
     headers: { Accept: "application/json", ...(options.body ? { "Content-Type": "application/json" } : {}) },
   });
   const data = await response.json().catch(() => null);
-  if (!response.ok || data === null) throw new Error(data?.error || "Trip Watch is unavailable. Try again shortly.");
+  if (!response.ok || data === null) throw new Error(data?.error || t("Trip Watch is unavailable. Try again shortly."));
   return data;
 }
 
@@ -48,7 +51,7 @@ async function transact(element, fn) {
   try {
     await fn();
   } catch (error) {
-    feedback.textContent = error instanceof Error ? error.message : "Try again shortly.";
+    feedback.textContent = error instanceof Error ? error.message : t("Try again shortly.");
   } finally {
     element.disabled = false;
     element.removeAttribute("aria-busy");
@@ -120,10 +123,10 @@ function passPreview(watch) {
   const head = node("div", "", "pass-head");
   const logo = node("div", "", "pass-logo");
   logo.append(node("span", "", "pass-bar"), node("span", face.brand, "pass-brand"));
-  head.append(logo, passField("Departure:", face.departure, "pass-header-field"));
+  head.append(logo, passField(t("Departure:"), face.departure, "pass-header-field"));
 
   const route = node("div", "", "pass-primary");
-  route.setAttribute("aria-label", `${face.origin} to ${face.destination}`);
+  route.setAttribute("aria-label", t("{from} to {to}", { from: face.origin, to: face.destination }));
   route.append(node("span", face.origin, "pass-station"), trainGlyph(), node("span", face.destination, "pass-station"));
 
   const details = node("div", "", "pass-secondary");
@@ -134,12 +137,12 @@ function passPreview(watch) {
   const qr = qrCode(url);
   qr.setAttribute("aria-hidden", "false");
   qr.setAttribute("role", "img");
-  qr.setAttribute("aria-label", "QR code that opens this trip page");
+  qr.setAttribute("aria-label", t("QR code that opens this trip page"));
   code.append(qr, node("span", face.notice, "pass-alt"));
 
-  card.append(head, route, details, passField("Next step", face.nextStep, "pass-aux"), code);
+  card.append(head, route, details, passField(t("Next step"), face.nextStep, "pass-aux"), code);
   const pass = node("section", "", "pass");
-  pass.setAttribute("aria-label", "Wallet pass");
+  pass.setAttribute("aria-label", t("Wallet pass"));
   pass.append(card);
   return pass;
 }
@@ -147,17 +150,17 @@ function passPreview(watch) {
 function render(next, focus = false) {
   if (!focus && JSON.stringify(next) === JSON.stringify(watch)) return;
   watch = next;
-  const title = heading(`${watch.origin} to ${watch.destination}`, "sr-only");
+  const title = heading(t("{from} to {to}", { from: watch.origin, to: watch.destination }), "sr-only");
   const panel = node("section", "", "card watch-panel");
   panel.dataset.state = watch.kind;
   const status = node("div", "", "state");
-  status.append(node("span", "", "dot"), node("span", watch.kind === "ended" ? "Watch ended" :
-    watch.kind === "check" ? "Connection changed" : "Watching trip"));
+  status.append(node("span", "", "dot"), node("span", watch.kind === "ended" ? t("Watch ended") :
+    watch.kind === "check" ? t("Connection changed") : t("Watching trip")));
   // The next step is on the pass above: the panel adds the live detail, or what the watch does.
-  panel.append(status, node("p", watch.detail || (watch.kind === "ended" ? "Updates have stopped for this trip." :
-    "Your next step updates here and on the pass if this connection changes."), "lead"));
+  panel.append(status, node("p", watch.detail || (watch.kind === "ended" ? t("Updates have stopped for this trip.") :
+    t("Your next step updates here and on the pass if this connection changes.")), "lead"));
   if (watch.legCount > 1 && watch.kind !== "ended") {
-    panel.append(node("p", `Leg ${watch.leg} of ${watch.legCount}`, "note"));
+    panel.append(node("p", t("Leg {leg} of {count}", { leg: watch.leg, count: watch.legCount }), "note"));
   }
 
   const controls = node("div", "", "watch-actions");
@@ -166,9 +169,9 @@ function render(next, focus = false) {
       render(await json(`/${watchId}`, { method: "PATCH", body: JSON.stringify({ action }) }), true);
     }, "btn btn-primary"));
   }
-  if (watch.kind === "check") controls.append(link("Find a connection", watch.alternativesUrl));
+  if (watch.kind === "check") controls.append(link(t("Find a connection"), watch.alternativesUrl));
   if (watch.actions.includes("stop")) {
-    controls.append(button("Stop watching", async () => {
+    controls.append(button(t("Stop watching"), async () => {
       render(await json(`/${watchId}`, { method: "DELETE" }), true);
     }));
   }
@@ -176,12 +179,12 @@ function render(next, focus = false) {
   if (watch.apple || watch.google) {
     const wallet = node("div", "", "wallet-buttons");
     if (watch.apple) {
-      const apple = link("Add to Apple Wallet", `${base}/${watchId}/apple.pkpass`, "btn wallet");
+      const apple = link(t("Add to Apple Wallet"), `${base}/${watchId}/apple.pkpass`, "btn wallet");
       apple.prepend(walletIcon());
       wallet.append(apple);
     }
     if (watch.google) {
-      const google = button("Add to Google Wallet", async () => {
+      const google = button(t("Add to Google Wallet"), async () => {
         const result = await json(`/${watchId}/google`, { method: "POST" });
         location.assign(result.url);
       }, "btn wallet");
@@ -217,12 +220,12 @@ async function boot() {
       aboard.type = "checkbox";
       aboard.className = "checkbox checkbox-sm";
       const option = node("label", "", "watch-option");
-      option.append(aboard, node("span", "I’m already on board"));
+      option.append(aboard, node("span", t("I’m already on board")));
       root.replaceChildren(
-        heading("Trip updates"),
-        node("p", "Get the next step if your selected connection changes.", "lead"),
+        heading(t("Trip updates")),
+        node("p", t("Get the next step if your selected connection changes."), "lead"),
         option,
-        button("Watch this trip", async () => {
+        button(t("Watch this trip"), async () => {
           const saved = await json("", { method: "POST", body: JSON.stringify({ ...selection, onBoard: aboard.checked }) });
           location.replace(`/trip-watch.html?id=${encodeURIComponent(saved.id)}`);
         }, "btn btn-primary btn-block"),
@@ -233,14 +236,14 @@ async function boot() {
     const list = node("div", "", "list");
     for (const item of watches) {
       const row = link("", `/trip-watch.html?id=${encodeURIComponent(item.id)}`, "row tap watch-list-item");
-      row.append(node("strong", `${item.origin} to ${item.destination}`), node("span", item.instruction));
+      row.append(node("strong", t("{from} to {to}", { from: item.origin, to: item.destination })), node("span", item.instruction));
       list.append(row);
     }
-    root.replaceChildren(heading("Watched trips"));
-    root.append(watches.length ? list : node("p", "Choose a connection to start watching a trip.", "lead"));
-    root.append(link("Find a trip", "/", "btn btn-primary btn-block"));
+    root.replaceChildren(heading(t("Watched trips")));
+    root.append(watches.length ? list : node("p", t("Choose a connection to start watching a trip."), "lead"));
+    root.append(link(t("Find a trip"), "/", "btn btn-primary btn-block"));
   } catch (error) {
-    root.replaceChildren(heading("Trip Watch"), node("p", error.message, "lead"), link("Find a trip", "/", "btn btn-primary btn-block"));
+    root.replaceChildren(heading(t("Trip Watch")), node("p", error.message, "lead"), link(t("Find a trip"), "/", "btn btn-primary btn-block"));
   } finally {
     root.setAttribute("aria-busy", "false");
   }

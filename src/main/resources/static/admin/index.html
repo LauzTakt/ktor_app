@@ -6,6 +6,8 @@
     <title>Takt · Staff overview</title>
     <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.1/dist/maplibre-gl.css" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <script src="/i18n.js"></script>
+    <script src="/i18n-strings.js"></script>
     <script src="/theme-init.js"></script>
     <link rel="stylesheet" href="/theme.css" />
     <link rel="stylesheet" href="/style.css" />
@@ -14,66 +16,67 @@
   </head>
   <body class="map-page">
     <header class="topbar">
-      <div class="brand"><img src="/favicon.svg" width="28" height="28" alt="" /> Takt <span class="sub">Staff overview</span></div>
+      <div class="brand"><img src="/favicon.svg" width="28" height="28" alt="" /> Takt <span class="sub" data-i18n>Staff overview</span></div>
       <div class="stats">
-        <span id="conn" class="connection-state offline">connecting…</span>
-        <span><b id="trainCount">–</b> trains</span>
-        <span><b id="lateCount">–</b> late ≥ 3′</span>
-        <span>twin time <b id="twinClock">–</b></span>
+        <span id="conn" class="connection-state offline" data-i18n>connecting…</span>
+        <span><b id="trainCount">–</b> <span data-i18n>trains</span></span>
+        <span><b id="lateCount">–</b> <span data-i18n>late ≥ 3′</span></span>
+        <span><span data-i18n>twin time</span> <b id="twinClock">–</b></span>
       </div>
       <nav>
+        <span data-lang-picker class="select select-ghost select-sm lang-select"></span>
         <button class="btn" id="themeToggle" type="button">☾ Dark</button>
-        <button class="btn" id="stationQrToggle" type="button" aria-haspopup="dialog">Station QR</button>
-        <a class="btn btn-primary" href="/admin/report.html">Report an incident</a>
+        <button class="btn" id="stationQrToggle" type="button" aria-haspopup="dialog" data-i18n>Station QR</button>
+        <a class="btn btn-primary" href="/admin/report.html" data-i18n>Report an incident</a>
       </nav>
     </header>
     <main>
       <div id="map"></div>
       <div class="legend">
-        <div><i class="tri" style="--c:#00973b"></i> moving, on time</div>
-        <div><i class="dot station" style="--c:#2d327d"></i> at a station</div>
-        <div><i class="tri" style="--c:#f27e00"></i> late ≥ 3 min</div>
-        <div><i class="dot" style="--c:#eb0000"></i> stopped on the line</div>
-        <div><i class="line" style="--c:#eb0000"></i> twin incident</div>
-        <div><i class="ring" style="--c:#f27e00"></i> staff report</div>
+        <div><i class="tri" style="--c:#00973b"></i> <span data-i18n>moving, on time</span></div>
+        <div><i class="dot station" style="--c:#2d327d"></i> <span data-i18n>at a station</span></div>
+        <div><i class="tri" style="--c:#f27e00"></i> <span data-i18n>late ≥ 3 min</span></div>
+        <div><i class="dot" style="--c:#eb0000"></i> <span data-i18n>stopped on the line</span></div>
+        <div><i class="line" style="--c:#eb0000"></i> <span data-i18n>twin incident</span></div>
+        <div><i class="ring" style="--c:#f27e00"></i> <span data-i18n>staff report</span></div>
       </div>
       <aside class="panel">
         <section id="trainPanel" hidden></section>
         <section>
-          <h2>Twin incidents <span id="incCount" class="count">0</span></h2>
-          <ul id="incList" class="list"><li class="empty">No active incident.</li></ul>
+          <h2><span data-i18n>Twin incidents</span> <span id="incCount" class="count">0</span></h2>
+          <ul id="incList" class="list"><li class="empty" data-i18n>No active incident.</li></ul>
         </section>
         <section>
-          <h2>Open staff reports <span id="repCount" class="count">0</span></h2>
-          <ul id="repList" class="list"><li class="empty">No open report.</li></ul>
+          <h2><span data-i18n>Open staff reports</span> <span id="repCount" class="count">0</span></h2>
+          <ul id="repList" class="list"><li class="empty" data-i18n>No open report.</li></ul>
         </section>
       </aside>
     </main>
     <dialog class="station-qr" id="stationQrDialog" aria-labelledby="stationQrTitle">
       <div class="station-qr__header">
-        <h2 id="stationQrTitle">Station QR</h2>
-        <button class="btn" id="stationQrClose" type="button">Close</button>
+        <h2 id="stationQrTitle" data-i18n>Station QR</h2>
+        <button class="btn" id="stationQrClose" type="button" data-i18n>Close</button>
       </div>
       <div class="station-qr__body" id="stationQrPicker">
-        <label for="stationQrSearch">Search for a station</label>
-        <input class="input" id="stationQrSearch" type="search" placeholder="Name or station ID" autocomplete="off" aria-controls="stationQrResults" />
+        <label for="stationQrSearch" data-i18n>Search for a station</label>
+        <input class="input" id="stationQrSearch" type="search" placeholder="Name or station ID" data-i18n-placeholder autocomplete="off" aria-controls="stationQrResults" />
         <p class="muted station-qr__status" id="stationQrStatus" role="status"></p>
-        <ul id="stationQrResults" class="station-qr__results" aria-label="Station search results"></ul>
+        <ul id="stationQrResults" class="station-qr__results" aria-label="Station search results" data-i18n-aria-label></ul>
       </div>
       <div class="station-qr__body" id="stationQrPreview" hidden>
         <div class="station-qr__sign">
           <h3 id="stationQrName"></h3>
-          <p id="stationQrLead">Scan for travel updates from here</p>
-          <div class="station-qr__code" id="stationQrCode" role="img" aria-label="Station QR code"></div>
+          <p id="stationQrLead" data-i18n>Scan for travel updates from here</p>
+          <div class="station-qr__code" id="stationQrCode" role="img" aria-label="Station QR code" data-i18n-aria-label></div>
           <p class="muted station-qr__note" id="stationQrNote" hidden></p>
         </div>
         <div class="station-qr__actions">
-          <button class="btn btn-primary" id="stationQrPrint" type="button">Print sign</button>
-          <a class="btn" id="stationQrDownload" download>Download QR</a>
+          <button class="btn btn-primary" id="stationQrPrint" type="button" data-i18n>Print sign</button>
+          <a class="btn" id="stationQrDownload" download data-i18n>Download QR</a>
         </div>
         <div class="station-qr__links">
-          <button class="station-qr__link" id="stationQrChange" type="button">Change station</button>
-          <a class="station-qr__link" id="stationQrPassenger" target="_blank" rel="noopener">Open passenger link</a>
+          <button class="station-qr__link" id="stationQrChange" type="button" data-i18n>Change station</button>
+          <a class="station-qr__link" id="stationQrPassenger" target="_blank" rel="noopener" data-i18n>Open passenger link</a>
         </div>
       </div>
     </dialog>

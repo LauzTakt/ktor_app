@@ -1,6 +1,7 @@
 // The ElevenLabs conversation (Claude Haiku behind it). Credentials come from our server (/api/voice/session), so
 // the API key never reaches the browser. WebRTC first (best echo cancellation on phones), WebSocket as fallback.
 import { Conversation } from "@elevenlabs/client";
+import { lang, t } from "./i18n";
 
 export type VoiceStatus = "idle" | "connecting" | "live";
 export type AskBackendParams = { question?: string; fromStopId?: string; toStopId?: string; trainId?: string };
@@ -176,6 +177,10 @@ export class Voice {
       // synchronous on purpose (the app keeps them fresh): no await between the tap and the microphone (iOS)
       const dynamicVariables = this.ev.variables();
       const options = {
+        // The UI language: the agent starts in it (its language preset: first message, speech recognition, voice).
+        // The agent (scripts/create-agent.mjs) allows the `agent.language` override and has fr / es presets; English
+        // is its default, so nothing is sent then. Language detection still follows the passenger if they switch.
+        ...(lang !== "en" ? { overrides: { agent: { language: lang } } } : {}),
         dynamicVariables: { active_disruptions: "- (not loaded)", passenger_location: "unknown", ...dynamicVariables },
         clientTools: { ask_backend: (p: AskBackendParams) => this.ev.askBackend(p), get_brief: (p: GetBriefParams) => this.ev.getBrief(p) },
         onMessage: (m: { message: string; source: "user" | "ai" }) => {
@@ -233,11 +238,11 @@ export class Voice {
       const err = e as Error & { name?: string };
       const msg = `${err?.name ?? ""} ${err?.message ?? String(e)}`;
       this.ev.error(
-        err?.name === "NoMicrophone" ? "This browser can't use a microphone here (it needs HTTPS). You can type your question instead."
-        : /permission|denied|notallowed|security/i.test(msg) ? "Please allow the microphone to talk to the assistant (browser or app settings)."
-        : /notfound|notreadable|overconstrained/i.test(msg) ? "No working microphone was found. You can type your question instead."
-        : /not configured/i.test(msg) ? "Voice is not set up on this server yet. You can type your question instead."
-        : "The voice assistant could not start. You can type your question instead.",
+        err?.name === "NoMicrophone" ? t("This browser can't use a microphone here (it needs HTTPS). You can type your question instead.")
+        : /permission|denied|notallowed|security/i.test(msg) ? t("Please allow the microphone to talk to the assistant (browser or app settings).")
+        : /notfound|notreadable|overconstrained/i.test(msg) ? t("No working microphone was found. You can type your question instead.")
+        : /not configured/i.test(msg) ? t("Voice is not set up on this server yet. You can type your question instead.")
+        : t("The voice assistant could not start. You can type your question instead."),
       );
       console.warn("[voice] start failed:", msg);
       prefetchVoice();

@@ -11,7 +11,7 @@
 //   Alerts (push.js): on a train, "Notify me" -> arrival at the chosen stop + its incidents; bell in the top bar ->
 //             your alerts + follow a whole line (incidents only); `/?line=<line>` -> line status.
 
-import { $, publicApi as api } from "../common.js";
+import { $, publicApi as api, t } from "../common.js";
 import * as push from "../push.js";
 import { startTour, tourSeen } from "../onboarding.js";
 import { ILLUSTRATION, buzz, ic, restartBtn, setUrl, show, toast, tripWatchAvailable } from "./ui.js";
@@ -44,8 +44,8 @@ function welcomeScreen() {
   show((s) => {
     s.innerHTML = `
       <div class="illus-box">${ILLUSTRATION.train}</div>
-      <h1>Welcome aboard</h1>
-      <p class="lead">Live trains, delays and incidents across Switzerland, for your trip.</p>`;
+      <h1>${t("Welcome aboard")}</h1>
+      <p class="lead">${t("Live trains, delays and incidents across Switzerland, for your trip.")}</p>`;
   }, { restart: false });
 }
 
@@ -71,7 +71,7 @@ if (qrTrain) {
 else if (qrStop) {
   api(`/stations/${encodeURIComponent(qrStop)}`)
     .then((d) => stationScreen({ stopId: d.station.stopId, name: d.station.name }))
-    .catch(() => browseScreen({ note: "Station code not recognised. Search by station name." }));
+    .catch(() => browseScreen({ note: t("Station code not recognised. Search by station name.") }));
 }
 else if (qrLine) lineScreen(qrLine, () => alertsScreen(() => detectScreen({ back: true })));
 else if (qrStation) {
@@ -80,6 +80,6 @@ else if (qrStation) {
     const to = params.get("to");
     if (to) api(`/stations/${encodeURIComponent(to)}`).then((x) => connectionsScreen(from, { stopId: x.station.stopId, name: x.station.name })).catch(() => destinationScreen(from));
     else destinationScreen(from);
-  }).catch(() => browseScreen({ note: "Station code not recognised. Search by station name." }));
+  }).catch(() => browseScreen({ note: t("Station code not recognised. Search by station name.") }));
 } else detectScreen(opts);
 }

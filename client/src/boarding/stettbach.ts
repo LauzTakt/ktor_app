@@ -1,6 +1,7 @@
 import type { StyleSpecification } from "maplibre-gl";
 import type { VisualCommand } from "../contract";
 import type { BoardingPoint, BoardingService } from "./BoardingCard";
+import { t } from "../i18n";
 import routes from "./stettbach-routes.json";
 import overview from "./zurich-overview.webp?inline";
 import station from "./zurich-hb.webp?inline";
@@ -29,25 +30,25 @@ export const replayMapStyle: StyleSpecification = {
 };
 
 export const timeline = [
-  { time: "19:35", notice: "The S 9 skips Stettbach. SBB advises taking tram 7 from Bahnhofstrasse/HB." },
-  { time: "19:36", notice: "SBB expects trains to start stopping at Stettbach from 20:00." },
-  { time: "19:37", notice: "SBB names the first train that stops at Stettbach." },
-] as const;
+  { time: "19:35", notice: t("The S 9 skips Stettbach. SBB advises taking tram 7 from Bahnhofstrasse/HB.") },
+  { time: "19:36", notice: t("SBB expects trains to start stopping at Stettbach from 20:00.") },
+  { time: "19:37", notice: t("SBB names the first train that stops at Stettbach.") },
+];
 
 // GTFS 20260923: 25 September trip .ojp-91-9-D.1.TA.482.j26, quay ch:1:sloid:3000:503:43.
 const publishedPoint: BoardingPoint = {
-  label: "Tracks 43–44",
+  label: t("Tracks {tracks}", { tracks: "43–44" }),
   coordinates: [8.53884610, 47.37896698],
   landmark: "ZVV-Contact · Halle Landesmuseum",
-  directions: "In Halle Landesmuseum, use the access beside ZVV-Contact. Follow the signs for tracks 43–44.",
+  directions: t("In Halle Landesmuseum, use the access beside ZVV-Contact. Follow the signs for tracks 43–44."),
 };
 
 // The platform is real. Its use by this service is a simulation for the reconnect check.
 export const simulatedPoint: BoardingPoint = {
-  label: "Tracks 41–42",
+  label: t("Tracks {tracks}", { tracks: "41–42" }),
   coordinates: [8.53881017, 47.37890615],
-  landmark: "Halle Landesmuseum · Access to tracks 41–42",
-  directions: "In Halle Landesmuseum, follow the signs for tracks 41–42.",
+  landmark: t("Halle Landesmuseum · Access to tracks 41–42"),
+  directions: t("In Halle Landesmuseum, follow the signs for tracks 41–42."),
 };
 
 export const train: BoardingService = {
@@ -61,7 +62,7 @@ export const train: BoardingService = {
 };
 
 export const tram: BoardingService = {
-  line: "Tram 7",
+  line: t("Tram 7"),
   direction: "Bahnhof Stettbach",
   departure: Date.parse("2026-09-25T19:43:00+02:00"),
   from: "Zürich, Bahnhofstrasse/HB",
@@ -69,8 +70,8 @@ export const tram: BoardingService = {
   point: {
     label: "Bahnhofstrasse/HB",
     coordinates: [8.53950187, 47.37611402],
-    landmark: "Tram stop on Bahnhofstrasse",
-    directions: "Follow the Bahnhofstrasse exit at Zürich HB. At the tram stop, look for tram 7 toward Bahnhof Stettbach.",
+    landmark: t("Tram stop on Bahnhofstrasse"),
+    directions: t("Follow the Bahnhofstrasse exit at Zürich HB. At the tram stop, look for tram 7 toward Bahnhof Stettbach."),
   },
 };
 
@@ -91,7 +92,7 @@ export function replayVisuals(plan: "rail" | "tram" | "disrupted"): VisualComman
       type: "route", id: "tram7-replay", label: "Tram 7", style: plan === "tram" ? "recommended" : "alternative",
       legs: [{ line: "Tram 7", geometry: { type: "LineString", coordinates: routes.tram } }],
     },
-    { type: "section", id: restrictionId, colour: "red", label: "S 9 skips Stettbach", geometry: { type: "LineString", coordinates: routes.affected } },
+    { type: "section", id: restrictionId, colour: "red", label: t("S 9 skips Stettbach"), geometry: { type: "LineString", coordinates: routes.affected } },
   );
   visuals.push(
     { type: "station", name: "Zürich HB", lon: hb[0], lat: hb[1], role: "origin" },

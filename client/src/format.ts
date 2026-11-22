@@ -1,5 +1,7 @@
-// Times as HH:mm in Europe/Zurich (payloads are epoch ms UTC).
-const clock = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Zurich", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+// Times as HH:mm in Europe/Zurich (payloads are epoch ms UTC), 24 h in every UI language.
+import { locale } from "./i18n";
+
+const clock = new Intl.DateTimeFormat(locale, { timeZone: "Europe/Zurich", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 export const hhmm = (ms: number | null | undefined) => (ms ? clock.format(ms) : "");
 export const minutes = (ms: number) => Math.max(0, Math.round(ms / 60000));
 

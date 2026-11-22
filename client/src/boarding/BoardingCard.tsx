@@ -1,6 +1,7 @@
 import { ArrowLeft, ArrowRight, Check, MapPin } from "lucide-react";
 import { useId, type Ref } from "react";
 import { hhmm } from "../format";
+import { t } from "../i18n";
 
 export type BoardingPoint = {
   label: string;
@@ -19,7 +20,7 @@ export type BoardingService = {
   point: BoardingPoint;
 };
 
-export function BoardingCard({ service, focused, status, action = "Board this one", onToggle, headingRef }: {
+export function BoardingCard({ service, focused, status, action = t("Board this one"), onToggle, headingRef }: {
   service: BoardingService;
   focused: boolean;
   status: string;
@@ -34,11 +35,11 @@ export function BoardingCard({ service, focused, status, action = "Board this on
       <div className="boarding-departure">
         <time dateTime={new Date(service.departure).toISOString()}>{hhmm(service.departure)}</time>
         <div>
-          <h2 id={heading} ref={headingRef} tabIndex={-1}>{service.line} <span>toward {service.direction}</span></h2>
-          <p>{service.from}{service.number && ` · Train ${service.number}`}</p>
+          <h2 id={heading} ref={headingRef} tabIndex={-1}>{service.line} <span>{t("toward {direction}", { direction: service.direction })}</span></h2>
+          <p>{service.from}{service.number && ` · ${t("Train {number}", { number: service.number })}`}</p>
         </div>
       </div>
-      <p className="boarding-confirmation"><Check size={18} aria-hidden="true" /> Stops at {service.destination}</p>
+      <p className="boarding-confirmation"><Check size={18} aria-hidden="true" /> {t("Stops at {station}", { station: service.destination })}</p>
       <div className="boarding-wayfinding" id={directions}>
         <MapPin size={20} aria-hidden="true" />
         <div>
@@ -55,7 +56,7 @@ export function BoardingCard({ service, focused, status, action = "Board this on
         onClick={onToggle}
       >
         {focused && <ArrowLeft size={18} aria-hidden="true" />}
-        {focused ? "Back to rail map" : action}
+        {focused ? t("Back to rail map") : action}
         {!focused && <ArrowRight size={18} aria-hidden="true" />}
       </button>
     </article>

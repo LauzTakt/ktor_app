@@ -5,6 +5,8 @@ import ch.lauzhack.twin.common.hhmm
 import ch.lauzhack.twin.common.long
 import ch.lauzhack.twin.common.objects
 import ch.lauzhack.twin.common.str
+import ch.lauzhack.twin.query.IncidentDto
+import ch.lauzhack.twin.query.Severity
 import ch.lauzhack.twin.query.StopDto
 import ch.lauzhack.twin.query.StopState
 import ch.lauzhack.twin.query.TwinQueries
@@ -96,6 +98,17 @@ internal class TripWatchJourneys(
                 leg.expectedArrival >= leg.expectedDeparture
         }
     }
+
+    /**
+     * Disruptions on the trains of [legs] worth a Wallet notification wherever the passenger is: official ones
+     * (SBB disruptions, faults) and a train cancelled, stopped or held. Plain delays (`auto.late`) are not: the pass
+     * already shows the new times, and Google allows only a few notifying messages a day per pass.
+     */
+    fun disruptions(legs: List<WatchLeg>): List<IncidentDto> = legs.map(WatchLeg::serviceId).distinct()
+        .flatMap { id -> runCatching { queries.trainIncidents(id) }.getOrDefault(emptyList()) }
+        .filter { i -> i.active && i.type != "auto.late" && Severity.parse(i.severity) != Severity.INFO }
+        .distinctBy { it.id }
+        .sortedBy { Severity.parse(it.severity).rank }
 
     fun observe(leg: WatchLeg): ObservedLeg? {
         val train = queries.trainLive(leg.serviceId) ?: return null

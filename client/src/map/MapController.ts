@@ -6,6 +6,7 @@ import type { GeoJSONSource, LngLatBoundsLike, StyleSpecification } from "maplib
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type { AnyGeoJSON, VisualCommand } from "../contract";
 import { sbbText } from "../format";
+import { t } from "../i18n";
 import { FleetFeed } from "./feed";
 import { TrainCanvas } from "./trains";
 import { applyMapTheme, captureBase } from "./mapTheme";
@@ -125,19 +126,19 @@ const pretty = (s: string) => s.replace(/ - /g, " – ").replace(/\b(IC|IR|ICE|E
 function describe(v: VisualCommand): { kind: string; label: string; colour: string } {
   switch (v.type) {
     case "route":
-      return v.style === "alternative" ? { kind: "Alternative", label: pretty(v.label ?? "Route"), colour: "#767676" } : { kind: "Recommended", label: pretty(v.label ?? "Route"), colour: "#00973b" };
+      return v.style === "alternative" ? { kind: t("Alternative"), label: pretty(v.label ?? t("Route")), colour: "#767676" } : { kind: t("Recommended"), label: pretty(v.label ?? t("Route")), colour: "#00973b" };
     case "section":
-      return { kind: v.colour === "orange" ? "Limited" : v.colour === "green" ? "Resumed" : v.colour === "blue" ? "Section" : "Interrupted", label: pretty(v.label ?? "Section"), colour: COLOURS[v.colour ?? "red"] ?? COLOURS.red };
+      return { kind: t(v.colour === "orange" ? "Limited" : v.colour === "green" ? "Resumed" : v.colour === "blue" ? "Section" : "Interrupted"), label: pretty(v.label ?? t("Section")), colour: COLOURS[v.colour ?? "red"] ?? COLOURS.red };
     case "train":
-      return { kind: "Train", label: pretty(v.label ?? "Train"), colour: "#2d327d" };
+      return { kind: t("Train"), label: pretty(v.label ?? t("Train")), colour: "#2d327d" };
     case "station":
-      return { kind: v.role === "destination" ? "Destination" : v.role === "origin" ? "Start" : v.role === "incident" ? "Affected station" : v.role === "transfer" ? "Change" : "Station", label: v.name, colour: v.role === "incident" ? "#eb0000" : "#2d327d" };
+      return { kind: t(v.role === "destination" ? "Destination" : v.role === "origin" ? "Start" : v.role === "incident" ? "Affected station" : v.role === "transfer" ? "Change" : "Station"), label: v.name, colour: v.role === "incident" ? "#eb0000" : "#2d327d" };
     case "line":
-      return { kind: "Line", label: pretty(v.label ?? v.line), colour: "#2d327d" };
+      return { kind: t("Line"), label: pretty(v.label ?? v.line), colour: "#2d327d" };
     case "label":
-      return { kind: "Note", label: v.text, colour: "#686868" };
+      return { kind: t("Note"), label: v.text, colour: "#686868" };
     case "track_train":
-      return { kind: "Tracking", label: pretty(v.label ?? "Your train"), colour: "#2d327d" };
+      return { kind: t("Tracking"), label: pretty(v.label ?? t("Your train")), colour: "#2d327d" };
     default:
       return { kind: v.type, label: v.type, colour: "#767676" };
   }
@@ -604,7 +605,7 @@ export class MapController {
     const pin = el("pin pin--boarding", '<span class="pin-dot"></span><span class="pin-label"></span>');
     pin.querySelector(".pin-label")!.textContent = point.label;
     pin.setAttribute("role", "img");
-    pin.setAttribute("aria-label", `Boarding point · ${point.label}`);
+    pin.setAttribute("aria-label", t("Boarding point · {place}", { place: point.label }));
     this.boardingMarker = new maplibregl.Marker({ element: pin, anchor: "center" }).setLngLat(point.coordinates).addTo(this.map);
     this.map.flyTo({ center: point.coordinates, zoom: 17, padding: this.cameraPadding(), duration: 850, essential: false });
   }
@@ -645,7 +646,7 @@ export class MapController {
     const leg = this.routes.get(id)?.legs.find((l) => l.trainId);
     if (!leg?.trainId) return;
     this.trains.highlights.clear();
-    this.trains.highlights.set(leg.trainId, { label: `Your train${leg.line ? ` · ${leg.line.replace(/^([A-Z]+)(\d)/, "$1 $2")}` : ""}`, follow: false });
+    this.trains.highlights.set(leg.trainId, { label: `${t("Your train")}${leg.line ? ` · ${leg.line.replace(/^([A-Z]+)(\d)/, "$1 $2")}` : ""}`, follow: false });
     this.map.triggerRepaint();
   }
   /** Highlight (outline) a train and optionally follow it with the camera. */

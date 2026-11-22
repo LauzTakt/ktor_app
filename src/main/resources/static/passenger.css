@@ -25,12 +25,16 @@ body { font: 14px/1.45 var(--rail-font); -webkit-font-smoothing: antialiased;
 .topbar .spacer { flex: 1; }
 .topbar .btn { flex: none; }
 .icon-btn { color: var(--granite); }
+.topbar .lang-select { flex: none; width: auto; min-width: 0; padding-inline: 8px 24px; color: var(--granite); font-size: 13px; font-weight: 700;
+  border-color: transparent; background-color: transparent; box-shadow: none; }
+.topbar .lang-select:hover { background-color: var(--milk); }
 @media (max-width: 30rem) {
   .topbar { flex-wrap: wrap; gap: 2px 4px; padding-inline: 10px; }
   .topbar .brand { margin-inline-end: 2px; font-size: 17px; }
   .topbar .live { margin: 0; font-size: 12px; }
   .topbar .spacer { min-width: 0; }
   .topbar .icon-btn { --size: 2.5rem; }
+  .topbar .lang-select { padding-inline: 6px 20px; font-size: 12px; }
 }
 
 /* ---------- layout & screen transitions ---------- */

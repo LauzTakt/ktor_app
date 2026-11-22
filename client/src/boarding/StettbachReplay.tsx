@@ -5,6 +5,7 @@ import { MapController } from "../map/MapController";
 import { BoardingCard } from "./BoardingCard";
 import { replayMapStyle, replayVisuals, restrictionId, routeBounds, simulatedPoint, timeline, train, tram } from "./stettbach";
 import "./boarding.css";
+import { t } from "../i18n";
 
 type Choice = "train" | "tram";
 type TrackUpdate = "published" | "queued" | "changed";
@@ -115,65 +116,65 @@ export function StettbachReplay() {
   const changeTrack = () => setTrack(navigator.onLine ? "changed" : "queued");
   const checkedAt = track === "changed" ? "19:40" : choice === "tram" ? "19:35" : "19:37";
   const status = !online
-    ? `Offline · Last checked at ${checkedAt}`
+    ? t("Offline · Last checked at {time}", { time: checkedAt })
     : track === "changed"
-      ? "Simulated change · 19:40"
+      ? t("Simulated change · {time}", { time: "19:40" })
       : choice === "tram"
-        ? step === timeline.length - 1 ? "Tram plan kept after the 19:37 update" : "Scheduled departure · 19:35 replay"
-        : "Stop confirmed at 19:37 · Published tracks";
+        ? step === timeline.length - 1 ? t("Tram plan kept after the {time} update", { time: "19:37" }) : t("Scheduled departure · {time} replay", { time: "19:35" })
+        : t("Stop confirmed at {time} · Published tracks", { time: "19:37" });
 
   return (
     <main className="app app--boarding">
-      <a className="boarding-skip" href="#boarding-guidance">Skip to journey guidance</a>
-      <div ref={mapNode} className="map" role="region" aria-label="Rail map from Zürich HB to Stettbach" />
+      <a className="boarding-skip" href="#boarding-guidance">{t("Skip to journey guidance")}</a>
+      <div ref={mapNode} className="map" role="region" aria-label={t("Rail map from Zürich HB to Stettbach")} />
       <header ref={top} className="topbar">
         <div className="brand">
           <Tikt className="mark mark--tikt" />
           <div>
-            <h1>Tikt · Travel assistant</h1>
-            <p className="status">Disruption replay · 25 Sep 2026</p>
+            <h1>Tikt · {t("Travel assistant")}</h1>
+            <p className="status">{t("Disruption replay · 25 Sep 2026")}</p>
           </div>
         </div>
-        <a className="btn btn-ghost btn-circle icon-btn boarding-exit" href={import.meta.env.BASE_URL} aria-label="Exit replay" title="Exit replay">
+        <a className="btn btn-ghost btn-circle icon-btn boarding-exit" href={import.meta.env.BASE_URL} aria-label={t("Exit replay")} title={t("Exit replay")}>
           <X size={19} aria-hidden="true" />
         </a>
       </header>
 
-      {!mapAvailable && <p className="boarding-map-fallback" role="status">Map unavailable. Boarding directions are below.</p>}
-      <section ref={sheet} id="boarding-guidance" className="sheet boarding-sheet" aria-label="Journey guidance" tabIndex={-1}>
+      {!mapAvailable && <p className="boarding-map-fallback" role="status">{t("Map unavailable. Boarding directions are below.")}</p>}
+      <section ref={sheet} id="boarding-guidance" className="sheet boarding-sheet" aria-label={t("Journey guidance")} tabIndex={-1}>
         <div className="sheet-body boarding-body">
           {service ? (
             <BoardingCard
               service={service}
               focused={focused}
               status={status}
-              action={choice === "tram" ? "Show tram stop" : undefined}
+              action={choice === "tram" ? t("Show tram stop") : undefined}
               onToggle={toggleBoarding}
               headingRef={contentHeading}
             />
           ) : (
             <article className="card boarding-card replay-notice" aria-labelledby="replay-trip">
-              <h2 id="replay-trip" ref={contentHeading} tabIndex={-1}>Zürich HB to Stettbach</h2>
-              <p className="replay-bulletin">{step === 0 ? "Trip alert" : "SBB bulletin"} · {update.time}</p>
+              <h2 id="replay-trip" ref={contentHeading} tabIndex={-1}>{t("Zürich HB to Stettbach")}</h2>
+              <p className="replay-bulletin">{step === 0 ? t("Trip alert") : t("SBB bulletin")} · {update.time}</p>
               <p className="replay-notice-copy" role="status">{update.notice}</p>
               {choice === "train" ? (
                 <button type="button" className="btn btn-primary boarding-action" onClick={nextUpdate}>
-                  Next SBB update <ArrowRight size={18} aria-hidden="true" />
+                  {t("Next SBB update")} <ArrowRight size={18} aria-hidden="true" />
                 </button>
               ) : (
                 <div className="boarding-choices">
-                  <button type="button" className="btn btn-primary boarding-action" onClick={() => choose("tram")}>Take tram 7 <ArrowRight size={18} aria-hidden="true" /></button>
-                  <button type="button" className="btn btn-outline boarding-action" onClick={() => choose("train")}>Wait for the S 9</button>
+                  <button type="button" className="btn btn-primary boarding-action" onClick={() => choose("tram")}>{t("Take tram 7")} <ArrowRight size={18} aria-hidden="true" /></button>
+                  <button type="button" className="btn btn-outline boarding-action" onClick={() => choose("train")}>{t("Wait for the S 9")}</button>
                 </div>
               )}
             </article>
           )}
           {(choice || step > 0) && (
             <div className="boarding-replay-controls">
-              <button className="btn btn-ghost btn-sm" type="button" onClick={restart}><RotateCcw size={15} aria-hidden="true" /> Restart replay</button>
-              {choice === "tram" && step < timeline.length - 1 && <button className="btn btn-ghost btn-sm" type="button" onClick={nextUpdate}>Next SBB update</button>}
-              {confirmed && focused && track === "published" && <button className="btn btn-ghost btn-sm" type="button" onClick={changeTrack}>Simulate track change</button>}
-              {track === "queued" && <p role="status">Simulated update queued for reconnect</p>}
+              <button className="btn btn-ghost btn-sm" type="button" onClick={restart}><RotateCcw size={15} aria-hidden="true" /> {t("Restart replay")}</button>
+              {choice === "tram" && step < timeline.length - 1 && <button className="btn btn-ghost btn-sm" type="button" onClick={nextUpdate}>{t("Next SBB update")}</button>}
+              {confirmed && focused && track === "published" && <button className="btn btn-ghost btn-sm" type="button" onClick={changeTrack}>{t("Simulate track change")}</button>}
+              {track === "queued" && <p role="status">{t("Simulated update queued for reconnect")}</p>}
             </div>
           )}
         </div>

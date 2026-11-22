@@ -4,6 +4,7 @@ import type { Arrival, AskContext, AskResponse, Brief, Option, SituationItem, Vi
 import { HoldMusic } from "./hold";
 import { onlyUnavailable, unavailableAnswer, unavailableIn } from "./scope";
 import { hhmm } from "./format";
+import { locale, t } from "./i18n";
 import { MapController, type DrawnItem, type Pick as MapPick, type Timer } from "./map/MapController";
 import { MapLegend, PickCard, TrackChip, type PickInfo, type Tracking } from "./mapui";
 import { Tikt } from "./Tikt";
@@ -69,19 +70,19 @@ function chipsFor(b: Brief | null): string[] {
     const e = main && ends(main.title);
     if (main && e) {
       const other = e[0] === b.station.name ? e[1] : e[1] === b.station.name ? e[0] : e[1];
-      out.push(`How do I get to ${other} now?`);
-      out.push(`When does ${e[0]} – ${e[1]} reopen?`);
+      out.push(t("How do I get to {place} now?", { place: other }));
+      out.push(t("When does {from} – {to} reopen?", { from: e[0], to: e[1] }));
     }
-    out.push(`Next trains from ${b.station.name}`);
-    out.push("Track my train");
+    out.push(t("Next trains from {station}", { station: b.station.name }));
+    out.push(t("Track my train"));
     return out.slice(0, 4);
   }
   for (const it of active.items.slice(0, 2)) {
     const e = ends(it.title);
-    if (e) out.push(out.length === 0 ? `What's happening between ${e[0]} and ${e[1]}?` : `How do I get from ${e[0]} to ${e[1]} now?`);
+    if (e) out.push(out.length === 0 ? t("What's happening between {from} and {to}?", { from: e[0], to: e[1] }) : t("How do I get from {from} to {to} now?", { from: e[0], to: e[1] }));
   }
-  out.push("Is my train running?");
-  out.push("Track my train");
+  out.push(t("Is my train running?"));
+  out.push(t("Track my train"));
   return out.slice(0, 4);
 }
 
@@ -100,7 +101,7 @@ function describeVisuals(vs: VisualCommand[]) {
 }
 
 const nextFrame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-const SUGGESTIONS = ["My IC from Zürich HB to Bern was cancelled", "Lausanne to Geneva Airport, fastest way", "Is Olten – Bern running normally?"];
+const SUGGESTIONS = [t("My IC from Zürich HB to Bern was cancelled"), t("Lausanne to Geneva Airport, fastest way"), t("Is Olten – Bern running normally?")];
 
 export function App() {
   const mapEl = useRef<HTMLDivElement>(null);
@@ -318,7 +319,7 @@ export function App() {
         log("ask_backend", Math.round(performance.now() - t0), `backend ${res.elapsedMs ?? "?"} ms`);
         return toolResult(res);
       } catch {
-        showToast("The live timetable did not answer");
+        showToast(t("The live timetable did not answer"));
         return JSON.stringify({ error: "The live timetable did not answer. Apologise briefly and offer to try again." });
       } finally {
         hold.stop();
@@ -383,7 +384,7 @@ export function App() {
   const watchRef = useRef(watch);
   watchRef.current = watch;
   useEffect(() => {
-    const t = window.setInterval(async () => {
+    const iv = window.setInterval(async () => {
       const w = watching.current;
       if (!w) return;
       briefs.delete(new URLSearchParams(w.params).toString());
@@ -400,7 +401,7 @@ export function App() {
         w.offered = new Set(fresh.keys());
       }
       const timedId = cardsRef.current?.walking?.option.journeyId;
-      if (timedId && withdrawn.has(timedId)) showToast("Your timed departure is no longer listed.");
+      if (timedId && withdrawn.has(timedId)) showToast(t("Your timed departure is no longer listed."));
       setCards((c) => {
         if (!c || (!fresh.size && !withdrawn.size)) return c;
         const options = c.options.filter((o) => !o.journeyId || !withdrawn.has(o.journeyId)).map((o) => {
@@ -421,45 +422,45 @@ export function App() {
       const main = b.disruptions.find((d) => d.active);
       const news = gone.length && !main ? `Good news: the disruption on ${b.place} is over.` : main ? `Update for ${b.place}: ${main.title}${main.until ? `, ${main.until}` : ""}.` : null;
       if (!news) return;
-      showToast(news);
+      showToast(gone.length && !main ? t("Good news: the disruption on {place} is over.", { place: b.place }) : t("Update for {place}: {title}", { place: b.place, title: `${main!.title}${main!.until ? `, ${main!.until}` : ""}.` }));
       setCards((c) => (c ? { ...c, situation: b.situation.length ? b.situation : c.situation } : c));
       // only for the trip the passenger is on, once per change, never over the passenger (Voice.notify gates it)
       if (b.related || gone.length) voice.current?.notify(`trip:${b.key}:${sig}`, `Live update for the passenger's trip (${b.place}): ${news} Tell the passenger in one short sentence; if the best connection changed, give the new one.`);
     }, 15_000);
-    return () => window.clearInterval(t);
+    return () => window.clearInterval(iv);
   }, [showToast]);
 
   // ---------- taps on the map: a card at once, and context for the assistant ----------
   const onPick = async (p: MapPick) => {
     if (p.kind === "section") {
       picked.current = { ...picked.current, sectionId: p.id, sectionTitle: p.label };
-      setPick({ kind: "section", title: p.label || "Disruption", lines: ["Loading…"] });
+      setPick({ kind: "section", title: p.label || t("Disruption"), lines: [t("Loading…")] });
       const d = (await fetch(`/api/brief/item?id=${encodeURIComponent(p.id)}`).then((r) => (r.ok ? r.json() : null)).catch(() => null)) as (Brief["disruptions"][number] & { lines: string[]; moreLines: number }) | null;
-      if (!d) return setPick({ kind: "section", title: p.label || "Disruption", lines: ["No details for this section."] });
-      setPick({ kind: "section", title: d.title, lines: [d.text, d.until ? `Expected end: ${d.until}` : "", d.lines.length ? `Lines: ${d.lines.join(", ")}${d.moreLines ? ` and ${d.moreLines} more` : ""}` : "", ...d.measures.slice(-2)].filter(Boolean), ask: `Tell me about the disruption ${d.title}` });
+      if (!d) return setPick({ kind: "section", title: p.label || t("Disruption"), lines: [t("No details for this section.")] });
+      setPick({ kind: "section", title: d.title, lines: [d.text, d.until ? t("Expected end: {time}", { time: d.until }) : "", d.lines.length ? (d.moreLines ? t("Lines: {lines} and {n} more", { lines: d.lines.join(", "), n: d.moreLines }) : t("Lines: {lines}", { lines: d.lines.join(", ") })) : "", ...d.measures.slice(-2)].filter(Boolean), ask: t("Tell me about the disruption {title}", { title: d.title }) });
       voice.current?.context(`[App] The passenger tapped the section "${d.title}" on the map (${d.until ?? "end unknown"}). They may ask about it.`);
     } else if (p.kind === "station") {
       picked.current = { ...picked.current, stationId: p.id, stationName: p.label };
-      setPick({ kind: "station", title: p.label, lines: ["Loading…"], stationId: p.id, lon: p.lon, lat: p.lat });
+      setPick({ kind: "station", title: p.label, lines: [t("Loading…")], stationId: p.id, lon: p.lon, lat: p.lat });
       const sit = (await fetch(`/api/v1/situation?station=${encodeURIComponent(p.id)}`).then((r) => (r.ok ? r.json() : null)).catch(() => null)) as { incidents?: { title: string; status?: string; lifecycle?: string }[]; departures?: { line: string; headsign: string; planned: number; expected?: number; delayMin?: number; cancelled?: boolean }[] } | null;
-      const deps = (sit?.departures ?? []).slice(0, 5).map((d) => `${hhmm(d.expected ?? d.planned)}  ${d.line} → ${d.headsign}${d.cancelled ? " · cancelled" : d.delayMin && d.delayMin >= 2 ? ` · +${d.delayMin}′` : ""}`);
+      const deps = (sit?.departures ?? []).slice(0, 5).map((d) => `${hhmm(d.expected ?? d.planned)}  ${d.line} → ${d.headsign}${d.cancelled ? ` · ${t("cancelled")}` : d.delayMin && d.delayMin >= 2 ? ` · +${d.delayMin}′` : ""}`);
       const inc = (sit?.incidents ?? []).filter((i) => i.lifecycle !== "ENDED" && i.status !== "ended").slice(0, 2).map((i) => `⚠ ${i.title}`);
       const arr = ((await fetch(`/api/v1/stations/${encodeURIComponent(p.id)}/arrivals`).then((r) => (r.ok ? r.json() : [])).catch(() => [])) as Arrival[]).slice(0, 4);
       setPick({
         kind: "station",
         title: p.label,
-        lines: [...inc, ...(deps.length ? ["Departures", ...deps] : ["No departures in the next minutes."])],
-        rows: arr.map((a) => ({ label: a.headsign === p.label ? `${a.line} (ends here)` : `${a.line} → ${a.headsign}`, detail: a.status === "at_station" ? "at the station" : `in ${Math.max(1, Math.round(a.etaSec / 60))} min${a.delaySec >= 120 ? ` · +${Math.round(a.delaySec / 60)}′` : ""}`, late: a.delaySec >= 120, onTap: () => startTrack(a.trainId, p.id, p.label) })),
+        lines: [...inc, ...(deps.length ? [t("Departures"), ...deps] : [t("No departures in the next minutes.")])],
+        rows: arr.map((a) => ({ label: a.headsign === p.label ? t("{line} (ends here)", { line: a.line }) : `${a.line} → ${a.headsign}`, detail: a.status === "at_station" ? t("at the station") : `${t("in {n} min", { n: Math.max(1, Math.round(a.etaSec / 60)) })}${a.delaySec >= 120 ? ` · +${Math.round(a.delaySec / 60)}′` : ""}`, late: a.delaySec >= 120, onTap: () => startTrack(a.trainId, p.id, p.label) })),
         stationId: p.id,
         lon: p.lon,
         lat: p.lat,
-        ask: `What is happening at ${p.label}?`,
+        ask: t("What is happening at {station}?", { station: p.label }),
       });
       voice.current?.context(`[App] The passenger tapped ${p.label} station (stop id ${p.id}) on the map.`);
     } else if (p.kind === "route") {
       picked.current = { ...picked.current, routeId: p.id };
       const o = cards?.options.find((x) => x.journeyId === p.id);
-      setPick({ kind: "route", title: p.label || "Route", lines: [o ? `${hhmm(o.departure)} → ${hhmm(o.arrival)} · ${o.transfers} change${o.transfers === 1 ? "" : "s"}` : "", p.legs?.length ? `Lines: ${p.legs.join(" → ")}` : "", o?.why ?? ""].filter(Boolean), ask: `Tell me more about the route ${p.label}` });
+      setPick({ kind: "route", title: p.label || t("Route"), lines: [o ? `${hhmm(o.departure)} → ${hhmm(o.arrival)} · ${t(o.transfers === 1 ? "{n} change" : "{n} changes", { n: o.transfers })}` : "", p.legs?.length ? t("Lines: {lines}", { lines: p.legs.join(" → ") }) : "", o?.why ?? ""].filter(Boolean), ask: t("Tell me more about the route {route}", { route: p.label }) });
       if (o) void choose(o);
       voice.current?.context(`[App] The passenger tapped the route "${p.label}" on the map.`);
     } else if (p.kind === "train") {
@@ -469,7 +470,7 @@ export function App() {
         const title = i.title.trim().toLowerCase();
         const reason = (i.description ?? "").split("\n").map((l) => l.trim()).filter((l) => l && l.toLowerCase() !== title && !title.endsWith(l.toLowerCase()));
         const e = i.expectedEnd;
-        const end = !e ? undefined : e < Date.now() ? `was due to end ${hhmm(e)}` : i.endKind === "at_least" ? `at least until ${hhmm(e)}` : i.endKind === "approx" ? `until about ${hhmm(e)}` : `until ${hhmm(e)}`;
+        const end = !e ? undefined : e < Date.now() ? t("was due to end {time}", { time: hhmm(e) }) : i.endKind === "at_least" ? t("at least until {time}", { time: hhmm(e) }) : i.endKind === "approx" ? t("until about {time}", { time: hhmm(e) }) : t("until {time}", { time: hhmm(e) });
         return { id: i.id, title: i.title, severity: i.severity ?? "info", reason, since: i.firstSeenAt ? hhmm(i.firstSeenAt) : undefined, end };
       });
       const info = detail?.train;
@@ -479,29 +480,29 @@ export function App() {
       setPick({
         kind: "train",
         title: `${line}${to ? ` → ${to}` : ""}`,
-        lines: [p.delay && p.delay >= 120 ? `About ${Math.round(p.delay / 60)} min late` : "On time", next?.name ? `Next stop: ${next.name}` : ""].filter(Boolean),
-        rows: next?.id ? [{ label: `Track it to ${next.name}`, detail: "live", late: false, onTap: () => startTrack(p.id, next.id!, next.name) }] : [],
+        lines: [p.delay && p.delay >= 120 ? t("About {n} min late", { n: Math.round(p.delay / 60) }) : t("On time"), next?.name ? t("Next stop: {station}", { station: next.name }) : ""].filter(Boolean),
+        rows: next?.id ? [{ label: t("Track it to {station}", { station: next.name ?? "" }), detail: t("live"), late: false, onTap: () => startTrack(p.id, next.id!, next.name) }] : [],
         incidents,
         onOpen: () => { setPick(null); openTrainView(p.id); },
         // with incidents, the question that matters: is there another way?
         ask: incidents.length
-          ? `The ${line}${to ? ` to ${to}` : ""} (train id ${p.id}) has incidents: ${incidents.slice(0, 3).map((i) => i.title).join("; ")}. Are there alternative routes? Should I change trains, and where?`
-          : `Tell me about the ${line}${to ? ` to ${to}` : ""}`,
-        askLabel: incidents.length ? "Ask about alternative routes" : undefined,
+          ? t(to ? "The {line} to {to} (train id {id}) has incidents: {incidents}. Are there alternative routes? Should I change trains, and where?" : "The {line} (train id {id}) has incidents: {incidents}. Are there alternative routes? Should I change trains, and where?", { line, to, id: p.id, incidents: incidents.slice(0, 3).map((i) => i.title).join("; ") })
+          : t(to ? "Tell me about the {line} to {to}" : "Tell me about the {line}", { line, to }),
+        askLabel: incidents.length ? t("Ask about alternative routes") : undefined,
       });
       picked.current = { ...picked.current };
       voice.current?.context(`[App] The passenger tapped the train ${line}${to ? ` to ${to}` : ""} (train id ${p.id}) on the map.`);
     } else {
       const r = await fetch(`/api/nearest?lat=${p.lat}&lon=${p.lon}`).then((x) => (x.ok ? x.json() : null)).catch(() => null);
       if (!r) return;
-      setPick({ kind: "point", title: r.name, lines: [`Nearest station · ${r.distanceKm} km`], stationId: r.id, lon: r.lon, lat: r.lat });
+      setPick({ kind: "point", title: r.name, lines: [t("Nearest station · {n} km", { n: r.distanceKm })], stationId: r.id, lon: r.lon, lat: r.lat });
     }
   };
   // ---------- live tracking of the train the passenger waits for ----------
   const startTrack = (trainId: string, stopId: string, stationName?: string) => {
     setPick(null);
     setTracking({ trainId, stopId, stationName: stationName ?? "", follow: false, arrival: null, at: Date.now() });
-    ctl.current?.highlight(trainId, "Your train");
+    ctl.current?.highlight(trainId, t("Your train"));
     voice.current?.context(`[App] The passenger is now tracking train ${trainId} arriving at stop ${stopId}${stationName ? ` (${stationName})` : ""}.`);
   };
   const startTrackRef = useRef(startTrack);
@@ -551,9 +552,10 @@ export function App() {
       picked.current = { ...picked.current, stationId: p.stationId, stationName: p.title };
       ctl.current?.apply([{ type: "station", stopId: p.stationId, name: p.title, lon: p.lon ?? 0, lat: p.lat ?? 0, role: "origin", label: p.title }], true);
       voice.current?.context(`[App] The passenger chose to start at ${p.title} (stop id ${p.stationId}).`);
-      showToast(`Starting at ${p.title}`);
+      showToast(t("Starting at {station}", { station: p.title }));
     } else {
-      void submitText(`How do I get to ${p.title} from ${picked.current?.stationName ?? locatedRef.current?.name ?? "here"}?`);
+      const from = picked.current?.stationName ?? locatedRef.current?.name;
+      void submitText(from ? t("How do I get to {to} from {from}?", { to: p.title, from }) : t("How do I get to {to} from here?", { to: p.title }));
     }
   };
 
@@ -627,14 +629,14 @@ export function App() {
       await show(b, { fromStopId: b.from?.id ?? b.station?.id ?? null, toStopId: b.to?.id ?? null });
       if (b.from && b.to) watch({ from: b.from.id, to: b.to.id }, b);
       log("text answer from brief", Math.round(performance.now() - t0));
-      return say("assistant", b.say, "Would you like me to look for another way?");
+      return say("assistant", b.say, t("Would you like me to look for another way?"));
     }
     try {
       const res = await ask(text);
       log("text answer from back office", Math.round(performance.now() - t0));
       say("assistant", res.answer, res.followUp);
     } catch {
-      say("assistant", "I'm sorry, I couldn't reach the live timetable just now. Please try again in a moment.");
+      say("assistant", t("I'm sorry, I couldn't reach the live timetable just now. Please try again in a moment."));
     }
   };
   // questions asked from the passenger view behind the panel (e.g. "alternative routes?" on a train with incidents)
@@ -690,7 +692,7 @@ export function App() {
 
   // ---------- location ----------
   const locate = (quiet = false) => {
-    if (!navigator.geolocation) return quiet ? undefined : showToast("Location is not available on this device");
+    if (!navigator.geolocation) return quiet ? undefined : showToast(t("Location is not available on this device"));
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
@@ -703,16 +705,16 @@ export function App() {
           ctl.current?.showMe(lon, lat, st);
           voice.current?.context(`[App] The passenger is at or near ${st.name} station (stop id ${st.id}).`);
           void fetchBrief({ station: st.id }).then((b) => b && setChips(chipsFor(b)));
-          showToast(`You are near ${st.name}`);
+          showToast(t("You are near {station}", { station: st.name }));
         } catch {
-          showToast("Could not find the nearest station");
+          showToast(t("Could not find the nearest station"));
         } finally {
           setLocating(false);
         }
       },
       (err) => {
         setLocating(false);
-        if (!quiet) showToast(err.code === 1 ? "Location permission was denied" : "Could not find your location");
+        if (!quiet) showToast(err.code === 1 ? t("Location permission was denied") : t("Could not find your location"));
       },
       { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 },
     );
@@ -749,22 +751,22 @@ export function App() {
   timerOn.current = !walking && Boolean(departureTimer);
   return (
     <main className="app" data-sheet={sheet}>
-      <div ref={mapEl} className="map" aria-label="Map of the Swiss railway with live trains" />
+      <div ref={mapEl} className="map" aria-label={t("Map of the Swiss railway with live trains")} />
 
       <header ref={topRef} className="topbar">
         <div className="brand">
           <Tikt className="mark mark--tikt" mood={checking ? "think" : undefined} voiceLevel={speaking ? speechLevel : undefined} />
           <div>
-            <h1>Tikt · Travel assistant</h1>
+            <h1>Tikt · {t("Travel assistant")}</h1>
             <p className="status">
               <i className={`dot ${fleet ? "dot--live" : ""}`} />
-              {fleet ? <>Live · <b>{fleet.count.toLocaleString("en")}</b> trains</> : "Connecting to the live network"}
-              {located && <> · Near <b>{located.name}</b></>}
+              {fleet ? <>{t("Live")} · <b>{fleet.count.toLocaleString(locale)}</b> {t(fleet.count === 1 ? "train" : "trains")}</> : t("Connecting to the live network")}
+              {located && <> · {t("Near")} <b>{located.name}</b></>}
             </p>
           </div>
         </div>
         {!empty && (
-          <button type="button" className="btn btn-ghost btn-circle icon-btn" onClick={restart} title="New conversation" aria-label="New conversation">
+          <button type="button" className="btn btn-ghost btn-circle icon-btn" onClick={restart} title={t("New conversation")} aria-label={t("New conversation")}>
             <RotateCcw size={18} />
           </button>
         )}
@@ -779,7 +781,7 @@ export function App() {
         <button
           type="button"
           className="handle"
-          aria-label={sheet === "peek" ? "Show the conversation" : "Hide the conversation"}
+          aria-label={sheet === "peek" ? t("Show the conversation") : t("Hide the conversation")}
           onClick={(event) => {
             if (event.detail === 0) setSheet((s) => s === "peek" ? "half" : "peek");
           }}
