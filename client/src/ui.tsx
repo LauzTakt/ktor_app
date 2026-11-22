@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import type { Option, SituationItem } from "./contract";
 import { Tikt } from "./Tikt";
 import { countdown, duration, hhmm, sbbText } from "./format";
+import { t } from "./i18n";
 import type { Timer } from "./map/MapController";
 import type { VoiceStatus } from "./voice";
 import { BOARDING_MINUTES, leaveBy, walkingPhase, waitRemaining, type WalkingPlan } from "./walking";
@@ -12,15 +13,15 @@ export type Item = { kind: "msg"; key: string; role: "passenger" | "assistant"; 
 export function Welcome({ suggestions, onPick, place, onLocate, locating }: { suggestions: string[]; onPick: (s: string) => void; place: string | null; onLocate: () => void; locating: boolean }) {
   return (
     <div className="welcome">
-      <h2>Where are you headed?</h2>
+      <h2>{t("Where are you headed?")}</h2>
       {place ? (
-        <p>Near <b>{place}</b></p>
+        <p>{t("Near")} <b>{place}</b></p>
       ) : (
         <button className="btn btn-ghost btn-sm welcome-locate" type="button" onClick={onLocate} disabled={locating}>
-          <LocateFixed size={16} aria-hidden="true" /> {locating ? "Locating…" : "Use my location"}
+          <LocateFixed size={16} aria-hidden="true" /> {locating ? t("Locating…") : t("Use my location")}
         </button>
       )}
-      <ul className="suggestions" aria-label="Examples">
+      <ul className="suggestions" aria-label={t("Examples")}>
         {suggestions.map((s) => (
           <li key={s}>
             <button className="btn btn-ghost" type="button" onClick={() => onPick(s)}>
@@ -31,7 +32,7 @@ export function Welcome({ suggestions, onPick, place, onLocate, locating }: { su
         ))}
       </ul>
       <a className="replay-link" href={`${import.meta.env.BASE_URL}?replay=stettbach`}>
-        Replay the Stettbach disruption <ArrowRight size={15} aria-hidden="true" />
+        {t("Replay the Stettbach disruption")} <ArrowRight size={15} aria-hidden="true" />
       </a>
     </div>
   );
@@ -67,7 +68,7 @@ export function Transcript({ items, checking, renderCards, speechLevel }: { item
       {checking && (
         <div className="say">
           <Tikt className="avatar" mood="think" />
-          <div className="bubble bubble--assistant bubble--checking" role="status" aria-label="Tikt is checking the live timetable">
+          <div className="bubble bubble--assistant bubble--checking" role="status" aria-label={t("Tikt is checking the live timetable")}>
             <span className="dots" aria-hidden="true">
               <i />
               <i />
@@ -80,11 +81,11 @@ export function Transcript({ items, checking, renderCards, speechLevel }: { item
   );
 }
 
-const SOURCE: Record<string, string> = { sbb: "SBB", staff: "SBB staff", auto: "Live data" };
+const SOURCE: Record<string, string> = { sbb: "SBB", staff: t("SBB staff"), auto: t("Live data") };
 export function SituationCard({ items }: { items: SituationItem[] }) {
   const shown = items.slice(0, 3);
   return (
-    <article className="card card--situation" aria-label="What's happening">
+    <article className="card card--situation" aria-label={t("What's happening")}>
       <ul className="situation">
         {shown.map((s) => (
           <li key={s.id}>
@@ -96,7 +97,7 @@ export function SituationCard({ items }: { items: SituationItem[] }) {
           </li>
         ))}
       </ul>
-      {items.length > shown.length && <p className="more">{items.length - shown.length} more on the way</p>}
+      {items.length > shown.length && <p className="more">{t("{n} more on the way", { n: items.length - shown.length })}</p>}
     </article>
   );
 }
@@ -122,7 +123,7 @@ export function OptionsCard({ options, selected, walking, onChoose, onWalk }: Op
   }, []);
   return (
     <article className="card">
-      <h3>Your options</h3>
+      <h3>{t("Your options")}</h3>
       <ul className="options">
         {options.slice(0, 4).map((o) => {
           const id = o.journeyId ?? o.id;
@@ -135,11 +136,11 @@ export function OptionsCard({ options, selected, walking, onChoose, onWalk }: Op
                   <span className="opt-times">
                     {hhmm(o.departure)} <span className="arrow">→</span> {hhmm(o.arrival)}
                   </span>
-                  {o.recommended && <span className="recommendation">Recommended</span>}
+                  {o.recommended && <span className="recommendation">{t("Recommended")}</span>}
                 </span>
                 <span className="opt-label">{sbbText(o.label)}</span>
                 <span className="opt-meta">
-                  {sbbText([duration(o.arrival - o.departure), /\bdirect\b/i.test(o.label) ? null : o.transfers === 0 ? "Direct" : `${o.transfers} change${o.transfers > 1 ? "s" : ""}`, o.why ? o.why.charAt(0).toUpperCase() + o.why.slice(1) : null].filter(Boolean).join(" · "))}
+                  {sbbText([duration(o.arrival - o.departure), /\bdirect\b/i.test(o.label) ? null : o.transfers === 0 ? t("Direct") : t(o.transfers > 1 ? "{n} changes" : "{n} change", { n: o.transfers }), o.why ? o.why.charAt(0).toUpperCase() + o.why.slice(1) : null].filter(Boolean).join(" · "))}
                 </span>
               </button>
               {(on || plan) && o.departure > Date.now() && (
@@ -151,7 +152,7 @@ export function OptionsCard({ options, selected, walking, onChoose, onWalk }: Op
       </ul>
       {canWatch && selectedJourney && (
         <a className="btn btn-outline option-watch" href={`/trip-watch.html?${new URLSearchParams({ journeyId: selectedJourney })}`} target="_top">
-          Watch this trip
+          {t("Watch this trip")}
         </a>
       )}
     </article>
@@ -180,7 +181,7 @@ function WalkingTimeControl({ option, plan, replacing, onWalk }: {
     }}>
       <summary ref={summary}>
         <Footprints size={16} aria-hidden="true" />
-        <span>{plan ? <>{plan.minutes === 0 ? "Be ready by" : "Leave by"} <b>{hhmm(leaveBy(plan))}</b> · {plan.minutes} min walk</> : "Set leave-by timer"}</span>
+        <span>{plan ? <>{plan.minutes === 0 ? t("Be ready by") : t("Leave by")} <b>{hhmm(leaveBy(plan))}</b> · {t("{n} min walk", { n: plan.minutes })}</> : t("Set leave-by timer")}</span>
         <ChevronDown className="walk-chevron" size={16} aria-hidden="true" />
       </summary>
       <form className="walk-form" onSubmit={(event) => {
@@ -193,21 +194,21 @@ function WalkingTimeControl({ option, plan, replacing, onWalk }: {
       }} onKeyDown={(event) => {
         if (event.key === "Escape") { event.preventDefault(); close(); }
       }}>
-        <label htmlFor={id}>Your walk to the boarding point</label>
+        <label htmlFor={id}>{t("Your walk to the boarding point")}</label>
         <div className="walk-entry">
           <span className="input walk-number"><input ref={field} id={id} type="number" inputMode="numeric" min="0" max="1440" step="1" required aria-describedby={id + "-hint"} /><span>min</span></span>
-          <button className="btn btn-primary" type="submit">{plan ? "Save" : replacing ? "Replace timer" : "Set timer"}</button>
+          <button className="btn btn-primary" type="submit">{plan ? t("Save") : replacing ? t("Replace timer") : t("Set timer")}</button>
         </div>
-        <p id={id + "-hint"}>{BOARDING_MINUTES} extra minute to board.</p>
-        {expired && <p role="alert">The departure time has passed. Choose another service.</p>}
+        <p id={id + "-hint"}>{t(BOARDING_MINUTES === 1 ? "{n} extra minute to board." : "{n} extra minutes to board.", { n: BOARDING_MINUTES })}</p>
+        {expired && <p role="alert">{t("The departure time has passed. Choose another service.")}</p>}
         <div className="walk-actions">
           {plan && <button type="button" onClick={() => {
             const optionButton = details.current?.closest("li")?.querySelector<HTMLButtonElement>(".option");
             onWalk(null);
             close();
             optionButton?.focus();
-          }}>Remove timer</button>}
-          <button type="button" onClick={close}>Cancel</button>
+          }}>{t("Remove timer")}</button>}
+          <button type="button" onClick={close}>{t("Cancel")}</button>
         </div>
       </form>
     </details>
@@ -230,13 +231,13 @@ export function TimerChip(props: { timer: Timer } | { walking: WalkingPlan }) {
     const phase = walkingPhase(plan, now);
     const atStop = plan.minutes === 0;
     const messages = {
-      waiting: atStop ? "Be ready to board in" : "Start walking in",
-      go: atStop ? "Be ready to board now" : "Start walking now",
-      tight: "You may miss this departure",
-      departed: "Departure time reached",
+      waiting: atStop ? t("Be ready to board in") : t("Start walking in"),
+      go: atStop ? t("Be ready to board now") : t("Start walking now"),
+      tight: t("You may miss this departure"),
+      departed: t("Departure time reached"),
     };
     return (
-      <div className="walk-timer" role="group" aria-label="Leave-by timer" data-phase={phase}>
+      <div className="walk-timer" role="group" aria-label={t("Leave-by timer")} data-phase={phase}>
         {atStop ? <Clock3 size={22} aria-hidden="true" /> : <Footprints size={22} aria-hidden="true" />}
         <div className="walk-timer-text">
           <div className="walk-head"><strong role="status">{messages[phase]}</strong>
@@ -250,16 +251,19 @@ export function TimerChip(props: { timer: Timer } | { walking: WalkingPlan }) {
   const { timer } = props;
   const left = timer.until - now;
   if (left < -120_000) return null;
+  // labels made here ("Departure in", "IC 8 leaves in") are translated; the assistant's own labels come in the passenger's language
+  const leaves = / leaves in$/.exec(timer.label) ? timer.label.replace(/ leaves in$/, "") : null;
+  const label = timer.label === "Departure in" ? t("Departure in") : leaves ? t("{line} leaves in", { line: sbbText(leaves) }) : sbbText(timer.label);
   return (
     <div className="chip chip--timer" data-soon={left < 120_000} role="timer" aria-live="off">
       <Clock3 size={16} aria-hidden="true" />
       {left > 0 ? (
         <>
-          <span>{sbbText(timer.label)}</span>
+          <span>{label}</span>
           <b>{countdown(left)}</b>
         </>
       ) : (
-        <span>{timer.label === "Departure in" ? "Departure time reached" : `${sbbText(timer.label.replace(/ leaves in$| in$/, ""))} is leaving now`}</span>
+        <span>{timer.label === "Departure in" ? t("Departure time reached") : t("{line} is leaving now", { line: sbbText(timer.label.replace(/ leaves in$| in$/, "")) })}</span>
       )}
     </div>
   );
@@ -269,7 +273,7 @@ export function CheckingPill() {
   return (
     <div className="chip chip--checking" aria-live="polite">
       <span className="scan" aria-hidden="true" />
-      Checking the live timetable…
+      {t("Checking the live timetable…")}
     </div>
   );
 }
@@ -295,7 +299,7 @@ export function Dock(p: DockProps) {
     if (p.typing) input.current?.focus();
   }, [p.typing]);
   const live = p.voiceStatus === "live";
-  const label = p.voiceStatus === "connecting" ? "Connecting…" : live ? (p.checking ? "Checking…" : p.voiceMode === "speaking" ? "Speaking · tap to end" : "Listening · tap to end") : "Tap to talk";
+  const label = p.voiceStatus === "connecting" ? t("Connecting…") : live ? (p.checking ? t("Checking…") : p.voiceMode === "speaking" ? t("Speaking · tap to end") : t("Listening · tap to end")) : t("Tap to talk");
 
   if (p.typing)
     return (
@@ -308,12 +312,12 @@ export function Dock(p: DockProps) {
           void p.onSubmit(t);
         }}
       >
-        <button type="button" className="btn btn-ghost btn-circle round" onClick={() => p.setTyping(false)} title="Talk instead" aria-label="Talk instead">
+        <button type="button" className="btn btn-ghost btn-circle round" onClick={() => p.setTyping(false)} title={t("Talk instead")} aria-label={t("Talk instead")}>
           <Mic size={20} />
         </button>
         <div className="input field">
-          <input ref={input} value={text} onChange={(e) => setText(e.target.value)} placeholder="Type your question" aria-label="Your question" enterKeyHint="send" autoComplete="off" />
-          <button type="submit" className="btn btn-circle btn-primary send" disabled={!text.trim() || p.busy} title="Send" aria-label="Send">
+          <input ref={input} value={text} onChange={(e) => setText(e.target.value)} placeholder={t("Type your question")} aria-label={t("Your question")} enterKeyHint="send" autoComplete="off" />
+          <button type="submit" className="btn btn-circle btn-primary send" disabled={!text.trim() || p.busy} title={t("Send")} aria-label={t("Send")}>
             <ArrowUp size={19} strokeWidth={2.4} />
           </button>
         </div>
@@ -322,7 +326,7 @@ export function Dock(p: DockProps) {
 
   return (
     <div className="dock">
-      <button type="button" className="btn btn-ghost btn-circle round" onClick={() => p.setTyping(true)} title="Type instead" aria-label="Type instead">
+      <button type="button" className="btn btn-ghost btn-circle round" onClick={() => p.setTyping(true)} title={t("Type instead")} aria-label={t("Type instead")}>
         <Keyboard size={20} />
       </button>
       <div className="talk-wrap">
@@ -331,7 +335,7 @@ export function Dock(p: DockProps) {
           {label}
         </span>
       </div>
-      <button type="button" className="btn btn-ghost btn-circle round" data-on={p.located} onClick={p.onLocate} disabled={p.locating} title="Use my location" aria-label="Use my location">
+      <button type="button" className="btn btn-ghost btn-circle round" data-on={p.located} onClick={p.onLocate} disabled={p.locating} title={t("Use my location")} aria-label={t("Use my location")}>
         <LocateFixed size={20} className={p.locating ? "pulsing" : undefined} />
       </button>
     </div>
@@ -356,7 +360,7 @@ function TalkButton({ status, mode, onTalk, levels }: { status: VoiceStatus; mod
   }, [status, mode, levels]);
   const live = status === "live";
   return (
-    <button type="button" className="btn btn-circle btn-primary talk" data-status={status} data-mode={mode} onClick={onTalk} title={live ? "End the conversation" : "Talk to the assistant"} aria-label={live ? "End the conversation" : "Talk to the assistant"}>
+    <button type="button" className="btn btn-circle btn-primary talk" data-status={status} data-mode={mode} onClick={onTalk} title={live ? t("End the conversation") : t("Talk to the assistant")} aria-label={live ? t("End the conversation") : t("Talk to the assistant")}>
       <span ref={ring} className="talk-ring" aria-hidden="true" />
       {live ? <Square size={20} fill="currentColor" strokeWidth={0} /> : <Mic size={28} strokeWidth={2.2} />}
     </button>

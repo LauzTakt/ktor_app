@@ -2,7 +2,7 @@
 // Shown once per browser (localStorage), before the location prompt; the "?" button in the header replays it.
 // Self-contained: `startTour({ onDone })` builds its own overlay and removes it when finished or skipped.
 
-import { reducedMotion } from "./common.js";
+import { reducedMotion, t } from "./common.js";
 import { TIKT_SVG } from "./tikt.js";
 
 const SEEN_KEY = "twin-tour-v1";
@@ -14,14 +14,14 @@ const markSeen = () => { try { localStorage.setItem(SEEN_KEY, "done"); } catch {
 
 // Mood per step: "hello" (waves the pantograph), "point" (looks at the target), "cheer" (brows up, big smile).
 const STEPS = [
-  { mood: "hello", title: "Hi, I'm Tikt", text: "I'll show you around this app. Skip the tour any time." },
-  { mood: "point", title: "I find your train for you", text: "When we start, your phone asks for your location. I use it only to spot a train or a station close to you. Say no and you can still pick your stations by hand." },
-  { target: "#assistant-fab", mood: "point", title: "Talk to me", text: "Not sure which train to take? Tap here and ask me, by voice or by chat." },
-  { target: "#alerts-btn", mood: "point", title: "Your alerts", text: "Follow a train or a line and I let you know about delays, incidents and when you reach your stop." },
-  { target: ".watched-trips-link", mood: "point", title: "Watched trips", text: "Trips you save show up here, so you can check them again later." },
-  { target: "#theme", mood: "point", title: "Light or dark", text: "Switch the colours here, whatever is easier on your eyes." },
-  { target: "#tour-btn", mood: "point", title: "Need me again?", text: "Tap the question mark and I come back for another round." },
-  { mood: "cheer", title: "All aboard!", text: "Let's find your train.", last: true },
+  { mood: "hello", title: t("Hi, I'm Tikt"), text: t("I'll show you around this app. Skip the tour any time.") },
+  { mood: "point", title: t("I find your train for you"), text: t("When we start, your phone asks for your location. I use it only to spot a train or a station close to you. Say no and you can still pick your stations by hand.") },
+  { target: "#assistant-fab", mood: "point", title: t("Talk to me"), text: t("Not sure which train to take? Tap here and ask me, by voice or by chat.") },
+  { target: "#alerts-btn", mood: "point", title: t("Your alerts"), text: t("Follow a train or a line and I let you know about delays, incidents and when you reach your stop.") },
+  { target: ".watched-trips-link", mood: "point", title: t("Watched trips"), text: t("Trips you save show up here, so you can check them again later.") },
+  { target: "#theme", mood: "point", title: t("Light or dark"), text: t("Switch the colours here, whatever is easier on your eyes.") },
+  { target: "#tour-btn", mood: "point", title: t("Need me again?"), text: t("Tap the question mark and I come back for another round.") },
+  { mood: "cheer", title: t("All aboard!"), text: t("Let's find your train."), last: true },
 ];
 
 const MASCOT_W = 84; // rendered width of the mascot in px (CSS .tikt)
@@ -42,12 +42,12 @@ export function startTour({ onDone = () => {} } = {}) {
     <div class="tour-guide" role="dialog" aria-modal="true" aria-labelledby="tour-title" aria-describedby="tour-text">
       <div class="tour-track"><div class="tikt">${TIKT_SVG}</div><div class="tour-rail"></div></div>
       <div class="tour-bubble">
-        <div class="tour-head"><span class="tour-count"></span><button class="tour-skip" type="button">Skip tour</button></div>
+        <div class="tour-head"><span class="tour-count"></span><button class="tour-skip" type="button">${t("Skip tour")}</button></div>
         <h2 id="tour-title"></h2>
         <p id="tour-text" aria-live="polite"></p>
         <div class="tour-foot">
-          <button class="btn tour-back" type="button">Back</button>
-          <button class="btn btn-primary tour-next" type="button">Next</button>
+          <button class="btn tour-back" type="button">${t("Back")}</button>
+          <button class="btn btn-primary tour-next" type="button">${t("Next")}</button>
         </div>
       </div>
     </div>`;
@@ -63,10 +63,10 @@ export function startTour({ onDone = () => {} } = {}) {
 
   function render(dir = 1) {
     const s = steps[i];
-    q(".tour-count").textContent = `${i + 1} of ${steps.length}`;
+    q(".tour-count").textContent = t("{i} of {n}", { i: i + 1, n: steps.length });
     q("#tour-title").textContent = s.title;
     q(".tour-back").hidden = i === 0;
-    q(".tour-next").textContent = s.last ? "Find my train" : i === 0 ? "Show me" : "Next";
+    q(".tour-next").textContent = s.last ? t("Find my train") : i === 0 ? t("Show me") : t("Next");
     q(".tour-skip").hidden = !!s.last;
     tikt.dataset.mood = s.mood;
     tikt.classList.remove("hop");

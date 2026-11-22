@@ -1,5 +1,6 @@
 package ch.lauzhack.twin.wallet
 
+import ch.lauzhack.twin.query.Severity
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -35,6 +36,8 @@ internal class TripWatchService(
                 expiresAt = legs.last().expectedArrival + 30 * 60_000L,
                 advice = if (verified.onBoard) alight(leg) else leg.boardAdvice(),
                 onBoard = verified.onBoard, updatedAt = at,
+                // already active when the pass is made: shown, not announced
+                announcedIncidents = journeys.disruptions(legs).map { it.id },
             ), alert = false,
         )
     }
@@ -130,7 +133,14 @@ internal class TripWatchService(
             )
         }
         val delivery = classifyTripWatchUpdate(watch.advice, updated.advice)
-        return if (updated == watch) watch else store.put(updated.copy(updatedAt = at), alert = delivery == TripWatchDelivery.NOTIFY)
+        // A new disruption on one of the remaining trains notifies the pass even when the advice stays the same
+        // (Google's own reminders only come near the station; this one comes wherever the passenger is).
+        val disruptions = journeys.disruptions(updated.legs.drop(updated.currentLeg))
+        val news = disruptions.filter { it.id !in watch.announcedIncidents }
+        val withNews = if (news.isEmpty()) updated else updated.copy(announcedIncidents = (watch.announcedIncidents + news.map { it.id }).takeLast(50))
+        if (withNews == watch) return watch
+        val text = news.firstOrNull()?.let { "${Severity.parse(it.severity).word}: ${it.title}. ${withNews.instruction()}." }
+        return store.put(withNews.copy(updatedAt = at), alert = delivery == TripWatchDelivery.NOTIFY || news.isNotEmpty(), alertText = text)
     }
 
     private suspend fun deliverApple(watch: TripWatch, synced: Long) {

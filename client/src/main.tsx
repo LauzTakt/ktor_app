@@ -1,3 +1,4 @@
+import "./i18n";
 import { createRoot } from "react-dom/client";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./styles.css";

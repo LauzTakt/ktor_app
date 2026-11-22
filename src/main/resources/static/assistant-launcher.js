@@ -4,6 +4,7 @@
   const fab = document.getElementById("assistant-fab");
   const panel = document.getElementById("assistant-panel");
   if (!fab || !panel) return;
+  const tr = window.TwinI18n?.t ?? ((k) => k);
   let opener;
   const setOpen = (open) => {
     if (open) opener = document.activeElement;
@@ -13,19 +14,19 @@
       wait.className = "assistant-wait";
       panel.appendChild(wait);
       import("/tikt.js").then(({ tiktLoading }) => {
-        wait.innerHTML = tiktLoading({ caption: "Tikt is on his way…", sub: "Your travel assistant, by voice or chat.", mood: "hello" });
+        wait.innerHTML = tiktLoading({ caption: tr("Tikt is on his way…"), sub: tr("Your travel assistant, by voice or chat."), mood: "hello" });
       }).catch(() => {});
       const frame = document.createElement("iframe");
       frame.src = "/assistant/";
-      frame.title = "Travel assistant";
+      frame.title = tr("Travel assistant");
       frame.allow = "microphone; geolocation; autoplay";
       frame.addEventListener("load", () => { loaded = true; post(); flush(); setTimeout(() => wait.remove(), 400); }, { once: true });
       panel.appendChild(frame);
     }
     panel.hidden = !open;
     fab.setAttribute("aria-expanded", String(open));
-    fab.setAttribute("aria-label", open ? "Close the travel assistant" : "Open the travel assistant");
-    fab.title = open ? "Close" : "Travel assistant";
+    fab.setAttribute("aria-label", open ? tr("Close the travel assistant") : tr("Open the travel assistant"));
+    fab.title = open ? tr("Close") : tr("Travel assistant");
     if (open) panel.focus({ preventScroll: true });
     else (opener?.isConnected && opener !== document.body ? opener : fab).focus({ preventScroll: true });
   };

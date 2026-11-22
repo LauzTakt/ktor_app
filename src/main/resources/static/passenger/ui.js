@@ -1,6 +1,6 @@
 // Shared UI of the passenger view: constants, formatting, icons, toast, theme button, screen transitions.
 
-import { $, esc, LATE_SEC, onTheme, publicApi as api, reducedMotion, setTheme, time as hhmm, toggleTheme } from "../common.js";
+import { $, esc, LATE_SEC, locale, onTheme, publicApi as api, reducedMotion, setTheme, t, time as hhmm, toggleTheme } from "../common.js";
 import { tiktLoading } from "../tikt.js";
 import { live } from "./location.js";
 import { alerts } from "./alerts.js";
@@ -64,36 +64,36 @@ export const ILLUSTRATION = {
   </svg>`,
 };
 
-export const lineLabel = (t, lg = false) => `<span class="line${lg ? " lg" : ""}">${esc(t?.line || t?.category || "Train")}</span>`;
+export const lineLabel = (x, lg = false) => `<span class="line${lg ? " lg" : ""}">${esc(x?.line || x?.category || t("Train"))}</span>`;
 export const distText = (m) => (m == null ? "" : m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1)} km`);
 
 /** `21:53 +2'` (delay in red, nothing when on time); cancelled: planned time struck through + "Cancelled". */
 export function timeHtml(planned, expected, cancelled = false) {
-  if (cancelled) return `<s class="planned time">${hhmm(planned)}</s> <span class="cancel">Cancelled</span>`;
+  if (cancelled) return `<s class="planned time">${hhmm(planned)}</s> <span class="cancel">${t("Cancelled")}</span>`;
   const delayMin = planned && expected ? Math.round((expected - planned) / 60_000) : 0;
   return `<span class="time">${hhmm(planned ?? expected)}</span>${delayMin >= 1 ? ` <span class="delay">+${delayMin}'</span>` : ""}`;
 }
 
 /** Observable train state (docs/STYLE.md §4): colour class + word. */
-export function trainState(t) {
-  const p = t?.position;
-  if (t?.status === "cancelled") return { cls: "s-cancelled", word: "Cancelled", color: "--cancelled" };
-  if (p?.motion === "stopped" && !p.atStopId) return { cls: "s-stopped", word: "Stopped on the line", color: "--red" };
-  if ((t?.delaySec ?? 0) >= LATE_SEC) return { cls: "s-late", word: `Late +${Math.round(t.delaySec / 60)}'`, color: "--orange" };
-  if (p?.motion === "stopped") return { cls: "s-station", word: "At a station", color: "--at-station" };
-  return { cls: "s-moving", word: "Running", color: "--green" };
+export function trainState(tr) {
+  const p = tr?.position;
+  if (tr?.status === "cancelled") return { cls: "s-cancelled", word: t("Cancelled"), color: "--cancelled" };
+  if (p?.motion === "stopped" && !p.atStopId) return { cls: "s-stopped", word: t("Stopped on the line"), color: "--red" };
+  if ((tr?.delaySec ?? 0) >= LATE_SEC) return { cls: "s-late", word: t("Late +{n}'", { n: Math.round(tr.delaySec / 60) }), color: "--orange" };
+  if (p?.motion === "stopped") return { cls: "s-station", word: t("At a station"), color: "--at-station" };
+  return { cls: "s-moving", word: t("Running"), color: "--green" };
 }
 export const stateHtml = (t) => { const s = trainState(t); return `<span class="state ${s.cls}"><span class="dot"></span>${esc(s.word)}</span>`; };
 
 export function untilText(ms) {
   if (!ms) return "";
   const d = ms - Date.now();
-  if (d < 45_000) return "now";
+  if (d < 45_000) return t("now");
   const min = Math.round(d / 60_000);
-  return min < 60 ? `in ${min} min` : `in ${Math.floor(min / 60)} h ${String(min % 60).padStart(2, "0")}`;
+  return min < 60 ? t("in {n} min", { n: min }) : t("in {h} h {mm}", { h: Math.floor(min / 60), mm: String(min % 60).padStart(2, "0") });
 }
 
-export const SEVERITY = { critical: "Critical", major: "Major", minor: "Minor", info: "Information" };
+export const SEVERITY = { critical: t("Critical"), major: t("Major"), minor: t("Minor"), info: t("Information") };
 /** The reason of an incident, when the feed gives one: its description, without a line that only repeats the title. */
 export function incidentReason(i) {
   const title = (i.title || "").trim().toLowerCase();
@@ -104,10 +104,10 @@ export function incidentReason(i) {
 export function endText(i) {
   if (!i.expectedEnd) return null;
   const d = new Date(i.expectedEnd);
-  const t = d.toDateString() === new Date().toDateString() ? hhmm(i.expectedEnd)
-    : `${d.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Europe/Zurich" })}, ${hhmm(i.expectedEnd)}`;
-  if (i.expectedEnd < Date.now()) return `was due to end ${t}`;
-  return i.endKind === "at_least" ? `at least until ${t}` : i.endKind === "approx" ? `until about ${t}` : `until ${t}`;
+  const time = d.toDateString() === new Date().toDateString() ? hhmm(i.expectedEnd)
+    : `${d.toLocaleDateString(locale, { day: "numeric", month: "short", timeZone: "Europe/Zurich" })}, ${hhmm(i.expectedEnd)}`;
+  if (i.expectedEnd < Date.now()) return t("was due to end {time}", { time });
+  return i.endKind === "at_least" ? t("at least until {time}", { time }) : i.endKind === "approx" ? t("until about {time}", { time }) : t("until {time}", { time });
 }
 
 /** An active incident: severity, title and place at a glance; tap to read the reason (docs/STYLE.md: no emoji). */
@@ -118,9 +118,9 @@ export const alertHtml = (i) => {
   <details class="alert sev-${esc(i.severity || "info")}" data-inc="${esc(i.id)}">
     <summary><span class="dot"></span>
       <div class="main"><div class="at">${esc(i.title)}</div>
-        <div class="ad">${esc(SEVERITY[i.severity] || "Information")}${i.where ? ` · ${esc(i.where)}` : ""}${end ? ` <span class="end">${ic("clock")}${esc(end)}</span>` : ""}</div></div>${ic("chevron", "more")}</summary>
-    <div class="why">${why.length ? why.map((l) => `<p>${esc(l)}</p>`).join("") : "<p>No reason given yet.</p>"}
-      ${i.firstSeenAt || i.createdAt ? `<p class="since">Since ${hhmm(i.firstSeenAt || i.createdAt)}</p>` : ""}</div>
+        <div class="ad">${esc(SEVERITY[i.severity] || SEVERITY.info)}${i.where ? ` · ${esc(i.where)}` : ""}${end ? ` <span class="end">${ic("clock")}${esc(end)}</span>` : ""}</div></div>${ic("chevron", "more")}</summary>
+    <div class="why">${why.length ? why.map((l) => `<p>${esc(l)}</p>`).join("") : `<p>${esc(t("No reason given yet."))}</p>`}
+      ${i.firstSeenAt || i.createdAt ? `<p class="since">${esc(t("Since {time}", { time: hhmm(i.firstSeenAt || i.createdAt) }))}</p>` : ""}</div>
   </details>`;
 };
 
@@ -135,12 +135,12 @@ export function drawIncidents(el, list) {
 export const askAssistant = (question) => (typeof window.askAssistant === "function" ? (window.askAssistant(question), true) : false);
 
 export function toast(msg, ms = 3500) {
-  const t = document.createElement("div");
-  t.className = "toast";
-  t.setAttribute("role", "status");
-  t.textContent = msg;
-  document.body.append(t);
-  setTimeout(() => t.remove(), ms);
+  const el = document.createElement("div");
+  el.className = "toast";
+  el.setAttribute("role", "status");
+  el.textContent = msg;
+  document.body.append(el);
+  setTimeout(() => el.remove(), ms);
 }
 
 // ------------------------------------------------------------------ theme (same key as the staff pages)
@@ -149,7 +149,7 @@ export const themeBtn = $("#theme");
 onTheme((theme) => {
   const dark = theme === "dark";
   themeBtn.innerHTML = ic(dark ? "sun" : "moon");
-  themeBtn.title = dark ? "Light mode" : "Dark mode";
+  themeBtn.title = dark ? t("Light mode") : t("Dark mode");
   themeBtn.setAttribute("aria-label", themeBtn.title);
 });
 setTheme(document.documentElement.dataset.theme || "light", false); // the inline <head> script already picked it
@@ -177,7 +177,7 @@ export function show(build, { back = false, restart = true } = {}) {
   s.className = `screen enter${back ? " back" : ""}`;
   stage.append(s);
   restartBtn.hidden = !restart;
-  restartBtn.textContent = "Change trip";
+  restartBtn.textContent = t("Change trip");
   build(s);
   window.scrollTo({ top: 0, behavior: reducedMotion() ? "auto" : "smooth" });
   return s;
@@ -208,7 +208,7 @@ export function setView(view) {
 }
 export const labelView = (label) => { if (window.twinView && label && window.twinView.label !== label) setView({ ...window.twinView, label }); };
 
-export const backBtn = (label = "Back") => `<button class="back" type="button" data-back>${ic("back")}${esc(label)}</button>`;
+export const backBtn = (label = t("Back")) => `<button class="back" type="button" data-back>${ic("back")}${esc(label)}</button>`;
 // Loading lists: Tikt rolling on his track above the skeleton rows (docs/STYLE.md "9. Mascot").
-export const placeholders = (n = 3, caption = "Checking the live data…") =>
+export const placeholders = (n = 3, caption = t("Checking the live data…")) =>
   (caption ? tiktLoading({ caption, mini: true }) : "") + Array.from({ length: n }, () => '<div class="placeholder"></div>').join("");

@@ -1,6 +1,6 @@
 // Location (browser geolocation, refined fix), nearby trains and stations, and the live WebSocket.
 
-import { $, publicApi as api } from "../common.js";
+import { $, publicApi as api, t } from "../common.js";
 import { NEAR_M, clamp } from "./ui.js";
 
 // ------------------------------------------------------------------ location
@@ -77,10 +77,10 @@ export function bearing(lat1, lon1, lat2, lon2) {
   return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
 }
 export const geoText = () => ({
-  denied: "Location access is off. Choose a starting station.",
-  insecure: "Location needs a secure connection (HTTPS).",
-  off: "Location is not available.",
-}[geo.status] || "We could not find you.");
+  denied: t("Location access is off. Choose a starting station."),
+  insecure: t("Location needs a secure connection (HTTPS)."),
+  off: t("Location is not available."),
+}[geo.status] || t("We could not find you."));
 
 export const nearbyTrainsFor = (f) =>
   api(`/trains/nearby?lat=${f.lat}&lon=${f.lon}&radiusM=${Math.max(NEAR_M, Math.min(f.acc, 500)) | 0}&limit=5&ts=${f.ts}` +
@@ -109,5 +109,5 @@ export const live = {
 export function liveBadge(on) {
   const el = $("#live");
   el.classList.toggle("off", !on);
-  el.textContent = on ? "Live" : "Reconnecting";
+  el.textContent = on ? t("Live") : t("Reconnecting");
 }

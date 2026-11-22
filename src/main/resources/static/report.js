@@ -1,9 +1,10 @@
 // Staff incident report: a form (POST /api/v1/reports) and the list of reports (resolve them when fixed).
-import { addRail, api, initStaffSession, ago, applyTheme, baseStyle, initTheme, onTheme, CATEGORIES, dateTime, esc, severityBadge } from "./common.js";
+import { addRail, api, initStaffSession, ago, applyTheme, baseStyle, initTheme, onTheme, CATEGORIES, dateTime, esc, severityBadge, t } from "./common.js";
 
 const $ = (id) => document.getElementById(id);
 const form = $("form");
 const params = new URLSearchParams(location.search);
+document.title = t("Takt · Report an incident");
 
 $("category").innerHTML = Object.entries(CATEGORIES)
   .map(([k, v]) => `<option value="${k}">${esc(v)}</option>`)
@@ -142,22 +143,22 @@ form.addEventListener("submit", async (e) => {
     scope: s,
   };
   if (s === "station") {
-    if (!picked.a) return msg("Pick a station from the list.");
+    if (!picked.a) return msg(t("Pick a station from the list."));
     body.stopId = picked.a.stopId;
   } else if (s === "section") {
-    if (!picked.a || !picked.b) return msg("Pick both stations from the lists.");
+    if (!picked.a || !picked.b) return msg(t("Pick both stations from the lists."));
     body.stopId = picked.a.stopId;
     body.toStopId = picked.b.stopId;
   } else if (s === "train") {
-    if (!picked.train) return msg("Pick a train from the list.");
+    if (!picked.train) return msg(t("Pick a train from the list."));
     body.trainId = picked.train.trainId;
   } else {
-    if (!picked.point) return msg("Click on the map to place the incident.");
+    if (!picked.point) return msg(t("Click on the map to place the incident."));
     Object.assign(body, picked.point);
   }
   try {
     const r = await api("/reports", { method: "POST", json: body });
-    msg(`Report ${r.id} sent. It is now on the staff map.`, true);
+    msg(t("Report {id} sent. It is now on the staff map.", { id: r.id }), true);
     form.elements.title.value = "";
     form.elements.description.value = "";
     setFilter("open");
@@ -184,14 +185,14 @@ async function loadReports() {
         <div class="row">${severityBadge(r.severity)} <b>${esc(r.title)}</b> <span class="muted right">${esc(r.id)}</span></div>
         <div class="muted">${esc(CATEGORIES[r.category] ?? r.category)} · ${esc(r.where)}</div>
         ${r.description ? `<p>${esc(r.description)}</p>` : ""}
-        <div class="muted">Reported ${dateTime(r.createdAt)} (${ago(r.createdAt)})${r.reporter ? ` by ${esc(r.reporter)}` : ""}</div>
+        <div class="muted">${r.reporter ? t("Reported {time} ({ago}) by {name}", { time: dateTime(r.createdAt), ago: ago(r.createdAt), name: esc(r.reporter) }) : t("Reported {time} ({ago})", { time: dateTime(r.createdAt), ago: ago(r.createdAt) })}</div>
         ${r.status === "resolved"
-          ? `<div class="resolved-note">✓ Resolved ${dateTime(r.resolvedAt)}${r.resolution ? `: ${esc(r.resolution)}` : ""}</div>`
-          : `<div class="actions"><input class="input" aria-label="Resolution note (optional)" placeholder="Resolution note (optional)" data-note="${esc(r.id)}" /><button class="btn btn-sm" data-resolve="${esc(r.id)}">Mark resolved</button></div>`}
+          ? `<div class="resolved-note">✓ ${t("Resolved {time}", { time: dateTime(r.resolvedAt) })}${r.resolution ? `: ${esc(r.resolution)}` : ""}</div>`
+          : `<div class="actions"><input class="input" aria-label="${t("Resolution note (optional)")}" placeholder="${t("Resolution note (optional)")}" data-note="${esc(r.id)}" /><button class="btn btn-sm" data-resolve="${esc(r.id)}">${t("Mark resolved")}</button></div>`}
       </li>`,
         )
         .join("")
-    : `<li class="empty">No ${filterVal() === "all" ? "" : filterVal() + " "}report.</li>`;
+    : `<li class="empty">${filterVal() === "open" ? t("No open report.") : filterVal() === "resolved" ? t("No resolved report.") : t("No report.")}</li>`;
   if (location.hash) document.getElementById(location.hash.slice(1))?.classList.add("flash");
 }
 $("reports").addEventListener("click", async (e) => {

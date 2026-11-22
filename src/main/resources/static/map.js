@@ -1,10 +1,11 @@
 // Staff overview: the live twin on a map (trains, stations, twin incidents, staff reports).
 // Data comes from this app (which reads the sbb-twin MQTT broker): WebSocket /ws/fleet + REST /api/v1.
 import { TrainCanvas } from "./trains.js";
-import { addRail, api, initStaffSession, applyTheme, baseStyle, bboxOf, initTheme, onTheme, CATEGORIES, clock, delayText, esc, ago, SEVERITY_COLOURS, severityBadge, time } from "./common.js";
+import { addRail, api, initStaffSession, applyTheme, baseStyle, bboxOf, initTheme, onTheme, CATEGORIES, clock, delayText, esc, ago, SEVERITY_COLOURS, severityBadge, time, t } from "./common.js";
 
 const $ = (id) => document.getElementById(id);
 const empty = { type: "FeatureCollection", features: [] };
+document.title = t("Takt · Staff overview");
 
 const map = new maplibregl.Map({
   container: "map",
@@ -48,7 +49,7 @@ initStaffSession();
 let twinTs = 0;
 function connect() {
   const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/fleet`);
-  ws.onopen = () => setConn("online", "live");
+  ws.onopen = () => setConn("online", t("live"));
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
     if (m.type !== "tick") return;
@@ -60,7 +61,7 @@ function connect() {
     if (trains.selected && !trains.info(trains.selected)) selectTrain(undefined); // left service
   };
   ws.onclose = () => {
-    setConn("offline", "reconnecting…");
+    setConn("offline", t("reconnecting…"));
     setTimeout(connect, 1500);
   };
 }
@@ -75,9 +76,9 @@ connect();
 async function refreshStatus() {
   try {
     const s = await api("/status");
-    if (!s.mqttConnected) setConn("warn", "broker offline");
-    else if (s.twin && !s.twin.online) setConn("warn", "twin offline");
-    else if ($("conn").classList.contains("warn")) setConn("online", "live");
+    if (!s.mqttConnected) setConn("warn", t("broker offline"));
+    else if (s.twin && !s.twin.online) setConn("warn", t("twin offline"));
+    else if ($("conn").classList.contains("warn")) setConn("online", t("live"));
   } catch {
     /* socket state already tells */
   }
@@ -109,10 +110,10 @@ async function refreshIncidents() {
         .map(
           (i) => `<li data-inc="${esc(i.id)}">
             <div class="row">${severityBadge(i.severity)} <b>${esc(i.title)}</b></div>
-            <div class="muted">${esc(i.where ?? i.scope?.kind ?? "")} · since ${time(i.createdAt)}</div></li>`,
+            <div class="muted">${esc(i.where ?? i.scope?.kind ?? "")} · ${t("since {time}", { time: time(i.createdAt) })}</div></li>`,
         )
         .join("")
-    : `<li class="empty">No active incident.</li>`;
+    : `<li class="empty">${t("No active incident.")}</li>`;
 }
 
 async function refreshReports() {
@@ -128,10 +129,10 @@ async function refreshReports() {
           (r) => `<li data-rep="${esc(r.id)}">
             <div class="row">${severityBadge(r.severity)} <b>${esc(r.title)}</b></div>
             <div class="muted">${esc(CATEGORIES[r.category] ?? r.category)} · ${esc(r.where)}</div>
-            <div class="muted">${ago(r.createdAt)}${r.reporter ? ` · by ${esc(r.reporter)}` : ""}</div></li>`,
+            <div class="muted">${ago(r.createdAt)}${r.reporter ? ` · ${t("by {name}", { name: esc(r.reporter) })}` : ""}</div></li>`,
         )
         .join("")
-    : `<li class="empty">No open report.</li>`;
+    : `<li class="empty">${t("No open report.")}</li>`;
 }
 refreshIncidents();
 refreshReports();
@@ -184,7 +185,7 @@ map.on("contextmenu", (e) => {
   closePopup();
   popup = new maplibregl.Popup({ closeButton: true })
     .setLngLat(e.lngLat)
-    .setHTML(`<a class="btn btn-primary" href="/admin/report.html?scope=point&lat=${e.lngLat.lat.toFixed(5)}&lon=${e.lngLat.lng.toFixed(5)}">Report an incident here</a>`)
+    .setHTML(`<a class="btn btn-primary" href="/admin/report.html?scope=point&lat=${e.lngLat.lat.toFixed(5)}&lon=${e.lngLat.lng.toFixed(5)}">${t("Report an incident here")}</a>`)
     .addTo(map);
 });
 
@@ -197,8 +198,8 @@ function showReportPopup(r) {
       `<div class="pop"><div class="row">${severityBadge(r.severity)} <b>${esc(r.title)}</b></div>
        <div class="muted">${esc(CATEGORIES[r.category] ?? r.category)} · ${esc(r.where)}</div>
        ${r.description ? `<p>${esc(r.description)}</p>` : ""}
-       <div class="muted">Reported ${time(r.createdAt)}${r.reporter ? ` by ${esc(r.reporter)}` : ""}</div>
-       <a href="/admin/report.html#${esc(r.id)}">Open in reports</a></div>`,
+       <div class="muted">${r.reporter ? t("Reported {time} by {name}", { time: time(r.createdAt), name: esc(r.reporter) }) : t("Reported {time}", { time: time(r.createdAt) })}</div>
+       <a href="/admin/report.html#${esc(r.id)}">${t("Open in reports")}</a></div>`,
     )
     .addTo(map);
 }
@@ -211,7 +212,7 @@ function showIncidentPopup(i, at) {
       `<div class="pop"><div class="row">${severityBadge(i.severity)} <b>${esc(i.title)}</b></div>
        <div class="muted">${esc(i.where ?? "")}${i.reasonCode ? ` · ${esc(i.reasonCode)}` : ""}</div>
        ${i.description ? `<p>${esc(i.description)}</p>` : ""}
-       <div class="muted">Since ${time(i.createdAt)} · twin incident</div></div>`,
+       <div class="muted">${t("Since {time} · twin incident", { time: time(i.createdAt) })}</div></div>`,
     )
     .addTo(map);
 }
@@ -221,10 +222,10 @@ async function showStationPopup(stopId, name, coords) {
     .setLngLat(coords)
     .setHTML(
       `<div class="pop"><b>${esc(name)}</b>
-       <table class="board"><tbody><tr><td class="muted">Loading departures…</td></tr></tbody></table>
+       <table class="board"><tbody><tr><td class="muted">${t("Loading departures…")}</td></tr></tbody></table>
        <div class="row">
-         <a class="btn btn-primary btn-sm" href="/admin/report.html?scope=station&stopId=${encodeURIComponent(stopId)}">Report an incident here</a>
-         <button class="btn btn-sm" type="button" aria-haspopup="dialog" data-station-qr="${esc(stopId)}" data-station-name="${esc(name)}">Station QR</button>
+         <a class="btn btn-primary btn-sm" href="/admin/report.html?scope=station&stopId=${encodeURIComponent(stopId)}">${t("Report an incident here")}</a>
+         <button class="btn btn-sm" type="button" aria-haspopup="dialog" data-station-qr="${esc(stopId)}" data-station-name="${esc(name)}">${t("Station QR")}</button>
        </div></div>`,
     )
     .addTo(map);
@@ -235,7 +236,7 @@ async function showStationPopup(stopId, name, coords) {
     .map((e) => `<tr><td>${time(e.plannedTime)}</td><td class="late">${esc(delayText(e.delaySec))}</td><td><b>${esc(e.line ?? "")}</b></td><td>${esc(e.headsign ?? e.destination?.name ?? "")}</td></tr>`)
     .join("");
   p.getElement().querySelector(".board tbody").innerHTML =
-    rows || `<tr><td class="muted">No departures in the next hour.</td></tr>`;
+    rows || `<tr><td class="muted">${t("No departures in the next hour.")}</td></tr>`;
   p.setLngLat(coords);
 }
 
@@ -250,26 +251,26 @@ async function selectTrain(id) {
     return;
   }
   panel.hidden = false;
-  panel.innerHTML = `<h2>Train</h2><div class="muted">loading…</div>`;
+  panel.innerHTML = `<h2>${t("Train")}</h2><div class="muted">${t("loading…")}</div>`;
   const render = async () => {
     const d = await api(`/trains/${encodeURIComponent(id)}`).catch(() => null);
     if (trains.selected !== id) return;
     if (!d) {
-      panel.innerHTML = `<h2>Train</h2><div class="muted">No details for this train yet.</div>`;
+      panel.innerHTML = `<h2>${t("Train")}</h2><div class="muted">${t("No details for this train yet.")}</div>`;
       return;
     }
-    const t = d.train;
+    const tr = d.train;
     const live = trains.info(id);
     const ahead = d.stops.filter((s) => s.state !== "passed").slice(0, 8);
     panel.innerHTML = `
-      <h2>${esc(t.line ?? "Train")} ${esc(t.number ?? "")} <button class="x" id="closeTrain" title="Close">×</button></h2>
-      <div class="big">→ ${esc(t.headsign ?? t.destination?.name ?? "")}</div>
-      <div class="muted">${esc(t.operator ?? "")} · from ${esc(t.origin?.name ?? "?")}</div>
+      <h2>${esc(tr.line ?? t("Train"))} ${esc(tr.number ?? "")} <button class="x" id="closeTrain" title="${t("Close")}">×</button></h2>
+      <div class="big">→ ${esc(tr.headsign ?? tr.destination?.name ?? "")}</div>
+      <div class="muted">${esc(tr.operator ?? "")} · ${t("from {name}", { name: esc(tr.origin?.name ?? "?") })}</div>
       <div class="kv">
-        <span>Delay</span><b class="${(t.delaySec ?? 0) >= 180 ? "late" : ""}">${t.delaySec == null ? "–" : delayText(t.delaySec) || "on time"}</b>
-        <span>Speed</span><b>${live ? Math.round(live.speed) + " km/h" : "–"}</b>
-        <span>Now</span><b>${esc(t.currentStop ? "at " + t.currentStop.name : t.nextStop ? "towards " + t.nextStop.name : "–")}</b>
-        <span>Status</span><b>${esc(t.status)}</b>
+        <span>${t("Delay")}</span><b class="${(tr.delaySec ?? 0) >= 180 ? "late" : ""}">${tr.delaySec == null ? "–" : delayText(tr.delaySec) || t("on time")}</b>
+        <span>${t("Speed")}</span><b>${live ? Math.round(live.speed) + " km/h" : "–"}</b>
+        <span>${t("Now")}</span><b>${esc(tr.currentStop ? t("at {name}", { name: tr.currentStop.name }) : tr.nextStop ? t("towards {name}", { name: tr.nextStop.name }) : "–")}</b>
+        <span>${t("Status")}</span><b>${esc(tr.status)}</b>
       </div>
       ${d.incidents.length ? `<div class="warnbox">${d.incidents.map((i) => `${severityBadge(i.severity)} ${esc(i.title)}`).join("<br>")}</div>` : ""}
       <table class="stops">${ahead
@@ -278,14 +279,14 @@ async function selectTrain(id) {
         )
         .join("")}</table>
       <div class="actions">
-        <button class="btn" id="follow">${trains.following ? "Stop following" : "Follow"}</button>
-        <button class="btn" type="button" aria-haspopup="dialog" data-train-qr="${esc(id)}" data-train-name="${esc([t.line, t.number].filter(Boolean).join(" "))}" data-train-to="${esc(t.headsign ?? t.destination?.name ?? "")}">Train QR</button>
-        <a class="btn btn-primary" href="/admin/report.html?scope=train&trainId=${encodeURIComponent(id)}">Report an incident</a>
+        <button class="btn" id="follow">${trains.following ? t("Stop following") : t("Follow")}</button>
+        <button class="btn" type="button" aria-haspopup="dialog" data-train-qr="${esc(id)}" data-train-name="${esc([tr.line, tr.number].filter(Boolean).join(" "))}" data-train-to="${esc(tr.headsign ?? tr.destination?.name ?? "")}">${t("Train QR")}</button>
+        <a class="btn btn-primary" href="/admin/report.html?scope=train&trainId=${encodeURIComponent(id)}">${t("Report an incident")}</a>
       </div>`;
     $("closeTrain").onclick = () => selectTrain(undefined);
     $("follow").onclick = (ev) => {
       trains.following = !trains.following;
-      ev.target.textContent = trains.following ? "Stop following" : "Follow";
+      ev.target.textContent = trains.following ? t("Stop following") : t("Follow");
     };
   };
   await render();

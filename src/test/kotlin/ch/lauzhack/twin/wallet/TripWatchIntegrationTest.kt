@@ -4,6 +4,8 @@ import ch.lauzhack.twin.T0
 import ch.lauzhack.twin.configureHttp
 import ch.lauzhack.twin.db.Database
 import ch.lauzhack.twin.info
+import ch.lauzhack.twin.db.IncidentRow
+import ch.lauzhack.twin.model.IncidentScope
 import ch.lauzhack.twin.query.TwinQueries
 import ch.lauzhack.twin.state.LiveState
 import ch.lauzhack.twin.twinapi.CachedJourney
@@ -92,6 +94,35 @@ class TripWatchIntegrationTest {
         assertEquals(HttpStatusCode.OK, ended.status)
         assertEquals("ended", ended.bodyAsText().json()["kind"]!!.jsonPrimitive.content)
         assertEquals("[]", client.get(base) { header(HttpHeaders.Cookie, cookie) }.bodyAsText())
+    }
+
+    @Test
+    fun newDisruptionOnTheTrainNotifiesThePassOnceButAPlainDelayDoesNot() = runBlocking {
+        val state = LiveState()
+        val info = info("disrupted", 0, listOf("A", "B", "C"))
+        state.upsertInfo(info)
+        val incidents = mutableListOf<IncidentRow>()
+        fun incident(id: String, type: String, severity: String, title: String) = IncidentRow(
+            id, title, "", severity, type, null, IncidentScope("train", trainId = info.trainId), null, null, "active", 1, 1, 1, null,
+        )
+        TripWatchStore(":memory:").use { store ->
+            val journeys = TripWatchJourneys(TwinQueries(state) { incidents.toList() }, JourneyCache(), null)
+            val service = TripWatchService(store, journeys, "", null, null, { true }, { T0 - 60_000L })
+            val watch = assertNotNull(service.start("a", TripWatchSelection(trainId = info.trainId, fromStopId = "A", toStopId = "C")))
+
+            incidents += incident("late-1", "auto.late", "minor", "S1 to C: 6 min late")
+            service.refresh()
+            assertEquals(watch.alertRevision, assertNotNull(store.find(watch.id)).alertRevision)
+
+            incidents += incident("d-1", "disruption", "critical", "Interrupted service: B - C")
+            service.refresh()
+            val alerted = assertNotNull(store.find(watch.id))
+            assertEquals(alerted.revision, alerted.alertRevision)
+            assertTrue(alerted.alertText!!.startsWith("Severe disruption: Interrupted service: B - C."), alerted.alertText)
+
+            service.refresh()                                           // same incident: no second notification
+            assertEquals(alerted.alertRevision, assertNotNull(store.find(watch.id)).alertRevision)
+        }
     }
 
     @Test

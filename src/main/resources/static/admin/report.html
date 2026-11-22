@@ -6,6 +6,8 @@
     <title>Takt · Report an incident</title>
     <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.1/dist/maplibre-gl.css" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <script src="/i18n.js"></script>
+    <script src="/i18n-strings.js"></script>
     <script src="/theme-init.js"></script>
     <link rel="stylesheet" href="/theme.css" />
     <link rel="stylesheet" href="/style.css" />
@@ -13,82 +15,82 @@
   </head>
   <body class="report-page">
     <header class="topbar">
-      <div class="brand"><img src="/favicon.svg" width="28" height="28" alt="" /> Takt <span class="sub">Report an incident</span></div>
-      <nav><button class="btn" id="themeToggle" type="button">☾ Dark</button> <a class="btn" href="/admin/">← Back to the map</a></nav>
+      <div class="brand"><img src="/favicon.svg" width="28" height="28" alt="" /> Takt <span class="sub" data-i18n>Report an incident</span></div>
+      <nav><span data-lang-picker class="select select-ghost select-sm lang-select"></span> <button class="btn" id="themeToggle" type="button">☾ Dark</button> <a class="btn" href="/admin/" data-i18n>← Back to the map</a></nav>
     </header>
     <main class="report-main">
       <form id="form" autocomplete="off">
-        <h1>New report</h1>
+        <h1 data-i18n>New report</h1>
 
-        <label>What happened? <span class="req">*</span>
-          <input class="input" name="title" required maxlength="200" placeholder="e.g. Door fault on coach 5, train cannot leave" />
+        <label><span data-i18n>What happened?</span> <span class="req">*</span>
+          <input class="input" name="title" required maxlength="200" placeholder="e.g. Door fault on coach 5, train cannot leave" data-i18n-placeholder />
         </label>
 
         <div class="grid2">
-          <label>Category
+          <label><span data-i18n>Category</span>
             <select class="select" name="category" id="category"></select>
           </label>
-          <label>Severity
+          <label><span data-i18n>Severity</span>
             <select class="select" name="severity">
-              <option value="info">Info: no impact on traffic</option>
-              <option value="minor" selected>Minor: small delays</option>
-              <option value="major">Major: serious delays</option>
-              <option value="critical">Critical: line blocked or danger</option>
+              <option value="info" data-i18n>Info: no impact on traffic</option>
+              <option value="minor" selected data-i18n>Minor: small delays</option>
+              <option value="major" data-i18n>Major: serious delays</option>
+              <option value="critical" data-i18n>Critical: line blocked or danger</option>
             </select>
           </label>
         </div>
 
         <fieldset>
-          <legend>Where?</legend>
+          <legend data-i18n>Where?</legend>
           <div class="seg" id="scopeSeg">
-            <label><input class="radio radio-sm" type="radio" name="scope" value="station" checked /> Station</label>
-            <label><input class="radio radio-sm" type="radio" name="scope" value="section" /> Between two stations</label>
-            <label><input class="radio radio-sm" type="radio" name="scope" value="train" /> On a train</label>
-            <label><input class="radio radio-sm" type="radio" name="scope" value="point" /> Point on the map</label>
+            <label><input class="radio radio-sm" type="radio" name="scope" value="station" checked /> <span data-i18n>Station</span></label>
+            <label><input class="radio radio-sm" type="radio" name="scope" value="section" /> <span data-i18n>Between two stations</span></label>
+            <label><input class="radio radio-sm" type="radio" name="scope" value="train" /> <span data-i18n>On a train</span></label>
+            <label><input class="radio radio-sm" type="radio" name="scope" value="point" /> <span data-i18n>Point on the map</span></label>
           </div>
 
           <div data-scope="station section">
-            <label><span data-scope="station">Station</span><span data-scope="section">From station</span>
-              <input class="input" id="stationA" list="stationsA" placeholder="type a station name, e.g. Bern" />
+            <label><span data-scope="station" data-i18n>Station</span><span data-scope="section" data-i18n>From station</span>
+              <input class="input" id="stationA" list="stationsA" placeholder="type a station name, e.g. Bern" data-i18n-placeholder />
               <datalist id="stationsA"></datalist>
             </label>
           </div>
           <div data-scope="section">
-            <label>To station
-              <input class="input" id="stationB" list="stationsB" placeholder="type a station name, e.g. Thun" />
+            <label><span data-i18n>To station</span>
+              <input class="input" id="stationB" list="stationsB" placeholder="type a station name, e.g. Thun" data-i18n-placeholder />
               <datalist id="stationsB"></datalist>
             </label>
           </div>
           <div data-scope="train">
-            <label>Train (line, number or destination)
-              <input class="input" id="trainSearch" list="trainsList" placeholder="e.g. IC 1, 712, Genève-Aéroport" />
+            <label><span data-i18n>Train (line, number or destination)</span>
+              <input class="input" id="trainSearch" list="trainsList" placeholder="e.g. IC 1, 712, Genève-Aéroport" data-i18n-placeholder />
               <datalist id="trainsList"></datalist>
             </label>
           </div>
-          <div data-scope="point" class="muted">Click on the map to place the incident.</div>
+          <div data-scope="point" class="muted" data-i18n>Click on the map to place the incident.</div>
           <div id="pickMap"></div>
           <div id="whereText" class="where muted"></div>
         </fieldset>
 
-        <label>Details
-          <textarea class="textarea" name="description" rows="4" maxlength="4000" placeholder="What do you see? Is anyone hurt? Is the track blocked?"></textarea>
+        <label><span data-i18n>Details</span>
+          <textarea class="textarea" name="description" rows="4" maxlength="4000" placeholder="What do you see? Is anyone hurt? Is the track blocked?" data-i18n-placeholder></textarea>
         </label>
-        <label>Your name / team (optional)
-          <input class="input" name="reporter" maxlength="100" placeholder="e.g. Train driver, RE 3456" />
+        <label><span data-i18n>Your name / team (optional)</span>
+          <input class="input" name="reporter" maxlength="100" placeholder="e.g. Train driver, RE 3456" data-i18n-placeholder />
         </label>
 
         <div class="actions">
-          <button class="btn btn-primary" type="submit">Send report</button>
+          <button class="btn btn-primary" type="submit" data-i18n>Send report</button>
           <span id="msg" role="status"></span>
         </div>
       </form>
 
       <section>
-        <h2>Reports</h2>
+        <h2 data-i18n>Reports</h2>
         <div class="seg small" id="filterSeg">
-          <label><input class="radio radio-sm" type="radio" name="filter" value="open" checked /> Open</label>
-          <label><input class="radio radio-sm" type="radio" name="filter" value="resolved" /> Resolved</label>
-          <label><input class="radio radio-sm" type="radio" name="filter" value="all" /> All</label>
+          <label><input class="radio radio-sm" type="radio" name="filter" value="open" checked /> <span data-i18n>Open</span></label>
+          <label><input class="radio radio-sm" type="radio" name="filter" value="resolved" /> <span data-i18n>Resolved</span></label>
+          <label><input class="radio radio-sm" type="radio" name="filter" value="all" /> <span data-i18n>All</span></label>
         </div>
         <ul id="reports" class="list reports"></ul>
       </section>

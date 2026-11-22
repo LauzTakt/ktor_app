@@ -9,6 +9,8 @@
     <link rel="stylesheet" href="/theme.css" />
     <link rel="stylesheet" href="/passenger.css" />
     <link rel="stylesheet" href="/trip-watch.css" />
+    <script src="/i18n.js"></script>
+    <script src="/i18n-strings.js"></script>
     <script src="/theme-init.js"></script>
     <script src="/trip-watch.js" type="module"></script>
     <script src="/app-links.js" defer></script>
@@ -17,12 +19,13 @@
     <header class="topbar">
       <a class="watch-brand" href="/"><img src="/favicon.svg" width="28" height="28" alt="" />Takt</a>
       <span class="spacer"></span>
-      <a class="watch-nav" href="/trip-watch.html">Watched trips</a>
+      <span data-lang-picker class="select select-ghost select-sm lang-select"></span>
+      <a class="watch-nav" href="/trip-watch.html" data-i18n>Watched trips</a>
     </header>
     <main id="passenger-app" class="watch-page">
       <div class="watch-layout" id="watch-page-content" aria-busy="true">
-        <h1>Trip Watch</h1>
-        <p class="lead">Loading your trip…</p>
+        <h1 data-i18n>Trip Watch</h1>
+        <p class="lead" data-i18n>Loading your trip…</p>
       </div>
       <p class="watch-feedback" id="watch-feedback" role="status"></p>
     </main>
