@@ -87,6 +87,8 @@ private data class WatchView(
     val apple: Boolean,
     val google: Boolean,
     val alternativesUrl: String,
+    /** The pass face shown in Wallet, for the page's HTML preview. */
+    val pass: TripWatchPassFace,
 )
 
 private fun TripWatch.view(canManage: Boolean, service: TripWatchService): WatchView {
@@ -109,7 +111,8 @@ private fun TripWatch.view(canManage: Boolean, service: TripWatchService): Watch
         currentLeg + 1, legs.size, canManage, actions, canManage && !ended && service.apple != null,
         canManage && !ended && service.google != null,
         if (next == destination.id) "/" else
-            "/?station=${java.net.URLEncoder.encode(next, Charsets.UTF_8)}&to=${java.net.URLEncoder.encode(destination.id, Charsets.UTF_8)}")
+            "/?station=${java.net.URLEncoder.encode(next, Charsets.UTF_8)}&to=${java.net.URLEncoder.encode(destination.id, Charsets.UTF_8)}",
+        passFace(service.site))
 }
 
 internal fun Route.tripWatchRoutes(service: TripWatchService?) {
@@ -177,8 +180,9 @@ internal fun Route.tripWatchRoutes(service: TripWatchService?) {
         }
     }
     if (service == null) return
-    if (service.google != null) get("/wallet/icon.png") {
-        call.respondBytes(walletIcon96, ContentType.Image.PNG)
+    if (service.google != null) {
+        get("/wallet/icon.png") { call.respondBytes(walletIcon96, ContentType.Image.PNG) }
+        get("/wallet/logo.png") { call.respondBytes(googleLogo, ContentType.Image.PNG) }
     }
     service.apple?.let { appleWalletRoutes(service, it) }
 }
@@ -227,6 +231,7 @@ private fun Route.appleWalletRoutes(service: TripWatchService, apple: AppleWalle
 }
 
 private const val SESSION = "twin_trip_watch"
+private val googleLogo by lazy { passCircleLogo() }
 private val pkpass = ContentType.parse("application/vnd.apple.pkpass")
 private val opaque = Regex("[A-Za-z0-9_-]{32}")
 private fun TripWatchSelection.valid(): Boolean {

@@ -149,7 +149,7 @@ internal class TripWatchService(
     )
 
     private fun alight(leg: WatchLeg) = TripWatchAdvice(TripWatchAction.Alight(leg.serviceId, leg.to.id),
-        if (leg.expectedArrival != leg.arrival) "Expected arrival ${watchTime(leg.expectedArrival)}." else null)
+        if (watchTime(leg.expectedArrival) != watchTime(leg.arrival)) "Expected arrival ${watchTime(leg.expectedArrival)}." else null)
 }
 
 private val watchRandom = SecureRandom()

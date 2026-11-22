@@ -84,15 +84,21 @@ internal class GoogleWallet(
 
     internal fun pass(watch: TripWatch, site: String): JsonObject {
         val station = watch.relevantLeg()?.from
+        val face = watch.passFace(site)
         return buildJsonObject {
             put("id", objectId(watch)); put("classId", classId)
             put("state", if (watch.ended) "EXPIRED" else "ACTIVE")
-            put("hexBackgroundColor", "#eb0000")
-            put("cardTitle", localized("Trip Watch")); put("subheader", localized(watch.destination.name))
-            put("header", localized(watch.instruction()))
+            // Same face as the Apple pass: white card, red bar logo, departure, route and a QR code to the watch page.
+            put("hexBackgroundColor", "#ffffff")
+            put("cardTitle", localized(PASS_BRAND))
+            put("subheader", localized("Departure ${face.departure}"))
+            put("header", localized("${face.origin} → ${face.destination}"))
             put("logo", buildJsonObject {
-                put("sourceUri", buildJsonObject { put("uri", "$site/wallet/icon.png") })
-                put("contentDescription", localized("Train twin"))
+                put("sourceUri", buildJsonObject { put("uri", "$site/wallet/logo.png") })
+                put("contentDescription", localized(PASS_BRAND))
+            })
+            put("barcode", buildJsonObject {
+                put("type", "QR_CODE"); put("value", face.url); put("alternateText", PASS_NOTICE)
             })
             put("merchantLocations", buildJsonArray {
                 if (station?.lat != null && station.lon != null) add(buildJsonObject {
@@ -104,13 +110,14 @@ internal class GoogleWallet(
                 put("end", buildJsonObject { put("date", Instant.ofEpochMilli(end).toString()) })
             })
             put("textModulesData", buildJsonArray {
-                watch.advice.detail?.let { add(buildJsonObject {
-                    put("id", "detail"); put("header", "Trip update"); put("body", it)
-                }) }
+                add(textModule("next", "Next step", face.nextStep))
+                add(textModule("line", "Line", "${face.line} · ${face.changes}"))
+                watch.advice.detail?.let { add(textModule("detail", "Trip update", it)) }
+                add(textModule("notice", "About this pass", PASS_ABOUT))
             })
             put("linksModuleData", buildJsonObject {
                 put("uris", buildJsonArray { add(buildJsonObject {
-                    put("id", "trip"); put("uri", "$site/trip-watch.html?id=${watch.id}"); put("description", "Open Trip Watch")
+                    put("id", "trip"); put("uri", face.url); put("description", "Open Trip Watch")
                 }) })
             })
         }
@@ -118,6 +125,10 @@ internal class GoogleWallet(
 
     private fun localized(value: String) = buildJsonObject {
         put("defaultValue", buildJsonObject { put("language", "en"); put("value", value) })
+    }
+
+    private fun textModule(id: String, header: String, body: String) = buildJsonObject {
+        put("id", id); put("header", header); put("body", body)
     }
 
     private suspend fun request(method: String, path: String, body: JsonObject? = null): HttpResponse<String> {

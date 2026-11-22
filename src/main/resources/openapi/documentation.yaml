@@ -660,7 +660,7 @@ components:
   schemas:
     TripWatch:
       type: object
-      required: [id, origin, destination, instruction, detail, kind, expiresAt, leg, legCount, canManage, actions, apple, google, alternativesUrl]
+      required: [id, origin, destination, instruction, detail, kind, expiresAt, leg, legCount, canManage, actions, apple, google, alternativesUrl, pass]
       properties:
         id: { type: string }
         origin: { type: string }
@@ -676,6 +676,22 @@ components:
         apple: { type: boolean }
         google: { type: boolean }
         alternativesUrl: { type: string }
+        pass: { $ref: "#/components/schemas/TripWatchPass" }
+    TripWatchPass:
+      type: object
+      description: The face of the Wallet pass (Apple boarding pass and Google generic object), for the page preview. Travel information, not a ticket.
+      required: [departure, date, origin, destination, line, changes, nextStep, url, brand, notice]
+      properties:
+        departure: { type: string, description: "Planned departure of the leg boarded next, dd.MM.yyyy HH:mm Europe/Zurich", example: "22.11.2026 05:53" }
+        date: { type: string, example: "22.11.2026" }
+        origin: { type: string, example: "Zürich HB" }
+        destination: { type: string, example: "Bern" }
+        line: { type: string, example: "IR35" }
+        changes: { type: string, description: "Direct, 1 change or N changes", example: "Direct" }
+        nextStep: { type: string, example: "Take IR35 from Zürich HB at 05:53" }
+        url: { type: string, description: "Trip Watch page encoded in the QR code; relative when WALLET_PUBLIC_BASE_URL is unset" }
+        brand: { type: string, example: "Train twin" }
+        notice: { type: string, example: "Travel information · not a ticket" }
     Login:
       type: object
       required: [username, password]

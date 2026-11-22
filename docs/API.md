@@ -56,7 +56,7 @@ written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lau
 | `GET /trip-watches/{id}/apple.pkpass` | Signed pass for the owner when Apple Wallet is configured |
 | `POST /trip-watches/{id}/google` | `{ "url": "…" }` for the owner when Google Wallet is configured |
 
-Trip Watch accepts a `journeyId` from a server-cached planner result, or `trainId`, `fromStopId` and `toStopId` from the live connection screen. Set the optional `onBoard` flag after the passenger confirms they have boarded. Expired or changed selections return 409 with a prompt to select a connection again. The remaining access routes require the feature to be enabled. [Trip Watch](WALLET_TRIP_WATCH.md)
+Trip Watch accepts a `journeyId` from a server-cached planner result, or `trainId`, `fromStopId` and `toStopId` from the live connection screen. Set the optional `onBoard` flag after the passenger confirms they have boarded. Expired or changed selections return 409 with a prompt to select a connection again. The remaining access routes require the feature to be enabled. A watch's `pass` object holds the face both Wallet passes show (departure, route, line, changes, next step and the QR link), which the watch page previews. [Trip Watch](WALLET_TRIP_WATCH.md)
 
 ### Query parameters
 
