@@ -30,9 +30,9 @@ internal data class TripWatchPassFace(
     val notice: String = PASS_NOTICE,
 )
 
-internal const val PASS_BRAND = "Train twin"
+internal const val PASS_BRAND = "Takt"
 internal const val PASS_NOTICE = "Travel information · not a ticket"
-internal const val PASS_ABOUT = "Travel information from Train twin, based on live train data. " +
+internal const val PASS_ABOUT = "Travel information from $PASS_BRAND, based on live train data. " +
     "This pass is not a ticket and is not valid for travel."
 
 internal fun TripWatch.passFace(site: String): TripWatchPassFace {
@@ -60,7 +60,7 @@ private val passDate = DateTimeFormatter.ofPattern("dd.MM.yyyy").withZone(ZURICH
 /** Plain red bar (3:1, the proportions of a Swiss railway flag, without any symbol). */
 private val passRed = Color(235, 0, 0)
 
-/** Apple Wallet logo: the bar alone, 45 × 15 pt, so the logo text "Train twin" sits right next to it. */
+/** Apple Wallet logo: the bar alone, 45 × 15 pt, so the logo text "Takt" sits right next to it. */
 internal fun passLogo(scale: Int): ByteArray {
     val image = BufferedImage(45 * scale, 15 * scale, BufferedImage.TYPE_INT_ARGB)
     val draw = image.createGraphics()

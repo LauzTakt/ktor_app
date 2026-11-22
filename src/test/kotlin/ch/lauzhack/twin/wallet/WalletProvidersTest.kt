@@ -72,8 +72,8 @@ class WalletProvidersTest {
 
         // Laid out like a rail ticket in Wallet: a white train boarding pass with black values and labels.
         assertFalse(pass.containsKey("generic"))
-        assertEquals("Train twin", pass.text("organizationName"))
-        assertEquals("Train twin", pass.text("logoText"))
+        assertEquals("Takt", pass.text("organizationName"))
+        assertEquals("Takt", pass.text("logoText"))
         assertEquals("rgb(255, 255, 255)", pass.text("backgroundColor"))
         assertEquals("rgb(0, 0, 0)", pass.text("foregroundColor"))
         assertEquals("rgb(0, 0, 0)", pass.text("labelColor"))
@@ -125,7 +125,7 @@ class WalletProvidersTest {
     fun googlePassShowsTheSameTicketFaceAndQrCode() {
         val pass = GoogleWallet("123.trip", "issuer@example.test", keys.private).pass(watch, site)
         assertEquals("#ffffff", pass.text("hexBackgroundColor"))
-        assertEquals("Train twin", pass.localized("cardTitle"))
+        assertEquals("Takt", pass.localized("cardTitle"))
         assertEquals("Departure 10.01.2030 09:00", pass.localized("subheader"))
         assertEquals("Station A → Station B", pass.localized("header"))
         assertEquals("$site/wallet/logo.png", pass["logo"]!!.jsonObject["sourceUri"]!!.jsonObject.text("uri"))

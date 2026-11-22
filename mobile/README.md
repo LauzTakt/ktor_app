@@ -13,8 +13,8 @@ Push a tag `vX.Y.Z` on a commit on `main`:
 git tag v1.0.0 && git push origin v1.0.0
 ```
 
-`.github/workflows/android-release.yml` builds `train-twin-X.Y.Z.apk` and `.github/workflows/ios-release.yml`
-builds `train-twin-X.Y.Z[-unsigned].ipa`; both are attached to the same GitHub Release. The version name comes from
+`.github/workflows/android-release.yml` builds `takt-X.Y.Z.apk` and `.github/workflows/ios-release.yml`
+builds `takt-X.Y.Z[-unsigned].ipa`; both are attached to the same GitHub Release. The version name comes from
 the tag and the build number from the run number. Both can also be run by hand (Actions -> Run workflow, artifact
 only); the iOS one also builds on every pull request that touches `mobile/`.
 
@@ -53,7 +53,7 @@ With a paid Apple Developer account, add these secrets and CI produces a signed 
   publishes `/.well-known/assetlinks.json` from the env var `ANDROID_CERT_SHA256` (comma-separated SHA-256
   fingerprints of the signing certificate). This needs the **stable release key** (secrets above): with the
   throwaway debug key every build has a new fingerprint, verification fails and Android opens the browser
-  (the user can still enable it in Settings -> Apps -> Train Twin -> Open by default). Fingerprint:
+  (the user can still enable it in Settings -> Apps -> Takt -> Open by default). Fingerprint:
 
   ```sh
   keytool -list -v -keystore release.jks -alias twin | grep SHA256
