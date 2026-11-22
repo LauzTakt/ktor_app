@@ -2,6 +2,13 @@ package ch.lauzhack.twin.api.v1
 
 import ch.lauzhack.twin.db.Database
 import ch.lauzhack.twin.db.IncidentRow
+import ch.lauzhack.twin.query.BoardDto
+import ch.lauzhack.twin.query.BoardType
+import ch.lauzhack.twin.query.IncidentDto
+import ch.lauzhack.twin.query.ScreenDto
+import ch.lauzhack.twin.query.TrainLiveDto
+import ch.lauzhack.twin.query.TwinQueries
+import ch.lauzhack.twin.query.toDto
 import io.ktor.server.routing.Route
 import io.ktor.server.websocket.DefaultWebSocketServerSession
 import io.ktor.server.websocket.webSocket

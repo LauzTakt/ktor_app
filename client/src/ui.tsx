@@ -8,7 +8,7 @@ import { BOARDING_MINUTES, leaveBy, walkingPhase, waitRemaining, type WalkingPla
 
 export type Item = { kind: "msg"; key: string; role: "passenger" | "assistant"; text: string; extra: string | null } | { kind: "cards"; key: string };
 
-export function Welcome({ suggestions, onPick, place, onLocate, locating }: { suggestions: string[]; onPick: (s: string) => void; voiceReady: boolean; place: string | null; onLocate: () => void; locating: boolean }) {
+export function Welcome({ suggestions, onPick, place, onLocate, locating }: { suggestions: string[]; onPick: (s: string) => void; place: string | null; onLocate: () => void; locating: boolean }) {
   return (
     <div className="welcome">
       <h2>{greeting()}</h2>

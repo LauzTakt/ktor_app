@@ -8,3 +8,5 @@ data/*.sqlite*
 
 # Local CA certs for Docker builds behind a TLS proxy
 docker/certs/*.crt
+
+.env.temp

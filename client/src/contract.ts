@@ -2,8 +2,6 @@
 import type { Geometry } from "geojson";
 
 export type AskContext = { fromStopId: string | null; toStopId: string | null; trainId: string | null; lat: number | null; lon: number | null };
-export type Turn = { role: "passenger" | "assistant"; text: string };
-export type AskRequest = { question: string; context: AskContext; history: Turn[]; sessionId: string };
 
 export type Severity = "info" | "minor" | "major" | "critical";
 export type SituationItem = { id: string; title: string; where?: string | null; severity: Severity; source?: "staff" | "auto" | "sbb" | string | null };

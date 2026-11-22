@@ -1,7 +1,7 @@
 package ch.lauzhack.twin.assistant
 
-import ch.lauzhack.twin.api.v1.ApiException
-import io.ktor.http.HttpStatusCode
+import ch.lauzhack.twin.common.InvalidInputException
+import ch.lauzhack.twin.common.UnavailableException
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
@@ -21,13 +21,13 @@ fun Route.assistantV1(agent: AssistantAgent?) = route("/api/v1/assistant") {
         val req = try {
             requestJson.decodeFromString<AskRequest>(call.receiveText())
         } catch (e: Exception) {
-            throw ApiException(HttpStatusCode.BadRequest, "bad_request", "body must be JSON: {question, context?, history?, sessionId?}")
+            throw InvalidInputException("bad_request", "body must be JSON: {question, context?, history?, sessionId?}")
         }
         val question = req.question.trim()
-        if (question.isEmpty()) throw ApiException(HttpStatusCode.BadRequest, "bad_question", "question is required")
-        if (question.length > 2000) throw ApiException(HttpStatusCode.BadRequest, "bad_question", "question must be at most 2000 characters")
-        val a = agent ?: throw ApiException(
-            HttpStatusCode.ServiceUnavailable, "assistant_unavailable", "the assistant is not configured (ANTHROPIC_API_KEY is not set)",
+        if (question.isEmpty()) throw InvalidInputException("bad_question", "question is required")
+        if (question.length > 2000) throw InvalidInputException("bad_question", "question must be at most 2000 characters")
+        val a = agent ?: throw UnavailableException(
+            "assistant_unavailable", "the assistant is not configured (ANTHROPIC_API_KEY is not set)",
         )
         call.respond(a.ask(req.copy(question = question)))
     }

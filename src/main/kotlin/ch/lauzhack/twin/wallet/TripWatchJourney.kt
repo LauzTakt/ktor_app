@@ -1,11 +1,12 @@
 package ch.lauzhack.twin.wallet
 
-import ch.lauzhack.twin.api.v1.StopDto
-import ch.lauzhack.twin.api.v1.StopState
-import ch.lauzhack.twin.api.v1.TwinQueries
-import ch.lauzhack.twin.assistant.JourneyCache
-import ch.lauzhack.twin.assistant.SbbTwinClient
-import ch.lauzhack.twin.assistant.TwinException
+import ch.lauzhack.twin.query.StopDto
+import ch.lauzhack.twin.query.StopState
+import ch.lauzhack.twin.query.TwinQueries
+import ch.lauzhack.twin.twinapi.JourneyCache
+import ch.lauzhack.twin.twinapi.SbbTwinClient
+import ch.lauzhack.twin.twinapi.TwinException
+import ch.lauzhack.twin.common.hhmm
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -13,9 +14,6 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.longOrNull
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 @Serializable
 data class TripWatchSelection(
@@ -166,5 +164,4 @@ private fun JsonObject.long(key: String) = (this[key] as? JsonPrimitive)?.longOr
 private fun JsonObject.number(key: String) = (this[key] as? JsonPrimitive)?.doubleOrNull
 private fun JsonObject.objects(key: String) = (this[key] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
 
-private val watchTimeFormat = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.of("Europe/Zurich"))
-internal fun watchTime(time: Long): String = watchTimeFormat.format(Instant.ofEpochMilli(time))
+internal fun watchTime(time: Long): String = hhmm(time)

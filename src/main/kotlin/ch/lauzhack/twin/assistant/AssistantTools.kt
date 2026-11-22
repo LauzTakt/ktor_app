@@ -1,17 +1,38 @@
 package ch.lauzhack.twin.assistant
 
-import ch.lauzhack.twin.api.v1.BoardType
-import ch.lauzhack.twin.api.v1.IncidentDto
-import ch.lauzhack.twin.api.v1.StopDto
-import ch.lauzhack.twin.api.v1.StopState
-import ch.lauzhack.twin.api.v1.TrainFilter
-import ch.lauzhack.twin.api.v1.TrainSummaryDto
-import ch.lauzhack.twin.api.v1.TwinQueries
+import ch.lauzhack.twin.common.ZURICH
+import ch.lauzhack.twin.common.arr
+import ch.lauzhack.twin.common.bool
+import ch.lauzhack.twin.common.distanceKm
+import ch.lauzhack.twin.common.double
+import ch.lauzhack.twin.common.hhmm
+import ch.lauzhack.twin.common.int
+import ch.lauzhack.twin.common.long
+import ch.lauzhack.twin.common.obj
+import ch.lauzhack.twin.common.objects
+import ch.lauzhack.twin.common.str
+import ch.lauzhack.twin.common.strings
 import ch.lauzhack.twin.db.Database
 import ch.lauzhack.twin.db.StaffReportRow
+import ch.lauzhack.twin.query.BoardType
+import ch.lauzhack.twin.query.IncidentDto
+import ch.lauzhack.twin.query.StopDto
+import ch.lauzhack.twin.query.StopState
+import ch.lauzhack.twin.query.TrainFilter
+import ch.lauzhack.twin.query.TrainSummaryDto
+import ch.lauzhack.twin.query.TwinQueries
 import ch.lauzhack.twin.state.Station
+import ch.lauzhack.twin.twinapi.SbbTwinClient
+import ch.lauzhack.twin.twinapi.PlanQuery
+import ch.lauzhack.twin.twinapi.CachedJourney
+import ch.lauzhack.twin.twinapi.JourneyCache
+import ch.lauzhack.twin.twinapi.TwinException
 import com.anthropic.core.JsonValue
 import com.anthropic.models.messages.Tool
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -28,10 +49,6 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import org.slf4j.LoggerFactory
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.concurrent.atomic.AtomicInteger
-import kotlin.math.roundToInt
 
 /** What one tool call gives back: the text the model reads, and the map commands it produced. */
 class ToolOutcome(val content: String, val isError: Boolean = false, val visuals: List<VisualCommand> = emptyList())
@@ -77,33 +94,6 @@ class TurnState(val request: AskRequest, val now: Long) {
     /** A journey re-planned under a new id (its geometry had expired): options follow it. */
     fun replaced(oldId: String, newId: String) { replanned[oldId] = newId }
     fun currentJourneyId(id: String): String = replanned[id] ?: id
-}
-
-/** How a journey was planned, so it can be planned again when the twin has dropped it. */
-data class PlanQuery(val from: String, val to: String, val after: Long?, val limit: Int, val onboardTrainId: String?)
-
-/** A planned journey as the twin returned it, with its validated (simplified) geometry per leg once known. */
-data class CachedJourney(val journey: JsonObject, val query: PlanQuery, val geometry: List<JsonElement?>?, val at: Long) {
-    val id: String get() = journey.str("id") ?: ""
-}
-
-/** Journeys from the planner, by id (the twin keeps them ~30 min): options and routes always use the planner's times. */
-class JourneyCache(private val ttlMs: Long = 30 * 60_000L) {
-    private val map = ConcurrentHashMap<String, CachedJourney>()
-
-    fun put(entry: CachedJourney, preferExisting: Boolean = false) {
-        if (entry.id.isEmpty()) return
-        map.compute(entry.id) { _, previous ->
-            if (preferExisting && previous != null && entry.at - previous.at <= ttlMs) previous else entry
-        }
-        if (map.size > 300) {
-            val now = System.currentTimeMillis()
-            map.entries.removeIf { now - it.value.at > ttlMs }
-        }
-    }
-
-    fun entry(id: String): CachedJourney? = map[id]?.takeIf { System.currentTimeMillis() - it.at <= ttlMs }
-    fun get(id: String): JsonObject? = entry(id)?.journey
 }
 
 /**
@@ -445,9 +435,9 @@ class AssistantTools(
         val a = stations.resolve(fromId) ?: return@coroutineScope null
         val b = stations.resolve(toId) ?: return@coroutineScope null
         if (a.stopId == b.stopId || a.lat == null || a.lon == null || b.lat == null || b.lon == null) return@coroutineScope null
-        val dAB = StationResolver.distanceKm(a.lat, a.lon, b.lat, b.lon).coerceAtLeast(1.0)
+        val dAB = distanceKm(a.lat, a.lon, b.lat, b.lon).coerceAtLeast(1.0)
         fun ratio(s: Station) = if (s.lat == null || s.lon == null) 99.0 else
-            (StationResolver.distanceKm(a.lat, a.lon, s.lat, s.lon) + StationResolver.distanceKm(s.lat, s.lon, b.lat, b.lon)) / dAB
+            (distanceKm(a.lat, a.lon, s.lat, s.lon) + distanceKm(s.lat, s.lon, b.lat, b.lon)) / dAB
 
         val disruptionsCall = async { runCatching { twin.disruptions() }.getOrNull()?.arr()?.mapNotNull { it.obj() }.orEmpty() }
         val directCall = async { runCatching { planValidated(PlanQuery(a.stopId, b.stopId, null, 3, null)).second }.getOrDefault(emptyList()) }
@@ -479,8 +469,8 @@ class AssistantTools(
         val hubPool = HUBS.mapNotNull { stations.byId(it) }.filter { it.stopId != a.stopId && it.stopId != b.stopId && it.stopId !in closedInside }
         val between = hubPool.map { it to ratio(it) }.filter { it.second <= 1.45 }.sortedBy { it.second }.take(3).map { it.first }
         val nearest = hubPool.filter { it.lat != null && it.lon != null }
-            .minByOrNull { StationResolver.distanceKm(a.lat, a.lon, it.lat!!, it.lon!!) }
-            ?.takeIf { StationResolver.distanceKm(a.lat, a.lon, it.lat!!, it.lon!!) <= 30.0 }
+            .minByOrNull { distanceKm(a.lat, a.lon, it.lat!!, it.lon!!) }
+            ?.takeIf { distanceKm(a.lat, a.lon, it.lat!!, it.lon!!) <= 30.0 }
         val hubs = (between + listOfNotNull(nearest)).distinctBy { it.stopId }.take(4)
         val hubCalls = hubs.map { h ->
             async {
@@ -682,7 +672,7 @@ class AssistantTools(
         fun dist(t: TrainSummaryDto): Double? {
             val p = t.position ?: return null
             if (ctx?.lat == null || ctx.lon == null) return null
-            return StationResolver.distanceKm(ctx.lat, ctx.lon, p.lat, p.lon)
+            return distanceKm(ctx.lat, ctx.lon, p.lat, p.lon)
         }
         val sorted = found.sortedWith(
             compareBy<TrainSummaryDto>(
@@ -960,7 +950,7 @@ class AssistantTools(
                     reports { r ->
                         r.stopId == s.stopId || r.toStopId == s.stopId ||
                             (r.scopeKind == "point" && r.lat != null && r.lon != null && s.lat != null && s.lon != null &&
-                                StationResolver.distanceKm(r.lat, r.lon, s.lat, s.lon) < 2.0)
+                                distanceKm(r.lat, r.lon, s.lat, s.lon) < 2.0)
                     }.forEach { addReport(it, incidents, turn) }
                 }
                 else -> throw ToolError("give stopId, or trainId, or fromStopId and toStopId")
@@ -1081,8 +1071,8 @@ class AssistantTools(
     /** (|a s| + |s b|) / |a b|: 1 = on the straight line, larger = a detour. */
     private fun corridorRatio(a: Station, b: Station, s: Station): Double {
         if (a.lat == null || a.lon == null || b.lat == null || b.lon == null || s.lat == null || s.lon == null) return 99.0
-        val ab = StationResolver.distanceKm(a.lat, a.lon, b.lat, b.lon).coerceAtLeast(1.0)
-        return (StationResolver.distanceKm(a.lat, a.lon, s.lat, s.lon) + StationResolver.distanceKm(s.lat, s.lon, b.lat, b.lon)) / ab
+        val ab = distanceKm(a.lat, a.lon, b.lat, b.lon).coerceAtLeast(1.0)
+        return (distanceKm(a.lat, a.lon, s.lat, s.lon) + distanceKm(s.lat, s.lon, b.lat, b.lon)) / ab
     }
 
     private fun localStation(stopId: String, into: MutableMap<String, JsonObject>, turn: TurnState, skip: Set<String> = emptySet()) {
@@ -1297,12 +1287,6 @@ class AssistantTools(
         val v = FitVisual(input.strings("trainIds"), stops, input.strings("sectionIds"))
         if (v.trainIds.isEmpty() && v.stopIds.isEmpty() && v.sectionIds.isEmpty()) throw ToolError("give trainIds, stopIds or sectionIds")
         return ToolOutcome("ok: map will fit", visuals = listOf(v))
-    }
-
-    private suspend fun highlightTrain(input: JsonObject): ToolOutcome {
-        val id = input.str("trainId") ?: throw ToolError("trainId is required")
-        if (queries.trainState(id) == null && runCatching { twin.train(id) }.isFailure) throw ToolError("train $id is not in service")
-        return ToolOutcome("ok: train highlighted", visuals = listOf(TrainVisual(id, input.str("label"))))
     }
 
     private suspend fun markStation(input: JsonObject): ToolOutcome {

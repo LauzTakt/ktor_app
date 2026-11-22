@@ -762,7 +762,7 @@ export function App() {
         {walking && <TimerChip walking={walking} />}
         <div ref={bodyRef} className="sheet-body">
           {empty ? (
-            <Welcome suggestions={chips} onPick={(s) => void submitText(s)} voiceReady={voiceStatus !== "connecting"} place={located?.name ?? null} onLocate={() => locate()} locating={locating} />
+            <Welcome suggestions={chips} onPick={(s) => void submitText(s)} place={located?.name ?? null} onLocate={() => locate()} locating={locating} />
           ) : (
             <Transcript
               items={items}

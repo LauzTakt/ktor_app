@@ -1,8 +1,22 @@
 package ch.lauzhack.twin.passenger
 
-import ch.lauzhack.twin.assistant.CachedJourney
-import ch.lauzhack.twin.assistant.JourneyCache
-import ch.lauzhack.twin.assistant.PlanQuery
+import ch.lauzhack.twin.twinapi.CachedJourney
+import ch.lauzhack.twin.twinapi.JourneyCache
+import ch.lauzhack.twin.twinapi.PlanQuery
+import ch.lauzhack.twin.common.EMPTY_ARRAY
+import ch.lauzhack.twin.common.array
+import ch.lauzhack.twin.common.double
+import ch.lauzhack.twin.common.hhmm
+import ch.lauzhack.twin.common.long
+import ch.lauzhack.twin.common.obj
+import ch.lauzhack.twin.common.objects
+import ch.lauzhack.twin.common.str
+import ch.lauzhack.twin.common.strings
+import ch.lauzhack.twin.twinapi.SbbTwinClient
+import ch.lauzhack.twin.twinapi.enc
+import kotlin.math.hypot
+import kotlin.math.max
+import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -23,9 +37,6 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import org.slf4j.LoggerFactory
-import kotlin.math.hypot
-import kotlin.math.max
-import kotlin.math.roundToInt
 
 /** contract.ts `BriefDisruption`. */
 internal data class BriefDisruption(
@@ -67,7 +78,7 @@ data class BriefQuery(
  * `/api/plan` and `/api/situation`.
  */
 class PlaceBrief(
-    private val twin: TwinHttp,
+    private val twin: SbbTwinClient,
     private val catalog: StationCatalog,
     private val now: () -> Long = System::currentTimeMillis,
     private val journeyCache: JourneyCache? = null,
@@ -85,7 +96,7 @@ class PlaceBrief(
         val d = synchronized(lock) {
             live?.takeIf { now() - it.first <= 5_000 }?.second ?: scope.async {
                 coroutineScope {
-                    suspend fun list(p: String) = try { twin.json(p, 4_000).objs() } catch (e: Exception) { emptyList() }
+                    suspend fun list(p: String) = try { twin.json(p, 4_000).objects() } catch (e: Exception) { emptyList() }
                     val i = async { list("/api/incidents") }
                     val a = async { list("/api/alerts") }
                     val ds = async { list("/api/disruptions") }
@@ -98,12 +109,12 @@ class PlaceBrief(
 
     private fun alertActive(a: JsonObject): Boolean {
         val t = now()
-        val periods = a.objs("activePeriods")
-        return periods.isEmpty() || periods.any { (it.lng("start") ?: 0) <= t + 30 * 60_000 && (it.lng("end") ?: Long.MAX_VALUE) > t }
+        val periods = a.objects("activePeriods")
+        return periods.isEmpty() || periods.any { (it.long("start") ?: 0) <= t + 30 * 60_000 && (it.long("end") ?: Long.MAX_VALUE) > t }
     }
     private fun isOpen(i: JsonObject) = i.str("status") != "ended" && i.str("lifecycle") != "ENDED"
     /** Ended control disruptions stay worth a sentence ("service resumed") for 30 minutes. */
-    private fun recentlyEnded(i: JsonObject) = !isOpen(i) && i.str("source") == "control" && now() - (i.lng("updatedAt") ?: 0) < 30 * 60_000
+    private fun recentlyEnded(i: JsonObject) = !isOpen(i) && i.str("source") == "control" && now() - (i.long("updatedAt") ?: 0) < 30 * 60_000
 
     private fun untilWords(until: Long?, durationType: String?): String? {
         if (until == null || until == 0L) return if (durationType == "UNKNOWN" || durationType.isNullOrEmpty()) "the end is not known yet" else null
@@ -133,10 +144,10 @@ class PlaceBrief(
             title = cleanTitle(i.str("title") ?: ""),
             where = i.str("where"),
             effect = effect,
-            cause = i.o("cause").str("label"),
-            until = if (effect == "resumed") null else if (source == "control") untilWords(i.lng("until"), i.str("durationType")) else null,
+            cause = i.obj("cause").str("label"),
+            until = if (effect == "resumed") null else if (source == "control") untilWords(i.long("until"), i.str("durationType")) else null,
             text = plainText(i.str("description")),
-            measures = i.objs("messages").takeLast(3).map { "${it.str("title")}: ${it.str("text")}" },
+            measures = i.objects("messages").takeLast(3).map { "${it.str("title")}: ${it.str("text")}" },
             replacementBus = i.truthy("replacementBus"),
             severity = i.str("severity") ?: "info",
             active = isOpen(i),
@@ -145,11 +156,11 @@ class PlaceBrief(
 
     private fun fromAlert(a: JsonObject): BriefDisruption {
         val t = now()
-        val end = a.objs("activePeriods").map { it.lng("end") ?: 0 }.filter { it > t }.minOrNull()
+        val end = a.objects("activePeriods").map { it.long("end") ?: 0 }.filter { it > t }.minOrNull()
         val title = a.str("title") ?: ""
         val effect = if (Regex("^interrupted", RegexOption.IGNORE_CASE).containsMatchIn(title)) "interrupted"
             else if (Regex("^(limited|restricted|irregular)", RegexOption.IGNORE_CASE).containsMatchIn(title)) "limited" else null
-        val stations = a.objs("stations")
+        val stations = a.objects("stations")
         return BriefDisruption(
             id = a.str("id") ?: "",
             kind = "sbb",
@@ -168,10 +179,10 @@ class PlaceBrief(
 
     // ---------- which disruptions concern a place ----------
     private fun touchesStation(id: String, inc: JsonObject, d: JsonObject?): Boolean {
-        val s = inc.o("scope")
+        val s = inc.obj("scope")
         if (s != null && id in listOf(s.str("station"), s.str("stopId"), s.str("from"), s.str("to"))) return true
-        val sec = d.o("section") ?: return false
-        return id in listOf(sec.o("a").str("id"), sec.o("b").str("id")) + sec.objs("inside").map { it.str("id") }
+        val sec = d.obj("section") ?: return false
+        return id in listOf(sec.obj("a").str("id"), sec.obj("b").str("id")) + sec.objects("inside").map { it.str("id") }
     }
 
     private fun mentionsLine(line: String, text: String): Boolean = runCatching {
@@ -190,7 +201,7 @@ class PlaceBrief(
             val title = inc.str("title")
             val hit = ids?.contains(id) == true || titles?.contains(title) == true ||
                 (inc.str("source") != "auto" && stationIds.any { touchesStation(it, inc, d) }) ||
-                (line != null && (inc.strs("lines").any { lineKey(it) == lineKey(line) } || (inc.str("source") == "auto" && mentionsLine(line, title ?: ""))))
+                (line != null && (inc.strings("lines").any { lineKey(it) == lineKey(line) } || (inc.str("source") == "auto" && mentionsLine(line, title ?: ""))))
             if (hit) out += fromIncident(inc).copy(onRoute = ids?.contains(id) == true || titles?.contains(title) == true)
         }
         for (a in pic.alerts) {
@@ -198,7 +209,7 @@ class PlaceBrief(
             val id = a.str("id")
             val title = a.str("title")
             val hit = ids?.contains(id) == true || titles?.contains(title) == true ||
-                stationIds.any { sid -> a.objs("stations").any { it.str("id") == sid } } ||
+                stationIds.any { sid -> a.objects("stations").any { it.str("id") == sid } } ||
                 (line != null && mentionsLine(line, "${title ?: ""} ${a.str("description") ?: ""}"))
             if (hit) out += fromAlert(a).copy(onRoute = ids?.contains(id) == true || titles?.contains(title) == true)
         }
@@ -216,22 +227,24 @@ class PlaceBrief(
             put("severity", when (effect) { "interrupted" -> "critical"; "limited" -> "major"; else -> "info" })
             put("source", if (d.str("kind") == "control") "control" else d.str("kind") ?: "control")
             put("effect", effect); put("cause", d["cause"] ?: JsonNull); put("lines", d["lines"] ?: JsonArray(emptyList()))
-            put("durationType", d.str("durationType")); put("until", d.lng("until")); put("lifecycle", d.str("lifecycle"))
+            put("durationType", d.str("durationType")); put("until", d.long("until")); put("lifecycle", d.str("lifecycle"))
             put("messages", d["messages"] ?: JsonArray(emptyList())); put("replacementBus", d.truthy("replacementBus"))
             put("status", if (ended) "ended" else "active"); put("updatedAt", now())
         }
     }
 
-    /** The station nearest to a position, from the twin's brief: `{id, name, distanceM}`. */
+    /**
+     * The station nearest to a position, `{id, name, distanceM}`: our own catalog (same rule as `GET /api/nearest`,
+     * instant, works without sbb-twin). It used to ask the twin's brief with a 2 s timeout, which lost the place
+     * whenever the twin was slow.
+     */
     private suspend fun nearestStation(lat: Double, lon: Double): JsonObject? {
-        val tb = try { twin.json("/api/brief?lat=$lat&lon=$lon", 2_000).obj() } catch (e: Exception) { null } ?: return null
-        tb.o("nearest")?.let { return it }
-        val st = tb.o("station") ?: return null
-        return JsonObject(st + ("distanceM" to JsonPrimitive(0)))
+        val (st, km) = Places.nearest(catalog.list(), lat, lon) ?: return null
+        return buildJsonObject { put("id", st.id); put("name", st.name); put("distanceM", (km * 1000).roundToInt()) }
     }
 
     // ---------- resolving the place ----------
-    private suspend fun resolve(raw: String?): Station? {
+    private suspend fun resolve(raw: String?): CatalogStation? {
         val s = raw?.trim()
         if (s.isNullOrEmpty()) return null
         val list = catalog.list()
@@ -240,7 +253,7 @@ class PlaceBrief(
         return Places.placesIn(s, list).firstOrNull()?.st
     }
 
-    internal data class Resolved(val station: Station?, val from: Station?, val to: Station?, val line: String?)
+    internal data class Resolved(val station: CatalogStation?, val from: CatalogStation?, val to: CatalogStation?, val line: String?)
 
     private val LINE_IN_TEXT = Regex("\\b(IC|IR|ICE|EC|RE|IRE|S|SN|R|PE)\\s?(\\d{1,3})\\b", RegexOption.IGNORE_CASE)
 
@@ -320,7 +333,7 @@ class PlaceBrief(
         val pic = livePicture()
         val tb = twinBriefD.await()
         val fromTwin = tb?.let {
-            (it.objs("disruptions").map { d -> fromIncident(twinIncident(d)) } + it.objs("alerts").filter { a -> alertActive(a) }.map { a -> fromAlert(a) })
+            (it.objects("disruptions").map { d -> fromIncident(twinIncident(d)) } + it.objects("alerts").filter { a -> alertActive(a) }.map { a -> fromAlert(a) })
                 .map { d -> d.copy(onRoute = route) }
         }
         var disruptions: List<BriefDisruption>
@@ -335,7 +348,7 @@ class PlaceBrief(
             place = "${from.name} to ${to.name}"
             val planD = async {
                 val tj = tb?.get("journeys") as? JsonArray
-                tj ?: try { twin.json("/api/plan?$qs&limit=4", 4_000).obj().a("journeys") } catch (e: Exception) { EMPTY_ARRAY }
+                tj ?: try { twin.json("/api/plan?$qs&limit=4", 4_000).obj().array("journeys") } catch (e: Exception) { EMPTY_ARRAY }
             }
             val extrasD = async {
                 try {
@@ -348,47 +361,47 @@ class PlaceBrief(
                 } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
             }
             val sitD = async { try { twin.json("/api/situation?$qs", 3_000).obj() } catch (e: Exception) { null } }
-            val plan = planD.await().objs()
+            val plan = planD.await().objects()
             val extras = extrasD.await()
             val sit = sitD.await()
-            val ids = plan.flatMap { j -> j.objs("legs").flatMap { l -> l.objs("incidents").mapNotNull { it.str("id") } } }.toSet()
+            val ids = plan.flatMap { j -> j.objects("legs").flatMap { l -> l.objects("incidents").mapNotNull { it.str("id") } } }.toSet()
             // what lies on the way: the journeys' incidents and warnings, and the twin's onTheWay
-            val warned = plan.take(3).flatMap { it.strs("warnings") }.toSet()
-            val onTheWay = sit.strs("onTheWay")
+            val warned = plan.take(3).flatMap { it.strings("warnings") }.toSet()
+            val onTheWay = sit.strings("onTheWay")
             fun onWay(d: BriefDisruption) = d.id in ids || onTheWay.any { it.replace(" - ", " – ") == d.title } ||
                 warned.any { it.replace(" - ", " – ").contains(d.title) }
             disruptions = fromTwin?.map { it.copy(onRoute = onWay(it)) }
                 ?: relevant(pic, listOf(from.id, to.id), r.line, ids, onTheWay.toSet())
-            val usable = plan.filter { j -> j.objs("legs").none { it.str("status") == "cancelled" } }.take(3)
+            val usable = plan.filter { j -> j.objects("legs").none { it.str("status") == "cancelled" } }.take(3)
             // a plausibility check: a bus ride (or any trip) far slower than the distance allows is shown as uncertain
             val km = hypot((to.lon - from.lon) * 76, (to.lat - from.lat) * 111)
             fun uncertain(j: JsonObject): Boolean {
-                val min = ((j.lng("arrival") ?: 0) - (j.lng("departure") ?: 0)) / 60_000.0
-                val busSlow = j.objs("legs").any { l ->
-                    val lf = l.o("from"); val lt = l.o("to")
-                    val legKm = hypot(((lt.num("lon") ?: 0.0) - (lf.num("lon") ?: 0.0)) * 76, ((lt.num("lat") ?: 0.0) - (lf.num("lat") ?: 0.0)) * 111)
-                    val legMin = ((lt.lng("expectedArr") ?: lt.lng("plannedArr") ?: 0) - (lf.lng("expectedDep") ?: lf.lng("plannedDep") ?: 0)) / 60_000.0
+                val min = ((j.long("arrival") ?: 0) - (j.long("departure") ?: 0)) / 60_000.0
+                val busSlow = j.objects("legs").any { l ->
+                    val lf = l.obj("from"); val lt = l.obj("to")
+                    val legKm = hypot(((lt.double("lon") ?: 0.0) - (lf.double("lon") ?: 0.0)) * 76, ((lt.double("lat") ?: 0.0) - (lf.double("lat") ?: 0.0)) * 111)
+                    val legMin = ((lt.long("expectedArr") ?: lt.long("plannedArr") ?: 0) - (lf.long("expectedDep") ?: lf.long("plannedDep") ?: 0)) / 60_000.0
                     l.str("category") == "EV" && legMin > max(45.0, 2.5 * legKm * 0.75)
                 }
-                return busSlow || (km < 150 && min > 180 && j.objs("legs").any { it.str("category") == "EV" })
+                return busSlow || (km < 150 && min > 180 && j.objects("legs").any { it.str("category") == "EV" })
             }
             journeys = usable.sortedBy { uncertain(it) }.map { j ->
-                val dep = j.lng("departure") ?: 0
-                val arr = j.lng("arrival") ?: 0
-                val late = j.num("arrivalDelayMin")?.toInt() ?: 0
+                val dep = j.long("departure") ?: 0
+                val arr = j.long("arrival") ?: 0
+                val late = j.double("arrivalDelayMin")?.toInt() ?: 0
                 BriefJourney(
                     journeyId = j.str("id") ?: "",
                     durationMin = ((arr - dep) / 60_000.0).roundToInt(),
                     uncertain = uncertain(j),
                     departs = hhmm(dep), arrives = hhmm(arr),
-                    transfers = j.num("transfers")?.toInt() ?: 0,
+                    transfers = j.double("transfers")?.toInt() ?: 0,
                     lateMin = if (late > 0) late else 0,
-                    legs = j.objs("legs").map { l ->
-                        val lf = l.o("from"); val lt = l.o("to")
+                    legs = j.objects("legs").map { l ->
+                        val lf = l.obj("from"); val lt = l.obj("to")
                         val name = if (l.str("category") == "EV") "replacement bus (EV)" else spaced(l.str("line") ?: "")
-                        "$name ${lf.str("name")} ${hhmm(lf.lng("expectedDep") ?: lf.lng("plannedDep") ?: dep)} → ${lt.str("name")} ${hhmm(lt.lng("expectedArr") ?: lt.lng("plannedArr") ?: arr)}"
+                        "$name ${lf.str("name")} ${hhmm(lf.long("expectedDep") ?: lf.long("plannedDep") ?: dep)} → ${lt.str("name")} ${hhmm(lt.long("expectedArr") ?: lt.long("plannedArr") ?: arr)}"
                     },
-                    warnings = j.strs("warnings").take(3),
+                    warnings = j.strings("warnings").take(3),
                 )
             }
             visuals = extras?.visuals ?: EMPTY_ARRAY
@@ -456,13 +469,13 @@ class PlaceBrief(
             put("visuals", visuals)
             put("twin", JsonNull)
             putJsonArray("departures") {
-                for (d in tb.objs("departures").take(6)) addJsonObject {
+                for (d in tb.objects("departures").take(6)) addJsonObject {
                     put("line", d.str("line")); put("headsign", d.str("headsign"))
-                    put("time", hhmm(d.lng("expected") ?: d.lng("planned") ?: 0))
+                    put("time", hhmm(d.long("expected") ?: d.long("planned") ?: 0))
                     put("delayMin", d["delayMin"]?.takeIf { it !is JsonNull } ?: JsonPrimitive(0)); put("cancelled", d.truthy("cancelled"))
                 }
             }
-            put("nearest", tb.o("nearest") ?: JsonNull)
+            put("nearest", tb.obj("nearest") ?: JsonNull)
             put("source", if (tb != null) "twin-brief" else "composed")
             put("elapsedMs", now() - t0)
         }
@@ -501,7 +514,7 @@ class PlaceBrief(
 
     private fun shownFor(vs: JsonArray): String {
         val bits = mutableListOf<String>()
-        val objs = vs.objs()
+        val objs = vs.objects()
         for (v in objs) {
             when (v.str("type")) {
                 "route" -> if (v.str("style") == "recommended") bits += "the recommended route (${v.str("label")})"
@@ -541,7 +554,7 @@ class PlaceBrief(
     suspend fun disruptionById(id: String): JsonObject? {
         val pic = livePicture()
         pic.incidents.find { it.str("id") == id || it.str("disruptionId") == id }?.let { inc ->
-            val lines = inc.a("lines")
+            val lines = inc.array("lines")
             return fromIncident(inc).json { put("lines", JsonArray(lines.take(12))); put("moreLines", max(0, lines.size - 12)) }
         }
         val a = pic.alerts.find { it.str("id") == id } ?: return null

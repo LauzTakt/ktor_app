@@ -1,5 +1,6 @@
 package ch.lauzhack.twin
 
+import ch.lauzhack.twin.common.searchKey
 import ch.lauzhack.twin.db.Database
 import ch.lauzhack.twin.model.Incident
 import ch.lauzhack.twin.model.IncidentScope
@@ -157,9 +158,9 @@ class ApiTest {
 
     @Test
     fun searchKeyIgnoresAccents() {
-        assertEquals("zurich hb", ch.lauzhack.twin.api.v1.searchKey(" Zürich HB "))
-        assertEquals("geneve", ch.lauzhack.twin.api.v1.searchKey("Genève"))
-        assertEquals("strasse", ch.lauzhack.twin.api.v1.searchKey("Straße"))
+        assertEquals("zurich hb", searchKey(" Zürich HB "))
+        assertEquals("geneve", searchKey("Genève"))
+        assertEquals("strasse", searchKey("Straße"))
     }
 
     @Test

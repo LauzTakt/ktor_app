@@ -1,6 +1,6 @@
 package ch.lauzhack.twin
 
-import ch.lauzhack.twin.api.v1.TwinQueries
+import ch.lauzhack.twin.query.TwinQueries
 import ch.lauzhack.twin.db.Database
 import ch.lauzhack.twin.model.Incident
 import ch.lauzhack.twin.model.IncidentScope

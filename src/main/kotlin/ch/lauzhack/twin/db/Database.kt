@@ -270,13 +270,6 @@ class Database(path: String) : AutoCloseable {
         "SELECT * FROM incident" + (if (activeOnly) " WHERE removed_at IS NULL" else "") + " ORDER BY updated_at DESC",
     ) { it.toIncidentRow(withGeometry) }
 
-    /** Incidents whose scope touches a station (section endpoint or the station itself). */
-    fun incidentsAtStation(stopId: String, activeOnly: Boolean): List<IncidentRow> = query(
-        "SELECT * FROM incident WHERE (scope_from=? OR scope_to=?)" +
-            (if (activeOnly) " AND removed_at IS NULL" else "") + " ORDER BY updated_at DESC",
-        stopId, stopId,
-    ) { it.toIncidentRow() }
-
     fun incidentHistory(id: String): List<IncidentEventRow> = query(
         "SELECT seq, incident_id, kind, received_at, updated_at, status, severity FROM incident_event WHERE incident_id=? ORDER BY seq",
         id,

@@ -2,8 +2,9 @@
 
 Read API over the live twin data ingested from MQTT, staff incident reports (the only writes) and the passenger
 assistant (`POST /assistant/ask`). Base path **`/api/v1`**, JSON only. A live fleet WebSocket and the staff web UI are described at the end.
-Implementation: `src/main/kotlin/ch/lauzhack/twin/api/v1/` (`Routes.kt` routing + params, `TwinQueries.kt` logic,
-`Dto.kt` response types). **Swagger UI: `/swagger`** (spec `src/main/resources/openapi/documentation.yaml`,
+Implementation: `src/main/kotlin/ch/lauzhack/twin/api/v1/` (`Routes.kt` routing + params, `Errors.kt` error bodies)
+over `query/` (`TwinQueries.kt`, `JourneyQueries.kt`, `IncidentQueries.kt` logic, `ReadModels.kt` response types);
+see [`CODE_ARCHITECTURE.md`](CODE_ARCHITECTURE.md). **Swagger UI: `/swagger`** (spec `src/main/resources/openapi/documentation.yaml`,
 written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lauzhack/twin/ApiTest.kt`.
 
 ## Conventions

@@ -1,6 +1,6 @@
 // Talks to the passenger agent in text (no microphone): checks the prompt, the ask_backend tool loop and the answers.
 // Usage: node scripts/agent-chat.mjs "My IC to Bern was cancelled at Zürich HB, what now?" ["follow-up" ...]
-// ask_backend calls the app's endpoint (APP_URL, default http://127.0.0.1:5190), like the browser does.
+// ask_backend calls the app's endpoint (APP_URL, default http://127.0.0.1:8080), like the browser does.
 import { readFileSync } from "node:fs";
 import { Conversation } from "@elevenlabs/client";
 

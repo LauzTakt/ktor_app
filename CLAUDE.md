@@ -3,6 +3,8 @@
 Kotlin/Ktor backend of the LauzHack 2026 train digital-twin project. **Read this first**, then the two reference docs:
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): full system diagram (source of truth for what this app must do).
+- [`docs/CODE_ARCHITECTURE.md`](docs/CODE_ARCHITECTURE.md): **packages, layers, dependency rules and runtime
+  interactions between modules**. Read it before adding a package or a cross-package call; update it when they change.
 - [`docs/DATA_SOURCE.md`](docs/DATA_SOURCE.md): the sbb-twin MQTT feed this app consumes (topics, payloads, rules).
 - Docker / deploy (Coolify): [`docker/README.md`](docker/README.md); all config from env vars.
 - [`docs/STYLE.md`](docs/STYLE.md): **visual rules for every page** (SBB look). Follow it for any UI work: no gradients, glow or emoji.
@@ -60,10 +62,14 @@ few seconds from the retained `trains/+/info` topics plus the next `fleet` messa
   the broker 15 s after a reconnect (it was unmarked while we were offline).
 - `station`: catalog, upserted when a new stopId appears.
 
-REST read API: `/api/v1/...`, documented in [`docs/API.md`](docs/API.md). Layers: `Routes.kt` (routing, param
-validation, `StatusPages` errors) -> `TwinQueries.kt` (joins LiveState + active incidents, pure/testable) -> `Dto.kt`
-(public contract, decoupled from MQTT payloads). `Application.configureHttp(state, db, …)` lets tests inject a seeded
-`LiveState` (see `ApiTest.kt`, fixtures in `Fixtures.kt`).
+REST read API: `/api/v1/...`, documented in [`docs/API.md`](docs/API.md). Layers (details and rules in
+[`docs/CODE_ARCHITECTURE.md`](docs/CODE_ARCHITECTURE.md)): `api/v1/Routes.kt` (routing, param validation) ->
+`query/` (`TwinQueries`, `JourneyQueries`, `IncidentQueries`: join LiveState + active incidents, pure/testable, no
+HTTP) -> `query/ReadModels.kt` (public contract, decoupled from MQTT payloads). Errors below the routes are
+`common/Errors.kt` exceptions, mapped to HTTP only in `api/v1/Errors.kt`. sbb-twin is reached only through
+`twinapi/SbbTwinClient` (config `twin.url`); shared helpers (geo, time, JSON, `searchKey`) live in `common/`.
+`Application.configureHttp(state, db, …)` lets tests inject a seeded `LiveState` (see `ApiTest.kt`, fixtures in
+`Fixtures.kt`).
 
 ## Feed facts verified on the live broker (2026-11-21) — not all are in DATA_SOURCE.md
 

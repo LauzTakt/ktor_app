@@ -1,9 +1,8 @@
 package ch.lauzhack.twin.api.v1
 
+import ch.lauzhack.twin.common.hhmm
+import ch.lauzhack.twin.query.ScreenDto
 import java.security.MessageDigest
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 /**
  * Plain-text form of [ScreenDto] for microcontroller displays (GET /stations/{id}/screen.txt): one line per item,
@@ -11,8 +10,6 @@ import java.time.format.DateTimeFormatter
  * parser nor time zone rules. Format in docs/API.md "Station screen, text form".
  */
 object ScreenText {
-    private val ZURICH: ZoneId = ZoneId.of("Europe/Zurich")
-    private val HHMM: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm").withZone(ZURICH)
     const val TITLE_MAX = 96
     const val WHERE_MAX = 48
 
@@ -43,7 +40,6 @@ object ScreenText {
         return Rendered(body, etag)
     }
 
-    private fun hhmm(epochMs: Long) = HHMM.format(Instant.ofEpochMilli(epochMs))
 
     /** No separators or line breaks inside a field; long values cut on a character boundary. */
     private fun field(v: String, max: Int): String {

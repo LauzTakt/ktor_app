@@ -1,13 +1,13 @@
 package ch.lauzhack.twin.wallet
 
-import kotlinx.serialization.Serializable
+import ch.lauzhack.twin.common.ZURICH
 import java.awt.Color
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
 import java.time.Instant
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import javax.imageio.ImageIO
+import kotlinx.serialization.Serializable
 
 /**
  * The front of every Trip Watch pass, laid out like a rail ticket in Wallet. Apple Wallet, Google Wallet and the web
@@ -54,9 +54,8 @@ internal fun TripWatch.passFace(site: String): TripWatchPassFace {
     )
 }
 
-private val zurich = ZoneId.of("Europe/Zurich")
-private val passDateTime = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm").withZone(zurich)
-private val passDate = DateTimeFormatter.ofPattern("dd.MM.yyyy").withZone(zurich)
+private val passDateTime = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm").withZone(ZURICH)
+private val passDate = DateTimeFormatter.ofPattern("dd.MM.yyyy").withZone(ZURICH)
 
 /** Plain red bar (3:1, the proportions of a Swiss railway flag, without any symbol). */
 private val passRed = Color(235, 0, 0)

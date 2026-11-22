@@ -1,10 +1,10 @@
 package ch.lauzhack.twin.wallet
 
 import ch.lauzhack.twin.T0
-import ch.lauzhack.twin.api.v1.TwinQueries
-import ch.lauzhack.twin.assistant.CachedJourney
-import ch.lauzhack.twin.assistant.JourneyCache
-import ch.lauzhack.twin.assistant.PlanQuery
+import ch.lauzhack.twin.query.TwinQueries
+import ch.lauzhack.twin.twinapi.CachedJourney
+import ch.lauzhack.twin.twinapi.JourneyCache
+import ch.lauzhack.twin.twinapi.PlanQuery
 import ch.lauzhack.twin.configureHttp
 import ch.lauzhack.twin.db.Database
 import ch.lauzhack.twin.info

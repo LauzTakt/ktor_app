@@ -1,11 +1,10 @@
 package ch.lauzhack.twin
 
-import ch.lauzhack.twin.api.v1.TwinQueries
 import ch.lauzhack.twin.assistant.AnthropicLlm
 import ch.lauzhack.twin.assistant.AssistantAgent
 import ch.lauzhack.twin.assistant.AssistantConfig
-import ch.lauzhack.twin.assistant.JourneyCache
-import ch.lauzhack.twin.assistant.SbbTwinClient
+import ch.lauzhack.twin.twinapi.JourneyCache
+import ch.lauzhack.twin.twinapi.SbbTwinClient
 import ch.lauzhack.twin.assistant.assistantV1
 import ch.lauzhack.twin.assistant.buildAssistant
 import ch.lauzhack.twin.api.v1.apiV1
@@ -21,6 +20,7 @@ import ch.lauzhack.twin.auth.staffPages
 import ch.lauzhack.twin.db.Database
 import ch.lauzhack.twin.mqtt.MqttConfig
 import ch.lauzhack.twin.mqtt.MqttIngestor
+import ch.lauzhack.twin.passenger.CatalogStation
 import ch.lauzhack.twin.passenger.PassengerConfig
 import ch.lauzhack.twin.passenger.PassengerService
 import ch.lauzhack.twin.passenger.passengerApi
@@ -29,6 +29,9 @@ import ch.lauzhack.twin.push.PushSender
 import ch.lauzhack.twin.push.PushService
 import ch.lauzhack.twin.push.PushStore
 import ch.lauzhack.twin.push.pushV1
+import ch.lauzhack.twin.query.IncidentQueries
+import ch.lauzhack.twin.query.JourneyQueries
+import ch.lauzhack.twin.query.TwinQueries
 import ch.lauzhack.twin.state.LiveState
 import ch.lauzhack.twin.wallet.TripWatchJourneys
 import ch.lauzhack.twin.wallet.TripWatchService
@@ -159,6 +162,7 @@ fun Application.configureHttp(
     val auth = AuthService(db, authConfig).also { it.ensureDefaultAdmin() }
     installStaffAuth(auth)
     val queries = TwinQueries(state) { db.incidents(activeOnly = true) }
+    val journeyQueries = JourneyQueries(state, queries)
     val live = LiveUpdates(queries, db)
     val fleet = FleetFeed(state)
     val agent = assistant?.invoke(queries)
@@ -198,7 +202,7 @@ fun Application.configureHttp(
         get("/health") { call.respond(Health("ok")) }
         // Swagger UI at /swagger, spec at /swagger/documentation.yaml (keep in sync with docs/API.md and api/v1/).
         swaggerUI(path = "swagger", swaggerFile = "openapi/documentation.yaml")
-        apiV1(queries, db, mqttConnected)
+        apiV1(queries, journeyQueries, IncidentQueries(db), mqttConnected)
         authV1(auth)
         reportsV1(state, db)
         assistantV1(agent)
@@ -227,9 +231,9 @@ fun Application.configureHttp(
  * 10 + the trains in service calling there (the twin counts the whole day), so every station passes the catalog's
  * minimum and busier ones still rank first.
  */
-private fun localStations(state: LiveState): List<ch.lauzhack.twin.passenger.Station> =
+private fun localStations(state: LiveState): List<CatalogStation> =
     state.stations().mapNotNull { s ->
         val lat = s.lat ?: return@mapNotNull null
         val lon = s.lon ?: return@mapNotNull null
-        ch.lauzhack.twin.passenger.Station(s.stopId, s.name, 10 + state.trainsCallingAt(s.stopId).size, lon, lat)
+        CatalogStation(s.stopId, s.name, 10 + state.trainsCallingAt(s.stopId).size, lon, lat)
     }

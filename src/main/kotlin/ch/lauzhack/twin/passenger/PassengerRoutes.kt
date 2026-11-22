@@ -1,6 +1,15 @@
 package ch.lauzhack.twin.passenger
 
-import ch.lauzhack.twin.assistant.JourneyCache
+import ch.lauzhack.twin.twinapi.JourneyCache
+import ch.lauzhack.twin.common.array
+import ch.lauzhack.twin.common.double
+import ch.lauzhack.twin.common.long
+import ch.lauzhack.twin.common.obj
+import ch.lauzhack.twin.common.objects
+import ch.lauzhack.twin.common.str
+import ch.lauzhack.twin.twinapi.SbbTwinClient
+import ch.lauzhack.twin.twinapi.TwinException
+import ch.lauzhack.twin.twinapi.enc
 import ch.lauzhack.twin.web.FleetFeed
 import io.ktor.http.ContentType
 import io.ktor.http.HttpMethod
@@ -15,6 +24,13 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.route
+import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
+import java.time.Duration
+import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.roundToLong
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -30,13 +46,6 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import org.slf4j.LoggerFactory
-import java.net.URI
-import java.net.http.HttpClient
-import java.net.http.HttpRequest
-import java.net.http.HttpResponse
-import java.time.Duration
-import java.util.concurrent.ConcurrentHashMap
-import kotlin.math.roundToLong
 
 /**
  * Server side of the passenger voice app (port of sbb-client `server/plugin.ts` + `twin.ts`): ElevenLabs session
@@ -46,10 +55,10 @@ class PassengerService(
     val config: PassengerConfig,
     private val fleet: FleetFeed? = null,
     journeys: JourneyCache? = null,
-    localStations: () -> List<Station> = { emptyList() },
+    localStations: () -> List<CatalogStation> = { emptyList() },
 ) {
     private val log = LoggerFactory.getLogger("passenger")
-    val twin = TwinHttp(config.twinUrl)
+    val twin = SbbTwinClient(config.twinUrl, timeoutMs = 15_000)
     val catalog = StationCatalog(twin, local = localStations)
     val brief = PlaceBrief(twin, catalog, journeyCache = journeys)
     private val http = HttpClient.newBuilder().connectTimeout(Duration.ofMillis(3_000)).build()
@@ -82,20 +91,20 @@ class PassengerService(
         twinFleet?.takeIf { System.currentTimeMillis() - it.first <= 1_500 }?.let { return it.second }
         return fleetMutex.withLock {
             twinFleet?.takeIf { System.currentTimeMillis() - it.first <= 1_500 }?.let { return@withLock it.second }
-            val list = try { twin.json("/api/trains", 15_000).objs() } catch (e: CancellationException) { throw e } catch (e: Exception) {
+            val list = try { twin.json("/api/trains", 15_000).objects() } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 twinFleet?.let { return@withLock it.second }
                 throw e
             }
             fun r5(x: Double?) = ((x ?: 0.0) * 1e5).roundToLong() / 1e5
             val body = buildJsonObject {
                 put("type", "tick")
-                put("ts", list.maxOfOrNull { it.lng("ts") ?: 0 } ?: 0)
+                put("ts", list.maxOfOrNull { it.long("ts") ?: 0 } ?: 0)
                 putJsonArray("trains") {
                     for (t in list) addJsonArray {
-                        add(t.str("trainId")); add(r5(t.num("lat"))); add(r5(t.num("lon")))
-                        add((t.num("bearing") ?: 0.0).roundToLong()); add((t.num("speedKmh") ?: 0.0).roundToLong())
+                        add(t.str("trainId")); add(r5(t.double("lat"))); add(r5(t.double("lon")))
+                        add((t.double("bearing") ?: 0.0).roundToLong()); add((t.double("speedKmh") ?: 0.0).roundToLong())
                         add(t.str("motion")); add(t["delaySec"]?.takeIf { it !is JsonNull }?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()?.roundToLong() } ?: 0L)
-                        add(t.str("line")); add(t.str("category")); add(t.o("atStop").str("id")); add(t.lng("continuity") ?: 0)
+                        add(t.str("line")); add(t.str("category")); add(t.obj("atStop").str("id")); add(t.long("continuity") ?: 0)
                     }
                 }
             }.toString()
@@ -122,7 +131,7 @@ class PassengerService(
             return call.respondBytes(hit.body, contentType(hit.type), HttpStatusCode.fromValue(hit.status))
         }
         val r = try { twin.raw(path, 20_000) } catch (e: CancellationException) { throw e } catch (e: Exception) {
-            return call.json(HttpStatusCode.BadGateway, errorBody("sbb-twin unreachable: ${e.message ?: e.javaClass.simpleName}"))
+            return call.json(HttpStatusCode.BadGateway, errorBody((e as? TwinException)?.message ?: "sbb-twin unreachable: ${e.message ?: e.javaClass.simpleName}"))
         }
         val type = r.contentType ?: "application/json"
         if (r.status in 200..299 && cachedPaths.matches(path.substringBefore('?'))) proxyCache[path] = Cached(System.currentTimeMillis(), r.status, type, r.body)
@@ -150,7 +159,7 @@ private suspend fun ApplicationCall.guard(block: suspend ApplicationCall.() -> U
         LoggerFactory.getLogger("passenger").warn("{} failed: {}", request.path(), e.toString())
         // the twin unreachable or answering an error: 502, like the proxy; anything else is ours: 500
         val status = if (e is java.io.IOException) HttpStatusCode.BadGateway else HttpStatusCode.InternalServerError
-        json(status, errorBody(if (e is java.io.IOException) "sbb-twin unreachable: ${e.message ?: e.javaClass.simpleName}" else (e.message ?: e.javaClass.simpleName)))
+        json(status, errorBody(if (e is TwinException) e.message ?: "sbb-twin unreachable" else if (e is java.io.IOException) "sbb-twin unreachable: ${e.message ?: e.javaClass.simpleName}" else (e.message ?: e.javaClass.simpleName)))
     }
 }
 
@@ -180,7 +189,7 @@ fun Route.passengerApi(svc: PassengerService) {
             val b = svc.brief.placeBrief(BriefQuery(p["station"], p["from"], p["to"], p["line"], p["q"], p["lat"], p["lon"]))
             log.info(
                 "[brief] {} {} ms {}",
-                b?.let { "${it.str("key")} related=${it["related"]} ${it.a("disruptions").size} disruptions ${it.a("journeys").size} journeys" } ?: "no place",
+                b?.let { "${it.str("key")} related=${it["related"]} ${it.array("disruptions").size} disruptions ${it.array("journeys").size} journeys" } ?: "no place",
                 System.currentTimeMillis() - t0, request.queryString().take(120),
             )
             if (b != null) json(HttpStatusCode.OK, b) else json(HttpStatusCode.NotFound, errorBody("No station, route or line recognised"))

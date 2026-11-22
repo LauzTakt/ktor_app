@@ -1,6 +1,9 @@
 package ch.lauzhack.twin.api.v1
 
 import ch.lauzhack.twin.auth.staff
+import ch.lauzhack.twin.common.ConflictException
+import ch.lauzhack.twin.common.invalid
+import ch.lauzhack.twin.common.notFound
 import ch.lauzhack.twin.auth.staffOnly
 import ch.lauzhack.twin.db.Database
 import ch.lauzhack.twin.db.StaffReportRow
@@ -74,7 +77,7 @@ fun StaffReportRow.toDto() = ReportDto(
     reporter, status, createdAt, updatedAt, resolvedAt, resolution,
 )
 
-private fun bad(code: String, msg: String): Nothing = throw ApiException(HttpStatusCode.BadRequest, code, msg)
+private fun bad(code: String, msg: String): Nothing = invalid(code, msg)
 
 /** Validates a report and fills in its location from the live state. Pure apart from [now]/[newId]. */
 fun buildReport(
@@ -170,7 +173,7 @@ fun Route.reportsV1(state: LiveState, db: Database) = route("/api/v1/reports") {
         val id = call.parameters["id"]!!
         val body = runCatching { call.receive<ResolveReportDto>() }.getOrDefault(ResolveReportDto())
         val existing = db.report(id) ?: throw notFound("report", id)
-        if (existing.status != "open") throw ApiException(HttpStatusCode.Conflict, "already_resolved", "report '$id' is already resolved")
+        if (existing.status != "open") throw ConflictException("already_resolved", "report '$id' is already resolved")
         db.resolveReport(id, System.currentTimeMillis(), body.resolution?.trim()?.takeIf { it.isNotEmpty() }?.take(1000))
         call.respond(db.report(id)!!.toDto())
     }

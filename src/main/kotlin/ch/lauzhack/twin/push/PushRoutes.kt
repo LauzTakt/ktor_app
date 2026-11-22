@@ -1,6 +1,6 @@
 package ch.lauzhack.twin.push
 
-import ch.lauzhack.twin.api.v1.ApiException
+import ch.lauzhack.twin.common.invalid
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -132,4 +132,4 @@ fun Route.pushV1(push: PushService) = route("/api/v1/push") {
 
 private fun RoutingCall.deviceId(): String = parameters["deviceId"]!!
 
-private fun bad(code: String, msg: String): Nothing = throw ApiException(HttpStatusCode.BadRequest, code, msg)
+private fun bad(code: String, msg: String): Nothing = invalid(code, msg)

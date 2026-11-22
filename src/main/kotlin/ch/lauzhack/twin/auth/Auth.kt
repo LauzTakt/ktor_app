@@ -1,6 +1,9 @@
 package ch.lauzhack.twin.auth
 
-import ch.lauzhack.twin.api.v1.ApiException
+import ch.lauzhack.twin.common.ConflictException
+import ch.lauzhack.twin.common.InvalidInputException
+import ch.lauzhack.twin.common.NotFoundException
+import ch.lauzhack.twin.common.UnauthorizedException
 import ch.lauzhack.twin.db.Database
 import ch.lauzhack.twin.db.UserRow
 import io.ktor.http.Cookie
@@ -164,7 +167,7 @@ class AuthService(private val db: Database, private val cfg: AuthConfig = AuthCo
         validatePassword(req.password)
         val now = clock()
         val row = UserRow(req.username, Passwords.hash(req.password), ROLE_STAFF, now, now)
-        if (!db.insertUser(row)) throw ApiException(HttpStatusCode.Conflict, "user_exists", "user '${req.username}' already exists")
+        if (!db.insertUser(row)) throw ConflictException("user_exists", "user '${req.username}' already exists")
         log.info("staff user created: {}", req.username)
         return row.toDto()
     }
@@ -178,19 +181,19 @@ class AuthService(private val db: Database, private val cfg: AuthConfig = AuthCo
     }
 
     fun deleteUser(caller: StaffPrincipal, username: String) {
-        if (caller.username == username) throw ApiException(HttpStatusCode.Conflict, "cannot_delete_self", "you cannot delete your own account")
+        if (caller.username == username) throw ConflictException("cannot_delete_self", "you cannot delete your own account")
         if (!db.deleteUser(username)) throw userNotFound(username)
         log.info("staff user {} deleted by {}", username, caller.username)
     }
 
-    private fun userNotFound(u: String) = ApiException(HttpStatusCode.NotFound, "user_not_found", "user '$u' not found")
+    private fun userNotFound(u: String) = NotFoundException("user_not_found", "user '$u' not found")
 
     private fun validateUsername(u: String) {
-        if (!USERNAME.matches(u)) throw ApiException(HttpStatusCode.BadRequest, "bad_username", "username must be 2-32 chars of a-z, A-Z, 0-9, . _ -")
+        if (!USERNAME.matches(u)) throw InvalidInputException("bad_username", "username must be 2-32 chars of a-z, A-Z, 0-9, . _ -")
     }
 
     private fun validatePassword(p: String) {
-        if (p.length !in 4..200) throw ApiException(HttpStatusCode.BadRequest, "bad_password", "password must be 4-200 characters")
+        if (p.length !in 4..200) throw InvalidInputException("bad_password", "password must be 4-200 characters")
     }
 
     companion object {
@@ -235,7 +238,7 @@ fun Route.authV1(auth: AuthService) = route("/api/v1") {
         post("/login") {
             val req = call.receive<LoginDto>()
             val res = auth.login(req.username, req.password)
-                ?: throw ApiException(HttpStatusCode.Unauthorized, "invalid_credentials", "wrong username or password")
+                ?: throw UnauthorizedException("invalid_credentials", "wrong username or password")
             // Browser session for the staff pages: same token in an HttpOnly cookie.
             call.response.cookies.append(staffCookie(res.token, auth.tokenTtlSeconds, call.request.local.scheme == "https"))
             call.respond(res)
@@ -277,7 +280,7 @@ fun Route.staffPages(auth: AuthService, pages: Map<String, String>) {
                 return@get call.respondRedirect("/login.html?next=" + java.net.URLEncoder.encode(path, Charsets.UTF_8))
             }
             call.response.headers.append(io.ktor.http.HttpHeaders.CacheControl, "no-store")
-            call.respond(call.resolveResource(resource) ?: throw ApiException(HttpStatusCode.NotFound, "not_found", "no page $path"))
+            call.respond(call.resolveResource(resource) ?: throw NotFoundException("not_found", "no page $path"))
         }
     }
 }

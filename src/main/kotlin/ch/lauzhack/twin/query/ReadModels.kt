@@ -1,4 +1,4 @@
-package ch.lauzhack.twin.api.v1
+package ch.lauzhack.twin.query
 
 import ch.lauzhack.twin.db.IncidentEventRow
 import ch.lauzhack.twin.db.IncidentRow
@@ -7,8 +7,10 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 
 /*
- * Public API v1 (see docs/API.md). These DTOs are the contract with the web UI and the prediction model:
- * they are decoupled from the MQTT payloads, so the feed can change without breaking clients.
+ * Read models returned by the query layer ([TwinQueries], [JourneyQueries], [IncidentQueries]). They are also the
+ * public API v1 contract (see docs/API.md) with the web UI and the prediction model, serialized as they are by
+ * `api/v1`; the assistant and the WebSocket hub reuse them in process. They are decoupled from the MQTT payloads, so
+ * the feed can change without breaking clients.
  * Conventions: times are epoch milliseconds UTC, delays in seconds (+ = late), ids are the feed's ids.
  */
 
@@ -207,12 +209,6 @@ data class StatusDto(
     val lastFleetTs: Long?,
     val twin: TwinStatusDto?,
 )
-
-@Serializable
-data class ErrorDto(val error: ErrorBody)
-
-@Serializable
-data class ErrorBody(val code: String, val message: String)
 
 fun IncidentRow.toDto(match: String? = null) = IncidentDto(
     id, title, description, severity, type, reasonCode, scope, where, disruptionId, status, active,

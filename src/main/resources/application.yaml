@@ -21,10 +21,13 @@ auth:
 db:
   path: "$DB_PATH:data/twin.sqlite"
 
+# sbb-twin HTTP API (planner, situation, geometry, stations), read by the assistant and the passenger app.
+twin:
+  url: "$SBB_TWIN_URL:http://127.0.0.1:8787"
+
 # Passenger assistant (POST /api/v1/assistant/ask, docs/API.md). The Claude API key is read from ANTHROPIC_API_KEY
 # (env only, never in this file); without it the endpoint answers 503.
 assistant:
-  twinUrl: "$SBB_TWIN_URL:http://127.0.0.1:8787"
   model: "$ASSISTANT_MODEL:claude-sonnet-5-5"
   fastMode: "$ASSISTANT_FAST_MODE:false"
   effort: "$ASSISTANT_EFFORT:low"
@@ -32,7 +35,7 @@ assistant:
 
 # Passenger voice app (sbb-client port, passenger/): ElevenLabs agent for /api/voice/session. The ElevenLabs API key is
 # read from ELEVENLABS_API_KEY (env only, never in this file); without key + agent id the endpoint answers 503.
-# sbb-twin is reached at assistant.twinUrl (SBB_TWIN_URL).
+# sbb-twin is reached at twin.url (SBB_TWIN_URL).
 passenger:
   agentId: "$PASSENGER_AGENT_ID:"
   elevenLabsUrl: "$ELEVENLABS_API_URL:https://api.elevenlabs.io"
