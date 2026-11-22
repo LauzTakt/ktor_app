@@ -617,7 +617,8 @@ function onTracksScreen(trainId) {
       $("#line", s).innerHTML = lineLabel(train, true);
       $("#to", s).textContent = `to ${train.headsign || train.destination?.name || "?"}`;
       $("#state", s).innerHTML = stateHtml(train);
-      scene.then((x) => x?.update({ speedKmh: train.position?.speedKmh ?? 0 }));
+      const standing = train.position?.motion === "stopped" && train.position?.atStopId;
+      scene.then((x) => x?.update({ speedKmh: standing ? 0 : train.position?.speedKmh ?? 0, atStation: standing ? (train.currentStop?.name || " ") : null }));
 
       const k = stops.findIndex((x) => x.state === "current" || x.state === "next");
       const cur = k >= 0 ? stops[k] : null;
@@ -698,8 +699,8 @@ async function trainScene(canvas) {
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(32, 2, 0.1, 200);
-  camera.position.set(9, 4.2, 11);
-  camera.lookAt(0, 0.9, -1);
+  camera.position.set(9, 6.4, 11);
+  camera.lookAt(-0.5, 0.6, -2);
 
   const mat = (c) => new THREE.MeshLambertMaterial({ color: c });
   const palette = () => ({
@@ -770,6 +771,49 @@ async function trainScene(canvas) {
   train.add(coach(3.9, true), coach(-3.5, false));
   scene.add(train);
 
+  // Station (platform + small house + name sign), shown while the train stands at a stop. It slides in towards the
+  // train when it arrives and moves away with the track when the train leaves.
+  const station = new THREE.Group();
+  const platMat = mat(P.cloud), wallMat = mat(P.white), roofMat2 = mat(P.iron), doorMat = mat(P.granite), trimMat = mat(P.cement);
+  const box = (w, h, d, m, x, y, z) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); station.add(o); return o; };
+  // Platform along the far side of the track, with its white safety line
+  box(3.4, 0.55, 26, platMat, -2.95, 0.28, 0);
+  box(0.14, 0.02, 26, mat("#ffffff"), -1.55, 0.57, 0);
+  // Canopy on slim columns (shows above the train roof)
+  box(2.8, 0.14, 15, roofMat2, -2.7, 3.45, 0);
+  box(2.84, 0.24, 0.1, trimMat, -2.7, 3.32, 7.5);
+  for (const cz of [-6, -2, 2, 6]) box(0.12, 2.9, 0.12, doorMat, -3.2, 2.0, cz);
+  // Station building behind the platform: two floors, windows, door, cornice
+  box(4.2, 3.6, 9, wallMat, -7.0, 1.8, -3);
+  box(4.6, 0.25, 9.4, roofMat2, -7.0, 3.7, -3);
+  box(4.3, 0.12, 9.1, trimMat, -7.0, 1.95, -3);
+  for (const wz of [-6.4, -4.8, -1.2, 0.4]) {
+    box(0.06, 0.8, 0.9, winMat, -4.88, 1.15, wz);
+    box(0.06, 0.8, 0.9, winMat, -4.88, 2.8, wz);
+  }
+  box(0.06, 1.7, 1.2, doorMat, -4.88, 0.85, -3);
+  // Lamps and benches on the platform
+  for (const lz of [-9, 9]) { box(0.08, 3.0, 0.08, doorMat, -3.9, 1.95, lz); box(0.5, 0.12, 0.25, trimMat, -3.7, 3.45, lz); }
+  for (const bz of [-4.5, 4.5]) { box(0.5, 0.08, 1.8, doorMat, -3.8, 0.85, bz); box(0.08, 0.45, 1.8, doorMat, -4.05, 1.1, bz); }
+  // Name sign hanging from the canopy edge, facing the camera
+  const signCanvas = document.createElement("canvas"); signCanvas.width = 512; signCanvas.height = 96;
+  const signTex = new THREE.CanvasTexture(signCanvas);
+  signTex.colorSpace = THREE.SRGBColorSpace;
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 0.64), new THREE.MeshBasicMaterial({ map: signTex }));
+  sign.position.set(-1.5, 4.05, 1.5); sign.rotation.y = 0.69; station.add(sign);
+  box(0.05, 0.5, 0.05, doorMat, -1.5, 3.7, 0.4); box(0.05, 0.5, 0.05, doorMat, -1.5, 3.7, 2.6);
+  const drawSign = (name) => {
+    const g = signCanvas.getContext("2d");
+    g.fillStyle = "#2d327d"; g.fillRect(0, 0, 512, 96);
+    g.fillStyle = "#ffffff"; g.font = "700 64px 'SBB Web', Helvetica, Arial, sans-serif"; g.textBaseline = "middle";
+    let txt = name || ""; while (g.measureText(txt).width > 472 && txt.length > 3) txt = txt.slice(0, -2) + "…";
+    g.fillText(txt, 20, 52); signTex.needsUpdate = true;
+  };
+  station.visible = false;
+  scene.add(station);
+  let stationMode = "away"; // away | arriving | here | leaving
+  let stationName = null;
+
   let speed = 0, target = 0, raf = 0, t0 = performance.now();
   const resize = () => {
     const w = canvas.clientWidth, h = canvas.clientHeight;
@@ -785,6 +829,13 @@ async function trainScene(canvas) {
     speed += (target - speed) * Math.min(1, dt * 1.5); // ease in / out, no jumps
     const v = reducedMotion ? 0 : (speed / 3.6) * 0.18; // scaled down: readable, not dizzying
     moving.position.z = (moving.position.z + v * dt) % (SPACING * 15);
+    if (stationMode === "arriving" || stationMode === "here") {
+      station.position.z += (0 - station.position.z) * Math.min(1, dt * (reducedMotion ? 60 : 1.8)); // eases in, no bounce
+      if (Math.abs(station.position.z) < 0.02) { station.position.z = 0; stationMode = "here"; }
+    } else if (stationMode === "leaving") {
+      station.position.z += Math.max(v, 4) * dt;
+      if (station.position.z > 60) { station.visible = false; stationMode = "away"; }
+    }
     train.position.y = speed > 1 && !reducedMotion ? Math.sin(now / 160) * 0.015 : 0;
     renderer.render(scene, camera);
     raf = requestAnimationFrame(frame);
@@ -794,12 +845,20 @@ async function trainScene(canvas) {
   const recolour = () => {
     P = palette();
     ground.material.color.set(P.milk); ballast.material.color.set(P.cloud); sleeperMat.color.set(P.granite);
+    platMat?.color.set(P.cloud); wallMat?.color.set(P.white === "#17191c" ? "#d2d6db" : "#ffffff"); roofMat2?.color.set(P.iron);
     poleMat.color.set(P.cement); bodyMat.color.set(P.white === "#17191c" ? "#e8e9eb" : P.white); winMat.color.set("#2a2d33");
   };
   recolour();
   themeListeners.add(recolour);
   return {
-    update({ speedKmh }) { target = clamp(speedKmh || 0, 0, 200); },
+    update({ speedKmh, atStation }) {
+      target = clamp(speedKmh || 0, 0, 200);
+      if (atStation && (stationMode === "away" || stationMode === "leaving" || stationName !== atStation)) {
+        if (stationName !== atStation) drawSign(atStation);
+        stationName = atStation;
+        if (stationMode !== "here") { station.position.z = -45; station.visible = true; stationMode = "arriving"; }
+      } else if (!atStation && (stationMode === "here" || stationMode === "arriving")) stationMode = "leaving";
+    },
     dispose() {
       cancelAnimationFrame(raf);
       ro.disconnect();
