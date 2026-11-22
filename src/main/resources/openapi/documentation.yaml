@@ -334,6 +334,34 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Screen" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /stations/{stopId}/screen.txt:
+    get:
+      tags: [stations]
+      summary: Station screen as plain text for microcontrollers (~250 B)
+      description: >-
+        Same view as `/stations/{stopId}/screen`, as `text/plain` UTF-8 with one item per line and `|`-separated
+        fields: `S|name|HH:MM now|now epoch s`, then `D|HH:MM planned|delay min|line|category|to|cancelled 0/1|atStation 0/1`
+        per departure and `I|severity|atStation 0/1|trains|title|where` per incident (worst first). Times are Swiss
+        local time, delays whole minutes. The `ETag` covers everything except the clock: send it in `If-None-Match`
+        and an unchanged board answers 304 with no body.
+      operationId: getStationScreenText
+      parameters:
+        - { $ref: "#/components/parameters/stopId" }
+        - { name: limit, in: query, schema: { type: integer, default: 6, minimum: 1, maximum: 20 }, description: Number of departures }
+        - { name: windowMin, in: query, schema: { type: integer, default: 120, minimum: 1, maximum: 1440 } }
+        - { name: incidents, in: query, schema: { type: integer, default: 3, minimum: 0, maximum: 5 }, description: Number of incidents }
+        - { name: If-None-Match, in: header, schema: { type: string }, description: ETag of the last board received }
+      responses:
+        "200":
+          description: OK
+          headers: { ETag: { schema: { type: string } } }
+          content:
+            text/plain:
+              schema: { type: string }
+              example: "S|Lausanne|23:27|1795294228\nD|23:34|2|IC1|IC|St. Gallen|0|0\nI|major|1|3|Overhead line fault: Lausanne – Fribourg|Lausanne – Fribourg\n"
+        "304": { description: Not modified (same ETag) }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /incidents:
     get:
