@@ -4,11 +4,12 @@
   "private": true,
   "description": "Android/iOS shell (Capacitor) that loads the twin web UI from the server",
   "scripts": {
-    "sync": "cap sync android"
+    "sync": "cap sync"
   },
   "dependencies": {
     "@capacitor/android": "^8.6.2",
-    "@capacitor/core": "^8.6.2"
+    "@capacitor/core": "^8.6.2",
+    "@capacitor/ios": "^8.6.2"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.6.2"
