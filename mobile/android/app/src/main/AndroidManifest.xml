@@ -22,6 +22,24 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- App Links: QR codes and links to the server open the app (verified via /.well-known/assetlinks.json;
+                 host from -PdeepLinkHost, see app/build.gradle). Unverified (e.g. debug key) = "Open with" chooser. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="${deepLinkHost}" android:path="/" />
+                <data android:scheme="https" android:host="${deepLinkHost}" android:path="/index.html" />
+                <data android:scheme="https" android:host="${deepLinkHost}" android:path="/trip-watch.html" />
+            </intent-filter>
+            <!-- traintwin://open/?stop=… : "Open in the app" button on the website (always works, no verification) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="traintwin" />
+            </intent-filter>
+
         </activity>
 
         <!-- Push notifications (FCM): status-bar icon and accent colour (SBB red) -->

@@ -360,3 +360,8 @@ button.stop { font: inherit; color: inherit; }
 .assistant-card .t { font-size: 16px; font-weight: 700; }
 .assistant-card .m { font-size: 13px; color: var(--metal); margin-top: 2px; }
 .assistant-card .btn { grid-column: 1 / -1; }
+
+/* ---------- "Open in the app" bar on phone browsers (app-links.js) ---------- */
+.app-banner { display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 16px; border-bottom: 1px solid var(--cloud); background: var(--milk); }
+.app-banner .t { flex: 1; min-width: 0; font-size: 14px; }
+.app-banner .btn { height: 32px; padding: 0 14px; font-size: 13px; text-decoration: none; color: var(--charcoal); white-space: nowrap; }
