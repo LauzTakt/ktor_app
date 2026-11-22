@@ -2,10 +2,10 @@
 // Shown once per browser (localStorage), before the location prompt; the "?" button in the header replays it.
 // Self-contained: `startTour({ onDone })` builds its own overlay and removes it when finished or skipped.
 
+import { reducedMotion } from "./common.js";
 import { LOKI_SVG } from "./loki.js";
 
 const SEEN_KEY = "twin-tour-v1";
-const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 export const tourSeen = () => {
   try { return localStorage.getItem(SEEN_KEY) === "done"; } catch { return true; }

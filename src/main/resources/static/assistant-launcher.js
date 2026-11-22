@@ -25,7 +25,7 @@
     fab.setAttribute("aria-label", open ? "Close the travel assistant" : "Open the travel assistant");
     fab.title = open ? "Close" : "Travel assistant";
   };
-  // What the passenger has open (passenger.js setView): the assistant sends it with every question.
+  // What the passenger has open (passenger/ui.js setView): the assistant sends it with every question.
   const post = () => panel.querySelector("iframe")?.contentWindow?.postMessage({ type: "twin-view", view: window.twinView ?? null }, location.origin);
   window.addEventListener("twin-view", post);
   window.addEventListener("message", (e) => {

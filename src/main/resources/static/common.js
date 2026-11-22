@@ -1,4 +1,5 @@
-// Shared helpers for the staff pages (map + report).
+// Shared helpers for every page: passenger view, staff pages (map + report), Trip Watch, the onboarding tour.
+// Plain ES module, no build. Keep page-specific code in the page's own module.
 
 export const SEVERITY_COLOURS = { info: "#0079c7", minor: "#f27e00", major: "#eb0000", critical: "#a20013" };
 export const CATEGORIES = {
@@ -16,9 +17,20 @@ const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;
 /** Escape untrusted text (feed and user input) before putting it into HTML. */
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ESC[c]);
 
-const hm = new Intl.DateTimeFormat("de-CH", { timeZone: "Europe/Zurich", hour: "2-digit", minute: "2-digit" });
-const dhm = new Intl.DateTimeFormat("de-CH", { timeZone: "Europe/Zurich", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-const hms = new Intl.DateTimeFormat("de-CH", { timeZone: "Europe/Zurich", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+/** `document.querySelector`. */
+export const $ = (sel, root = document) => root.querySelector(sel);
+
+/** The user asked for less motion: no smooth scrolls, no animations. */
+export const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/** SBB punctuality threshold: a train is "late" from 3 min on (same as the server and the React client). */
+export const LATE_SEC = 180;
+
+export const TZ = "Europe/Zurich";
+const hm = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const dhm = new Intl.DateTimeFormat("de-CH", { timeZone: TZ, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+const hms = new Intl.DateTimeFormat("de-CH", { timeZone: TZ, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+/** `HH:mm`, Swiss time; "–" when unknown. */
 export const time = (ms) => (ms ? hm.format(ms) : "–");
 export const dateTime = (ms) => (ms ? dhm.format(ms) : "–");
 export const clock = (ms) => (ms ? hms.format(ms) : "–");
@@ -26,17 +38,29 @@ export const clock = (ms) => (ms ? hms.format(ms) : "–");
 /** "+3′" for 3 min late, "" when on time (< 1 min). */
 export const delayText = (sec) => (sec == null || Math.abs(sec) < 60 ? "" : `${sec > 0 ? "+" : "−"}${Math.round(Math.abs(sec) / 60)}′`);
 
-export async function api(path, init = {}) {
+/**
+ * `/api/v1` JSON call. `init.json` is sent as the body; 204 -> null. A failure throws an Error with `status` and the
+ * API's error `code` (docs/API.md). [onUnauthorized] runs on 401.
+ */
+async function request(path, init, onUnauthorized) {
+  const body = init.json !== undefined ? JSON.stringify(init.json) : init.body;
   const r = await fetch(`/api/v1${path}`, {
     ...init,
-    headers: { "content-type": "application/json" },
-    body: init.json !== undefined ? JSON.stringify(init.json) : init.body,
+    headers: { Accept: "application/json", ...(body !== undefined ? { "Content-Type": "application/json" } : {}) },
+    body,
   });
+  if (r.status === 204) return null;
   const j = await r.json().catch(() => ({}));
-  if (r.status === 401) toLogin(); // staff session expired or logged out
-  if (!r.ok) throw new Error(j?.error?.message ?? `HTTP ${r.status}`);
+  if (r.status === 401) onUnauthorized?.();
+  if (!r.ok) throw Object.assign(new Error(j?.error?.message ?? `HTTP ${r.status}`), { status: r.status, code: j?.error?.code });
   return j;
 }
+
+/** API call from a staff page: an expired or missing session goes to the login page. */
+export const api = (path, init = {}) => request(path, init, toLogin);
+
+/** API call from a public page (passenger view, alerts). */
+export const publicApi = (path, init = {}) => request(path, init, null);
 
 export function severityBadge(sev) {
   return `<span class="badge" style="background:${SEVERITY_COLOURS[sev] ?? "#767676"}">${esc(sev ?? "?")}</span>`;
@@ -77,12 +101,16 @@ const THEME_KEY = "twin-theme";
 export function currentTheme() {
   return document.documentElement.dataset.theme ?? (localStorage.getItem(THEME_KEY) || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
 }
-const themeListeners = [];
-/** Called with the new theme on every change (maps recolour themselves). */
-export const onTheme = (fn) => themeListeners.push(fn);
-export function setTheme(theme) {
+const themeListeners = new Set();
+/** Calls [fn] with the new theme on every change (maps recolour themselves). Returns the function that stops it. */
+export function onTheme(fn) {
+  themeListeners.add(fn);
+  return () => themeListeners.delete(fn);
+}
+/** Applies [theme] (`light` | `dark`) to the page and tells the listeners; [save] remembers it for every page. */
+export function setTheme(theme, save = true) {
   document.documentElement.dataset.theme = theme;
-  localStorage.setItem(THEME_KEY, theme);
+  if (save) localStorage.setItem(THEME_KEY, theme);
   const btn = document.getElementById("themeToggle");
   if (btn) {
     btn.textContent = theme === "dark" ? "☀ Light" : "☾ Dark";
@@ -90,7 +118,10 @@ export function setTheme(theme) {
   }
   themeListeners.forEach((fn) => fn(theme));
 }
-/** Wires the #themeToggle button of the page. */
+/** The other theme, saved. */
+export const toggleTheme = () => setTheme(currentTheme() === "dark" ? "light" : "dark");
+
+/** Wires the #themeToggle button of a staff page. */
 export function initTheme() {
   setTheme(currentTheme());
   document.getElementById("themeToggle")?.addEventListener("click", () => setTheme(currentTheme() === "dark" ? "light" : "dark"));
@@ -138,8 +169,10 @@ export function addRail(map, beforeId) {
 
 /** Per-theme colours of our own map layers. */
 export const MAP_COLOURS = {
-  light: { rail: "#444444", abroad: "#767676", halo: "#ffffff", stationFill: "#ffffff", stationStroke: "#212121", label: "#212121", labelHalo: "rgba(255,255,255,0.95)", reportFill: "rgba(255,255,255,0.85)" },
-  dark: { rail: "#9aa6b8", abroad: "#6f7a8a", halo: "#0b0e11", stationFill: "#17191c", stationStroke: "#d2d6db", label: "#d2d6db", labelHalo: "#101418", reportFill: "rgba(23,25,28,0.9)" },
+  light: { rail: "#444444", abroad: "#767676", halo: "#ffffff", stationFill: "#ffffff", stationStroke: "#212121", label: "#212121", labelHalo: "rgba(255,255,255,0.95)", reportFill: "rgba(255,255,255,0.85)",
+    pickStroke: "#444444", pickOtherStroke: "#bdbdbd" },
+  dark: { rail: "#9aa6b8", abroad: "#6f7a8a", halo: "#0b0e11", stationFill: "#17191c", stationStroke: "#d2d6db", label: "#d2d6db", labelHalo: "#101418", reportFill: "rgba(23,25,28,0.9)",
+    pickStroke: "#d2d6db", pickOtherStroke: "#5a6069" },
 };
 
 /** Recolour the base map and our layers for a theme, in place (no style reload: sources and trains stay). */
@@ -174,6 +207,12 @@ export function applyTheme(map, theme) {
   set("station-labels", "text-halo-color", c.labelHalo);
   set("report-ring", "circle-color", c.reportFill);
   set("pick-point", "circle-stroke-color", c.halo);
+  // passenger view: the station picker map
+  for (const id of ["st", "st-other"]) set(id, "circle-color", c.stationFill);
+  set("st", "circle-stroke-color", c.pickStroke);
+  set("st-other", "circle-stroke-color", c.pickOtherStroke);
+  set("st-label", "text-color", c.label);
+  set("st-label", "text-halo-color", c.labelHalo);
 }
 
 /** [[minLon, minLat], [maxLon, maxLat]] of any GeoJSON geometry, or null. */

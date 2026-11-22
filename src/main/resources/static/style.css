@@ -5,7 +5,7 @@
   --muted: #686868;
   --line: #e5e5e5;
   --bg: #f6f6f6;
-  --blue: #0079c7;
+  --sky: #0079c7;          /* links and focus (SBB sky; theme.css --blue is the darker SBB blue) */
   --surface: #ffffff;      /* cards, panels, top bar */
   --hover: #fafafa;
   --border: #b7b7b7;       /* inputs, buttons */
@@ -24,7 +24,7 @@
   --muted: #a3a9b1;
   --line: #30343a;
   --bg: #101418;
-  --blue: #8fb8ff;
+  --sky: #8fb8ff;
   --surface: #17191c;
   --hover: #22252a;
   --border: #4a5058;
@@ -38,7 +38,7 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
 body { display: flex; flex-direction: column; background: var(--bg); }
-a { color: var(--blue); }
+a { color: var(--sky); }
 
 .topbar { display: flex; align-items: center; gap: 24px; padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--line); z-index: 2; }
 .brand { font-weight: 700; font-size: 17px; display: flex; align-items: center; gap: 8px; }
