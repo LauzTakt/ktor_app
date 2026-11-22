@@ -1,4 +1,4 @@
-import { RotateCcw, TramFront } from "lucide-react";
+import { RotateCcw, TrainFront } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Arrival, AskContext, AskResponse, Brief, Option, SituationItem, VisualCommand } from "./contract";
 import { HoldMusic } from "./hold";
@@ -714,7 +714,7 @@ export function App() {
       <header ref={topRef} className="topbar">
         <div className="brand">
           <span className="mark" aria-hidden="true">
-            <TramFront size={20} strokeWidth={2.1} />
+            <TrainFront size={20} strokeWidth={2.1} />
           </span>
           <div>
             <h1>Travel assistant</h1>
