@@ -353,3 +353,10 @@ button.stop { font: inherit; color: inherit; }
 .incidents summary .chev { color: var(--granite); transition: transform 200ms var(--ease); }
 .incidents[open] summary .chev { transform: rotate(90deg); }
 .incidents > .list { padding: 0 12px 12px; }
+
+/* ---------- no location: travel assistant as the main action (browseScreen noLocation) ---------- */
+.assistant-card { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: center; padding: 16px; }
+.assistant-card .fic { background: var(--red); color: #fff; }
+.assistant-card .t { font-size: 16px; font-weight: 700; }
+.assistant-card .m { font-size: 13px; color: var(--metal); margin-top: 2px; }
+.assistant-card .btn { grid-column: 1 / -1; }

@@ -53,6 +53,7 @@ const ICONS = {
   list: '<path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/>',
   swap: '<path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/>',
   moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+  chat: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
   bell: '<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
 };
@@ -320,7 +321,7 @@ function detectScreen(opts = {}) {
       }
       await minShow;
       if (!alive) return;
-      if (!fix) return browseScreen({ note: `${geoText()} Choose where you start and where you go.` });
+      if (!fix) return browseScreen({ note: `${geoText()} Ask the travel assistant, or choose where you start and where you go.`, noLocation: true });
       if (trains.length) return askTrainScreen(trains);
       return askStationOrBrowse(fix);
     })();
@@ -681,7 +682,8 @@ function stationSearchScreen(onBack) {
 
 // ------------------------------------------------------------------ 3b. just browsing: origin + destination
 
-function browseScreen({ note = null, back = false } = {}) {
+/** [noLocation]: we could not locate the user, so the travel assistant is the main action (card on top, red button). */
+function browseScreen({ note = null, back = false, noLocation = false } = {}) {
   const pick = { from: null, to: null };
   const hint = { from: "Where do you start?", to: "Where do you go?" };
   show((s) => {
@@ -691,6 +693,13 @@ function browseScreen({ note = null, back = false } = {}) {
       <div class="illus-box small">${ILLUSTRATION.search}</div>
       <h1>Plan a trip</h1>
       <p class="lead">${esc(note || "Choose where you start and where you go.")}</p>
+      ${noLocation ? `<div class="assistant-card card">
+        <span class="fic">${ic("chat")}</span>
+        <div class="main"><div class="t">Ask the travel assistant</div>
+          <div class="m">Tell it where you are and where you go, by voice or chat. It finds your train.</div></div>
+        <button class="btn primary block" type="button" id="ask">Ask the assistant</button>
+      </div>
+      <h2>Or plan it yourself</h2>` : ""}
       <div class="od card">
         ${field$("from")}
         <button class="icon-btn swap" type="button" title="Swap" aria-label="Swap">${ic("swap")}</button>
@@ -698,7 +707,7 @@ function browseScreen({ note = null, back = false } = {}) {
       </div>
       <button class="link" type="button" id="board">Departures and incidents at a station${ic("chevron")}</button>
       <div id="picker"></div>
-      <div class="actions"><button class="btn primary block" id="go" disabled>Show trains</button></div>`;
+      <div class="actions"><button class="btn${noLocation ? "" : " primary"} block" id="go" disabled>Show trains</button></div>`;
     const inputOf = (f) => $(`.od-field[data-f="${f}"] input`, s);
     let field = "from";
     let close = null;
@@ -751,10 +760,19 @@ function browseScreen({ note = null, back = false } = {}) {
       if (close) openPicker(); // the destination list depends on the origin
     };
     $("#go", s).onclick = () => { buzz(15); connectionsScreen(pick.from, pick.to); };
-    $("#board", s).onclick = () => { buzz(15); stationSearchScreen(() => browseScreen({ note, back: true })); };
+    $("#board", s).onclick = () => { buzz(15); stationSearchScreen(() => browseScreen({ note, back: true, noLocation })); };
+    const ask = $("#ask", s);
+    if (ask) ask.onclick = () => {
+      buzz(15);
+      const fab = $("#assistant-fab");
+      if (fab?.getAttribute("aria-expanded") !== "true") fab?.click();
+    };
     render();
-    openPicker();
-    setTimeout(() => inputOf("from")?.focus({ preventScroll: true }), 250);
+    // Without location the assistant comes first: no keyboard popping up over it.
+    if (!noLocation) {
+      openPicker();
+      setTimeout(() => inputOf("from")?.focus({ preventScroll: true }), 250);
+    }
   }, { back });
 }
 
