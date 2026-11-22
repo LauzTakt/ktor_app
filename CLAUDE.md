@@ -28,6 +28,7 @@ The prediction model also reads "modified data" from the broker on its own; it i
 | SQLite: incident history + station catalog | **done** | `db/Database.kt` |
 | REST API v1 (read: trains, stations, boards, incidents, status) | **done** — see docs/API.md | `api/v1/` |
 | Staff incident reports (REST + SQLite `staff_report`, local only, not published) | **done** | `api/v1/Reports.kt` |
+| Passenger assistant `POST /api/v1/assistant/ask` (Claude Sonnet 5.5 agent, effort low, knowledge pack in `resources/assistant/knowledge.md`: tools over our data + sbb-twin planner/situation/geometry; system prompt in `resources/assistant/system-prompt.md`) | **done** — see docs/API.md | `assistant/` |
 | Swagger UI (`/swagger`) | **done** — OpenAPI spec, hand-written: update it with every API change | `resources/openapi/documentation.yaml` |
 | Staff auth: bearer tokens (`POST /api/v1/auth/login`), SQLite `app_user` + `auth_token`, default `admin`/`admin`. Read API/WebSockets/Swagger public; **staff only: web UI pages (`staffPages`, redirect to `/login.html`, session cookie `twin_staff`) and `POST /api/v1/reports`**; new staff-only calls go inside `staffOnly { }` | **done** — first staff calls: `/auth/me`, `/auth/logout`, `/staff/users` | `auth/Auth.kt` |
 | REST API for predictions (model pushes to us) | todo | |
@@ -105,6 +106,8 @@ validation, `StatusPages` errors) -> `TwinQueries.kt` (joins LiveState + active 
 - Config: `application.yaml`, every value overridable by env: `PORT` (8080), `MQTT_BROKER_URL`, `MQTT_USERNAME`,
   `MQTT_PASSWORD`, `MQTT_ENABLED` (true), `DB_PATH` (`data/twin.sqlite`), `ADMIN_PASSWORD` (`admin`, only used to seed the
   first user), `AUTH_TOKEN_TTL_HOURS` (12). `./gradlew run` loads `.env` automatically.
+  Assistant: `ANTHROPIC_API_KEY` (env only), `SBB_TWIN_URL` (`http://127.0.0.1:8787`), `ASSISTANT_MODEL`,
+  `ASSISTANT_FAST_MODE`, `ASSISTANT_EFFORT`, `ASSISTANT_MAX_MODEL_CALLS`.
 - **Never commit `.env`** or any broker credential.
 - Tests (`src/test`) run with `mqtt.enabled=false` and a temp SQLite file.
 

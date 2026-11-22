@@ -1,7 +1,7 @@
 # REST API v1
 
-Read API over the live twin data ingested from MQTT, plus staff incident reports (the only writes). Base path
-**`/api/v1`**, JSON only. A live fleet WebSocket and the staff web UI are described at the end.
+Read API over the live twin data ingested from MQTT, staff incident reports (the only writes) and the passenger
+assistant (`POST /assistant/ask`). Base path **`/api/v1`**, JSON only. A live fleet WebSocket and the staff web UI are described at the end.
 Implementation: `src/main/kotlin/ch/lauzhack/twin/api/v1/` (`Routes.kt` routing + params, `TwinQueries.kt` logic,
 `Dto.kt` response types). **Swagger UI: `/swagger`** (spec `src/main/resources/openapi/documentation.yaml`,
 written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lauzhack/twin/ApiTest.kt`.
@@ -46,6 +46,7 @@ written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lau
 | `POST /reports` | **staff only** (see "Staff authentication"): creates a `Report` from a `CreateReport` body → `201`; `reporter` defaults to the staff username; `401 unauthorized` without a session |
 | `GET /reports/{id}` | `Report` |
 | `POST /reports/{id}/resolve` | `{ "resolution": "text" \| null }` (optional body) → resolved `Report`; `409 already_resolved` if not open |
+| `POST /assistant/ask` | `AskResponse`: the passenger assistant's answer (see [Passenger assistant](#passenger-assistant-post-assistantask)) |
 
 ### Query parameters
 
@@ -195,6 +196,92 @@ written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lau
 | `station` | `station`: the train will still call there | `station` |
 | `line` | `line`: same line | — |
 | `network` | `network` | `network` |
+
+## Passenger assistant (`POST /assistant/ask`)
+
+Back office of the passenger web app (contract: `ASSISTANT_CONTRACT.md`, section 2, in the team workspace). An agent
+loop on **Claude Sonnet 5.5** (effort `low`, no fast mode; `src/main/kotlin/ch/lauzhack/twin/assistant/`) investigates with tools over our
+own data (trains, boards, incidents, staff reports) and sbb-twin (`/plan`, `/situation`, `/geometry/…`), then returns a
+spoken answer, the options and map commands. Measured: 2.5–6 s (one model call for most questions, two when the
+model needs another lookup); a question only about an out-of-scope topic is answered in ~1 ms without a model call.
+
+```jsonc
+// Request. question: required, ≤ 2000 chars. context fields: stopIds (station names also work), all optional.
+{ "question": "My IC to Bern was cancelled, how do I get there?",
+  "context": { "fromStopId": "8503000", "toStopId": "8507000", "trainId": null, "lat": null, "lon": null },
+  "history": [ { "role": "passenger", "text": "…" }, { "role": "assistant", "text": "…" } ],   // last turns, optional
+  "sessionId": "…" }
+
+// Response (always this shape; null / [] when not relevant)
+{ "answer": "Take the IC 1 at 23:32, it is expected in Bern at about 00:31.",   // spoken by the voice agent
+  "summary": "IC 1 at 23:32, direct",                                            // short line for the screen
+  "situation": [ { "id": "sa-da9b…", "title": "Limited service Bern - Olten", "where": "Bern – Olten",
+                   "severity": "minor", "source": "sbb" } ],                     // staff | auto | sbb
+  "options": [ { "id": "A", "label": "IC 1 at 23:32, direct", "departure": 1795300350000, "arrival": 1795303890000,
+                 "transfers": 0, "recommended": true, "why": "arrives first", "journeyId": "j-fd856db851" } ],
+  "visuals": [ { "type": "clear" }, { "type": "route", … }, … ],
+  "followUp": null,
+  "elapsedMs": 2310,
+  "unavailable": [],
+  "append": null }                                                                // true = add to the current map picture                                                             // out-of-scope topics asked about
+```
+
+- `options`: the recommended journey (first) and at most one alternative. `departure`, `arrival` and `transfers` are
+  the planner's live times for the `journeyId`, never values written by the model.
+- `visuals` (`[]` = leave the map as it is, otherwise it starts with `clear`): `route` (`id`, `style`
+  `recommended|alternative`, `label`, `legs[{line, trainId, fromName, toName, geometry}]`; the options' journeys are
+  always drawn), `section` (`id`, `colour` `red|orange|green|blue`, `label`, `geometry`), `train` (`trainId`, `label`,
+  `follow`), `station` (`stopId`, `name`, `lon`, `lat`, `role` `origin|destination|transfer|incident|info`, `label`; the
+  recommended route adds its origin, transfers and destination), `timer` (`label`, `until`: only a departure the tools
+  returned), `track_train` (`trainId`, `stopId`, `label`: live tracking of the train the passenger waits for at that
+  station), `line` (`line` e.g. `IC8`, `label`), `label` (`id`, `lon`, `lat`, `text`: a callout), `fit` (`trainIds`, `stopIds`,
+  `sectionIds`: the client fits them, with live train positions, above its sheet) and `focus` (`bbox` `[w, s, e, n]`, fits everything drawn). `remove`
+  (`id`) removes one item (client action, or the `remove` tool in a follow-up). Every answer replaces the map picture unless `append` is `true` (set by the model only for a
+  pure follow-up; then `visuals` has no leading `clear`). Geometry is GeoJSON from sbb-twin, simplified
+  to ~8 m.
+- `unavailable`: the topics the passenger asked about that the assistant has no data for, passed as is to the voice
+  agent. Values: `platforms`, `accessibility`, `fares`, `tickets`, `refunds`, `occupancy`, `luggage`, `bikes`,
+  `bus_stop_location`, `local_transport`. Filled by the model (`respond.unavailable`) and by a keyword check on the
+  question. If the question is only about such topics (no timetable/disruption cue), the backend answers at once
+  without a model call, e.g. "I'm sorry, I don't have information on platforms. The station staff or the SBB app can
+  tell you." (EN/DE/FR/IT).
+- Scope (fixed, in the system prompt and the knowledge pack). CAN: timetables and live delays; cancelled,
+  short-turned and held trains; disruptions with cause, section, expected end and the official bulletin text;
+  replacement buses (route, stops, departures); alternatives. CANNOT: the `unavailable` topics above. The model never
+  mentions a limitation the passenger did not ask about.
+- How it works: the backend first runs the lookups the context or the question makes predictable (a trip named in the
+  question or the context → `plan_journey` + `situation`; the passenger's train → `train_status`), so most questions
+  need one model call. When origin and destination are known and a disruption lies between them (both section ends
+  near the corridor), or no direct journey exists, or it is night (00:00-05:00), the backend also explores in one
+  parallel pass (`explored_alternatives` in the first message): the direct journeys, waiting for the reopening
+  (`after` = the disruption's `until`, flagged uncertain unless `durationType` is `UNTIL`), two journeys via 2-3 hubs
+  between origin and destination (Bern, Olten, Zürich HB, Lausanne, Biel/Bienne, Luzern, Basel SBB, Fribourg; not
+  inside an interrupted section) plus the nearest hub, and at night the first services after 05:00, with a verdict
+  (earliest arrival). The model then decides one plan. Tools: `find_station`, `station_board`, `train_status`, `plan_journey`, `situation`, `arrivals` (twin `/stations/{id}/arrivals`: line, headsign,
+  expectedArr, etaMin, delayMin, stopsAway, status, trainId), `bulletins` (data: the twin's
+  SBB/VIA bulletins, latest version each, joined with `/disruptions` for effect, cause, until, durationType, measures and
+  bus stops; filters `stopId`, `line`; active first, ENDED ones older than 30 min skipped);
+  `show_route`, `show_section`, `show_path` (a `section` with id `path:A-B` over consecutive stations; twin
+  `/geometry/section` per pair), `highlight_trains`, `track_train`, `highlight_line` (`route=true` adds the line's path),
+  `mark_stations`, `label`, `fit`, `remove`, `start_timer` (drawing; the prompt maps question types to pictures and
+  every answer gets one); `respond`
+  (final answer). For trip questions, disruptions whose section is off the origin-destination corridor are removed
+  in code from `situation` and from the journeys' leg incidents and warnings. Independent tool calls of one turn run in parallel; at most 6 model calls. A journey whose geometry
+  the twin no longer has (404) is planned again once. System prompt: `src/main/resources/assistant/system-prompt.md`, followed in the same
+  cached system block (1 h TTL) by the knowledge pack `src/main/resources/assistant/knowledge.md` (~3k tokens: train
+  categories, bulletin lifecycle and vocabulary, interrupted vs limited, short turns, holds, EV buses, prognosis types,
+  typical durations per cause from 520 SBB incidents, transfer rules). General questions are answered from it with no
+  data tool; today's data comes only from the tools.
+- Errors: `400 bad_question` (missing or too long), `400 bad_request` (body is not JSON), `503 assistant_unavailable`
+  (no `ANTHROPIC_API_KEY`). If the model or the twin fails midway, the answer is still `200`, with a short apology the
+  voice agent can speak.
+- Config (env): `ANTHROPIC_API_KEY` (required), `SBB_TWIN_URL` (default `http://127.0.0.1:8787`), `ASSISTANT_MODEL`
+  (`claude-sonnet-5-5`), `ASSISTANT_FAST_MODE` (`false`; only Opus 5.5 / Fable 5.2 support `speed: fast`), `ASSISTANT_EFFORT` (`low`), `ASSISTANT_MAX_MODEL_CALLS` (`6`).
+
+```sh
+curl -s localhost:8080/api/v1/assistant/ask -H 'Content-Type: application/json' \
+  -d '{"question":"Is there any problem between Lausanne and Genève?"}'
+```
 
 ## WebSocket `/api/v1/ws` (live subscriptions)
 

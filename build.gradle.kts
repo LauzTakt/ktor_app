@@ -34,6 +34,7 @@ dependencies {
     implementation(libs.logback.classic)
     implementation(libs.paho.mqttv3)
     implementation(libs.sqlite.jdbc)
+    implementation(libs.anthropic.java)
 
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.kotlin.test.junit)

@@ -20,3 +20,12 @@ auth:
 
 db:
   path: "$DB_PATH:data/twin.sqlite"
+
+# Passenger assistant (POST /api/v1/assistant/ask, docs/API.md). The Claude API key is read from ANTHROPIC_API_KEY
+# (env only, never in this file); without it the endpoint answers 503.
+assistant:
+  twinUrl: "$SBB_TWIN_URL:http://127.0.0.1:8787"
+  model: "$ASSISTANT_MODEL:claude-sonnet-5-5"
+  fastMode: "$ASSISTANT_FAST_MODE:false"
+  effort: "$ASSISTANT_EFFORT:low"
+  maxModelCalls: "$ASSISTANT_MAX_MODEL_CALLS:6"

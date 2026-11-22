@@ -1,6 +1,11 @@
 package ch.lauzhack.twin
 
 import ch.lauzhack.twin.api.v1.TwinQueries
+import ch.lauzhack.twin.assistant.AnthropicLlm
+import ch.lauzhack.twin.assistant.AssistantAgent
+import ch.lauzhack.twin.assistant.AssistantConfig
+import ch.lauzhack.twin.assistant.assistantV1
+import ch.lauzhack.twin.assistant.buildAssistant
 import ch.lauzhack.twin.api.v1.apiV1
 import ch.lauzhack.twin.api.v1.LiveUpdates
 import ch.lauzhack.twin.api.v1.installApiErrors
@@ -22,6 +27,7 @@ import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationStopped
 import io.ktor.server.application.install
+import io.ktor.server.application.log
 import io.ktor.server.plugins.calllogging.CallLogging
 import io.ktor.server.plugins.compression.Compression
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
@@ -68,11 +74,32 @@ fun Application.module() {
         adminPassword = conf.propertyOrNull("auth.adminPassword")?.getString()?.takeIf { it.isNotEmpty() } ?: "admin",
         tokenTtlHours = conf.propertyOrNull("auth.tokenTtlHours")?.getString()?.toLongOrNull() ?: 12,
     )
-    configureHttp(state, db, authConfig) { ingestor?.isConnected ?: false }
+    // Passenger assistant (POST /api/v1/assistant/ask): Claude API key from ANTHROPIC_API_KEY, the rest from assistant.*
+    val assistantCfg = AssistantConfig.from(conf)
+    val llm = AnthropicLlm.fromEnv(assistantCfg)
+    if (llm == null) log.warn("ANTHROPIC_API_KEY is not set: /api/v1/assistant/ask will answer 503")
+    else log.info("Assistant: model {} (fast mode {}, effort {}), sbb-twin at {}", assistantCfg.model, assistantCfg.fastMode, assistantCfg.effort, assistantCfg.twinUrl)
+    llm?.keepWarm(assistantCfg.model)
+    val assistant = llm?.let { l ->
+        { q: TwinQueries ->
+            buildAssistant(assistantCfg, l, q, state, db).also { a -> Thread({ Thread.sleep(8_000); a.warmUp() }, "assistant-warm-up").apply { isDaemon = true }.start() }
+        }
+    }
+
+    configureHttp(state, db, authConfig, assistant) { ingestor?.isConnected ?: false }
 }
 
-/** HTTP layer only (plugins + routes); split from [module] so tests can inject a seeded [LiveState]. */
-fun Application.configureHttp(state: LiveState, db: Database, authConfig: AuthConfig = AuthConfig(), mqttConnected: () -> Boolean) {
+/**
+ * HTTP layer only (plugins + routes); split from [module] so tests can inject a seeded [LiveState] (and a fake
+ * assistant through [assistant], built from the same [TwinQueries] as the REST API).
+ */
+fun Application.configureHttp(
+    state: LiveState,
+    db: Database,
+    authConfig: AuthConfig = AuthConfig(),
+    assistant: ((TwinQueries) -> AssistantAgent)? = null,
+    mqttConnected: () -> Boolean,
+) {
     install(CallLogging)
     install(Compression) // gzip/deflate: the rail network GeoJSON (~3 MB) and API lists shrink ~5x
     install(ContentNegotiation) { json(Json { explicitNulls = true; encodeDefaults = true }) }
@@ -87,6 +114,7 @@ fun Application.configureHttp(state: LiveState, db: Database, authConfig: AuthCo
     val queries = TwinQueries(state) { db.incidents(activeOnly = true) }
     val live = LiveUpdates(queries, db)
     val fleet = FleetFeed(state)
+    val agent = assistant?.invoke(queries)
     routing {
         get("/health") { call.respond(Health("ok")) }
         // Swagger UI at /swagger, spec at /swagger/documentation.yaml (keep in sync with docs/API.md and api/v1/).
@@ -94,6 +122,7 @@ fun Application.configureHttp(state: LiveState, db: Database, authConfig: AuthCo
         apiV1(queries, db, mqttConnected)
         authV1(auth)
         reportsV1(state, db)
+        assistantV1(agent)
         liveUpdatesWs(live)
         fleetSocket(fleet)
         // Staff panel (staff only, else -> /login.html): `/admin/` = live map, `/admin/report.html` = report an incident.
