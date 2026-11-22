@@ -7,8 +7,8 @@ self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
 
 self.addEventListener("push", (e) => {
   let m = {};
-  try { m = e.data ? e.data.json() : {}; } catch { m = { title: "Train twin", body: e.data?.text() || "" }; }
-  e.waitUntil(self.registration.showNotification(m.title || "Train twin", {
+  try { m = e.data ? e.data.json() : {}; } catch { m = { title: "Takt", body: e.data?.text() || "" }; }
+  e.waitUntil(self.registration.showNotification(m.title || "Takt", {
     body: m.body || "",
     tag: m.tag || undefined,
     renotify: Boolean(m.tag),

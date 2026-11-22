@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: Train digital twin — REST API v1
+  title: Takt — REST API v1
   version: "1.0"
   description: |
     Read API over the live twin data ingested from MQTT, plus staff incident reports, the passenger assistant and Trip Watch. See docs/API.md.
@@ -890,7 +890,7 @@ components:
         changes: { type: string, description: "Direct, 1 change or N changes", example: "Direct" }
         nextStep: { type: string, example: "Take IR35 from Zürich HB at 05:53" }
         url: { type: string, description: "Trip Watch page encoded in the QR code; relative when WALLET_PUBLIC_BASE_URL is unset" }
-        brand: { type: string, example: "Train twin" }
+        brand: { type: string, example: "Takt" }
         notice: { type: string, example: "Travel information · not a ticket" }
     Login:
       type: object

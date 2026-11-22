@@ -80,7 +80,7 @@ async function registerNative() {
   // 1. Permission first, so the user always sees the Android prompt (Android 13+; granted by default before).
   let perm = await NativePush.checkPermissions();
   if (perm.receive !== "granted") perm = await NativePush.requestPermissions();
-  if (perm.receive !== "granted") throw new Error("Notifications are blocked. Allow them in Settings > Apps > Train Twin > Notifications.");
+  if (perm.receive !== "granted") throw new Error("Notifications are blocked. Allow them in Settings > Apps > Takt > Notifications.");
   // 2. The APK must contain the Firebase config: without it register() crashes the app (TwinAppPlugin.java).
   const app = await cap.Plugins?.TwinApp?.info?.().catch(() => null);
   if (!app?.firebase) {

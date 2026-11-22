@@ -138,7 +138,7 @@ reason texts ("Overhead line fault", "Track damage", "Person accident") with the
 
 ## 6. Components
 
-Train twin uses daisyUI 5 for buttons, fields, checkboxes, radios and station-picker tabs. The Ktor pages
+Takt uses daisyUI 5 for buttons, fields, checkboxes, radios and station-picker tabs. The Ktor pages
 and the React assistant both load the compiled controls through `/theme.css`. To add a daisyUI component
 or variant, update `client/rail-ui.css`, run `npm ci && npm run build:ui` from `client/`, and include the
 resulting `src/main/resources/static/vendor/daisyui.css` in the change. Ktor serves this local asset even

@@ -60,7 +60,7 @@
     bar.setAttribute("role", "region");
     bar.setAttribute("aria-label", "Mobile app");
     bar.innerHTML = `
-      <span class="t">Have the Train twin app?</span>
+      <span class="t">Have the Takt app?</span>
       <a class="btn" id="app-open" href="#">Open in the app</a>
       <button class="btn btn-ghost btn-circle icon-btn" type="button" id="app-close" title="Close" aria-label="Close">
         <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>`;

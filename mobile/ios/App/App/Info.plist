@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>Train Twin</string>
+	<string>Takt</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -27,9 +27,9 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Train Twin uses your location to find the train or station you are at.</string>
+	<string>Takt uses your location to find the train or station you are at.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Train Twin uses the microphone for the voice travel assistant.</string>
+	<string>Takt uses the microphone for the voice travel assistant.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

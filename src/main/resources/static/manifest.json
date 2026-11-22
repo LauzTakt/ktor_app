@@ -1,6 +1,6 @@
 {
-  "name": "Train twin",
-  "short_name": "Train twin",
+  "name": "Takt",
+  "short_name": "Takt",
   "description": "Your train live: route, delays, incidents and arrival alerts.",
   "start_url": "/",
   "scope": "/",

@@ -108,16 +108,16 @@ jobs:
           ./gradlew --no-daemon assembleRelease -PdeepLinkHost="$HOST" \
             -PversionCode=${{ steps.version.outputs.code }} \
             -PversionName=${{ steps.version.outputs.name }}
-          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/train-twin-${{ steps.version.outputs.name }}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/takt-${{ steps.version.outputs.name }}.apk"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: train-twin-apk
-          path: train-twin-*.apk
+          name: takt-apk
+          path: takt-*.apk
 
       - name: GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: train-twin-*.apk
+          files: takt-*.apk
           generate_release_notes: true

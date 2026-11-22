@@ -1,4 +1,4 @@
-# ktor_app
+# Takt
 
 Kotlin Ktor backend for the LauzHack 2026 Swiss-train digital twin: consumes the sbb-twin MQTT feed, stores state and
 history in SQLite, receives predictions over REST and pushes live updates to browsers over WebSocket.
