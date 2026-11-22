@@ -1,0 +1,254 @@
+.map-page .topbar,
+.map-page .stats {
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.map-page .topbar nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-inline-start: auto;
+}
+
+.map-page .topbar .who {
+  overflow-wrap: anywhere;
+}
+
+.station-qr {
+  width: min(29rem, calc(100% - 24px));
+  max-height: calc(100dvh - 24px);
+  scroll-padding-top: 72px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+}
+
+.station-qr::backdrop {
+  background: rgb(0 0 0 / 40%);
+}
+
+.station-qr__header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.station-qr__header h2 {
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+.station-qr__body {
+  padding: 20px;
+}
+
+.station-qr label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.station-qr input {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+
+.station-qr__status {
+  margin: 12px 0 0;
+}
+
+.station-qr__results {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+.station-qr__status:empty,
+.station-qr__results:empty {
+  margin: 0;
+}
+
+.station-qr__choice {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.875rem;
+  text-align: start;
+  cursor: pointer;
+}
+
+.station-qr__choice:hover,
+.station-qr__choice:active {
+  background: var(--hover);
+}
+
+.station-qr__choice span:first-child {
+  overflow-wrap: anywhere;
+}
+
+.station-qr__choice .muted {
+  font-variant-numeric: tabular-nums;
+}
+
+.station-qr__sign {
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  text-align: center;
+}
+
+.station-qr__sign h3 {
+  margin: 0;
+  font-size: 1.5rem;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.station-qr__sign p {
+  margin: 8px 0 16px;
+  font-size: 0.875rem;
+}
+
+.station-qr__code svg {
+  display: block;
+  width: min(100%, 10rem);
+  height: auto;
+  margin-inline: auto;
+}
+
+.station-qr__actions, .station-qr__links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.station-qr__links {
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.station-qr .btn, .station-qr__link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+}
+
+.station-qr .btn:active {
+  transform: translateY(1px);
+}
+
+.station-qr__link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--blue);
+  font: inherit;
+  font-size: 0.875rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.station-qr :focus-visible,
+#stationQrToggle:focus-visible,
+[data-station-qr]:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+@media (max-width: 600px) {
+  .map-page .stats {
+    flex-basis: 100%;
+  }
+
+  .map-page .topbar nav {
+    flex-basis: 100%;
+    margin: 0;
+  }
+
+  .map-page .topbar nav .btn {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .station-qr .btn:active {
+    transform: none;
+  }
+}
+
+@media print {
+  .map-page:has(.station-qr[open] #stationQrPreview:not([hidden])) {
+    display: block;
+    height: auto;
+    background: #fff;
+  }
+
+  .map-page:has(.station-qr[open] #stationQrPreview:not([hidden])) > :not(.station-qr),
+  .station-qr__header,
+  .station-qr__actions,
+  .station-qr__links,
+  .station-qr::backdrop {
+    display: none;
+  }
+
+  .station-qr[open] {
+    position: static;
+    width: auto;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: #fff;
+    color: #212121;
+    box-shadow: none;
+    color-scheme: light;
+  }
+
+  .station-qr__sign {
+    padding: 16mm 0 0;
+    border: 0;
+    background: #fff;
+    break-inside: avoid;
+  }
+
+  .station-qr__sign h3 { font-size: 32pt; }
+  .station-qr__sign p { font-size: 16pt; margin: 4mm 0 8mm; }
+  .station-qr__code svg { width: min(100%, 85mm); }
+}

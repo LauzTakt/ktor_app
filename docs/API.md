@@ -30,7 +30,7 @@ written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lau
 | `GET /trains/{trainId}/position` | `Position` |
 | `GET /trains/{trainId}/stops` | `Stop[]` |
 | `GET /trains/{trainId}/incidents` | `Incident[]` (with `match`) |
-| `GET /stations` | `Station[]` |
+| `GET /stations` | `Station[]`: station catalog restored from SQLite at startup and updated from the feed |
 | `GET /stations/{stopId}` | `StationDetail` |
 | `GET /stations/{stopId}/board` | `Board`: trains that will still call at / pass through the station |
 | `GET /stations/{stopId}/incidents` | `Incident[]` (with `match`) |
@@ -437,5 +437,8 @@ Responses are gzip-compressed (Ktor `Compression`).
 - `/login.html` (public): staff login; `?next=/admin/report.html` returns there after login (default `/admin/`). Pages show the user + "Log out".
 - `/admin/`: staff overview map (stripped-down sbb-twin viewer): live trains (`/ws/fleet`), stations, twin incidents,
   open staff reports. Click a train for its stops; click a station for departures; right-click to report at a point.
+  **Station QR** opens a station search from the toolbar or selects the current station from its map popup.
+  Print the sign or download the QR as an SVG. Generate signs from the public HTTPS address passengers will use.
+  The QR opens `/?station=<stopId>` on that address with the origin already selected.
 - `/admin/report.html` (old `/report.html` redirects here): report form (station / section / train / map point) and the list of reports (resolve them).
   Accepts `?scope=station&stopId=…`, `?scope=train&trainId=…`, `?scope=point&lat=…&lon=…` to pre-fill.
