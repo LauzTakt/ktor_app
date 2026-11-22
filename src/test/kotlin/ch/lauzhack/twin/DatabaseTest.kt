@@ -3,7 +3,6 @@ package ch.lauzhack.twin
 import ch.lauzhack.twin.db.Database
 import ch.lauzhack.twin.model.Incident
 import ch.lauzhack.twin.model.IncidentScope
-import kotlin.io.path.createTempFile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -15,15 +14,9 @@ class DatabaseTest {
         scope = IncidentScope(kind = "section", from = "8503000", to = "8516218"),
     )
 
-    /** Writes are async; closing a second handle on the same file isn't needed — poll until the writer drains. */
-    private fun <T> eventually(block: () -> T, ok: (T) -> Boolean): T {
-        repeat(50) { val v = block(); if (ok(v)) return v; Thread.sleep(20) }
-        return block()
-    }
-
     @Test
     fun incidentLifecycleIsRecordedOncePerChange() {
-        val db = Database(createTempFile("twin", ".sqlite").toString())
+        val db = testDb()
         db.upsertIncident(inc(10), "{}")
         db.upsertIncident(inc(10), "{}") // retained re-delivery: ignored
         db.upsertIncident(inc(20, "critical"), "{}")
@@ -44,7 +37,7 @@ class DatabaseTest {
 
     @Test
     fun reconcileMarksMissingIncidents() {
-        val db = Database(createTempFile("twin", ".sqlite").toString())
+        val db = testDb()
         db.upsertIncident(inc(10), "{}")
         db.reconcileActiveIncidents(emptySet())
         val h = eventually({ db.incidentHistory("i-1") }) { it.size >= 2 }

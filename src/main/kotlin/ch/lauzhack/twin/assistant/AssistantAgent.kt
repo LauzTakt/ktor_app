@@ -27,6 +27,9 @@ import kotlinx.coroutines.future.await
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonObject
 import org.slf4j.LoggerFactory
+import ch.lauzhack.twin.common.dayTime
+import ch.lauzhack.twin.common.toJsonElement
+import ch.lauzhack.twin.query.Severity
 
 data class AssistantConfig(
     /** sbb-twin base URL (`twin.url` / `SBB_TWIN_URL`, shared with the passenger app). */
@@ -303,7 +306,7 @@ class AssistantAgent(
         }
 
         val situation = r?.situationIds?.mapNotNull { turn.situationItem(it) }?.distinctBy { it.id }
-            ?: turn.situationItems().sortedByDescending { AssistantTools.severityRank(it.severity) }.take(5)
+            ?: turn.situationItems().sortedBy { Severity.parse(it.severity).rank }.take(5)
 
         val unique = (drawn + autoRoutes).distinct()
         // The recommended route brings its origin, transfer and destination markers (unless the model marked them).

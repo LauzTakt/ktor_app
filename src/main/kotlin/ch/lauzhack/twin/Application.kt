@@ -20,7 +20,7 @@ import ch.lauzhack.twin.auth.staffPages
 import ch.lauzhack.twin.db.Database
 import ch.lauzhack.twin.mqtt.MqttConfig
 import ch.lauzhack.twin.mqtt.MqttIngestor
-import ch.lauzhack.twin.passenger.CatalogStation
+import ch.lauzhack.twin.passenger.localCatalog
 import ch.lauzhack.twin.passenger.PassengerConfig
 import ch.lauzhack.twin.passenger.PassengerService
 import ch.lauzhack.twin.passenger.passengerApi
@@ -210,7 +210,7 @@ fun Application.configureHttp(
         authV1(auth)
         reportsV1(state, db)
         assistantV1(agent)
-        passengerApi(PassengerService(passenger, fleet, journeys.takeIf { tripWatch != null }) { localStations(state) })
+        passengerApi(PassengerService(passenger, fleet, journeys.takeIf { tripWatch != null }) { localCatalog(state) })
         tripWatchRoutes(tripWatch)
         liveUpdatesWs(live)
         fleetSocket(fleet)
@@ -229,15 +229,3 @@ fun Application.configureHttp(
     }
     return pushService
 }
-
-/**
- * Our stations (from MQTT `info`) in the passenger catalog's shape, for when sbb-twin is unreachable. `trains` is
- * 10 + the trains in service calling there (the twin counts the whole day), so every station passes the catalog's
- * minimum and busier ones still rank first.
- */
-private fun localStations(state: LiveState): List<CatalogStation> =
-    state.stations().mapNotNull { s ->
-        val lat = s.lat ?: return@mapNotNull null
-        val lon = s.lon ?: return@mapNotNull null
-        CatalogStation(s.stopId, s.name, 10 + state.trainsCallingAt(s.stopId).size, lon, lat)
-    }

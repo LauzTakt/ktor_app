@@ -4,7 +4,6 @@ import ch.lauzhack.twin.common.angleDiff
 import ch.lauzhack.twin.common.haversineM
 import ch.lauzhack.twin.common.move
 import ch.lauzhack.twin.common.notFound
-import ch.lauzhack.twin.common.searchKey
 import ch.lauzhack.twin.state.LiveState
 import ch.lauzhack.twin.state.TrainState
 import kotlinx.serialization.Serializable
@@ -110,7 +109,7 @@ class JourneyQueries(private val state: LiveState, private val q: TwinQueries) {
     /** Stations reachable from [fromStopId] with a train already in service, most served first. */
     fun destinations(fromStopId: String, query: String?, limit: Int): List<DestinationDto> {
         if (state.station(fromStopId) == null) throw notFound("station", fromStopId)
-        val needle = query?.let(::searchKey)?.takeIf { it.isNotEmpty() }
+        val needle = query?.trim()?.takeIf { it.isNotEmpty() }?.let(StationSearch::cleanQuery)?.takeIf { it.isNotEmpty() }
         val count = HashMap<String, Int>()
         val earliest = HashMap<String, Long>()
         for (t in state.trainsCallingAt(fromStopId)) {
@@ -127,11 +126,9 @@ class JourneyQueries(private val state: LiveState, private val q: TwinQueries) {
         }
         return count.entries.asSequence()
             .mapNotNull { (id, n) -> state.station(id)?.let { DestinationDto(it.toDto(), n, earliest[id]) } }
-            .filter { needle == null || needle in searchKey(it.station.name) }
-            .sortedWith(
-                compareBy<DestinationDto>({ needle != null && !searchKey(it.station.name).startsWith(needle) })
-                    .thenByDescending { it.trains }.thenBy { it.station.name },
-            )
+            .mapNotNull { d -> (if (needle == null) 0 else StationSearch.tier(needle, d.station.name))?.let { d to it } }
+            .sortedWith(compareBy<Pair<DestinationDto, Int>>({ it.second }).thenByDescending { it.first.trains }.thenBy { it.first.station.name })
+            .map { it.first }
             .take(limit)
             .toList()
     }

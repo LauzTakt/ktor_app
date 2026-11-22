@@ -13,7 +13,6 @@ import ch.lauzhack.twin.common.objects
 import ch.lauzhack.twin.common.str
 import ch.lauzhack.twin.common.strings
 import ch.lauzhack.twin.twinapi.SbbTwinClient
-import ch.lauzhack.twin.twinapi.enc
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -37,6 +36,18 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import org.slf4j.LoggerFactory
+import ch.lauzhack.twin.common.spacedLine
+import ch.lauzhack.twin.common.cleanDashes
+import ch.lauzhack.twin.common.urlEncode
+import ch.lauzhack.twin.common.geometry
+import ch.lauzhack.twin.common.truthy
+import ch.lauzhack.twin.common.dayMonth
+import ch.lauzhack.twin.common.capitalised
+import ch.lauzhack.twin.query.Severity
+import ch.lauzhack.twin.query.sameLine
+import ch.lauzhack.twin.query.lineIn
+import ch.lauzhack.twin.query.mentionsLine
+import ch.lauzhack.twin.common.coordsOf
 
 /** contract.ts `BriefDisruption`. */
 internal data class BriefDisruption(
@@ -141,7 +152,7 @@ class PlaceBrief(
         return BriefDisruption(
             id = i.str("id") ?: "",
             kind = when (source) { "control" -> "operator"; "auto" -> "detected"; else -> "sbb" },
-            title = cleanTitle(i.str("title") ?: ""),
+            title = cleanDashes(i.str("title") ?: ""),
             where = i.str("where"),
             effect = effect,
             cause = i.obj("cause").str("label"),
@@ -164,7 +175,7 @@ class PlaceBrief(
         return BriefDisruption(
             id = a.str("id") ?: "",
             kind = "sbb",
-            title = cleanTitle(title),
+            title = cleanDashes(title),
             where = if (stations.isNotEmpty()) stations.mapNotNull { it.str("name") }.take(2).joinToString(" – ") else null,
             effect = effect,
             cause = a.str("cause")?.replace("_", " ")?.takeIf { it.isNotEmpty() },
@@ -185,12 +196,6 @@ class PlaceBrief(
         return id in listOf(sec.obj("a").str("id"), sec.obj("b").str("id")) + sec.objects("inside").map { it.str("id") }
     }
 
-    private fun mentionsLine(line: String, text: String): Boolean = runCatching {
-        val k = lineKey(line)
-        val core = Regex("^([A-Z]+)(\\d+)$").matchEntire(k)?.let { "${it.groupValues[1]}\\s?${it.groupValues[2]}" } ?: Regex.escape(k)
-        Regex("(^|[^A-Z0-9])$core([^0-9]|$)", RegexOption.IGNORE_CASE).containsMatchIn(text)
-    }.getOrDefault(false)
-
     private fun relevant(pic: Picture, stationIds: List<String>, line: String?, ids: Set<String>? = null, titles: Set<String>? = null): List<BriefDisruption> {
         val byDisruption = pic.disruptions.associateBy { it.str("id") }
         val out = mutableListOf<BriefDisruption>()
@@ -201,7 +206,7 @@ class PlaceBrief(
             val title = inc.str("title")
             val hit = ids?.contains(id) == true || titles?.contains(title) == true ||
                 (inc.str("source") != "auto" && stationIds.any { touchesStation(it, inc, d) }) ||
-                (line != null && (inc.strings("lines").any { lineKey(it) == lineKey(line) } || (inc.str("source") == "auto" && mentionsLine(line, title ?: ""))))
+                (line != null && (inc.strings("lines").any { sameLine(it, line) } || (inc.str("source") == "auto" && mentionsLine(line, title ?: ""))))
             if (hit) out += fromIncident(inc).copy(onRoute = ids?.contains(id) == true || titles?.contains(title) == true)
         }
         for (a in pic.alerts) {
@@ -224,11 +229,11 @@ class PlaceBrief(
         val ended = d.str("lifecycle") == "ENDED" || effect == "resumed"
         return buildJsonObject {
             put("id", d.str("id")); put("title", d.str("title")); put("description", d.str("description"))
-            put("severity", when (effect) { "interrupted" -> "critical"; "limited" -> "major"; else -> "info" })
+            put("severity", Severity.fromEffect(effect).id)
             put("source", if (d.str("kind") == "control") "control" else d.str("kind") ?: "control")
-            put("effect", effect); put("cause", d["cause"] ?: JsonNull); put("lines", d["lines"] ?: JsonArray(emptyList()))
+            put("effect", effect); put("cause", d["cause"] ?: JsonNull); put("lines", d["lines"] ?: EMPTY_ARRAY)
             put("durationType", d.str("durationType")); put("until", d.long("until")); put("lifecycle", d.str("lifecycle"))
-            put("messages", d["messages"] ?: JsonArray(emptyList())); put("replacementBus", d.truthy("replacementBus"))
+            put("messages", d["messages"] ?: EMPTY_ARRAY); put("replacementBus", d.truthy("replacementBus"))
             put("status", if (ended) "ended" else "active"); put("updatedAt", now())
         }
     }
@@ -255,8 +260,6 @@ class PlaceBrief(
 
     internal data class Resolved(val station: CatalogStation?, val from: CatalogStation?, val to: CatalogStation?, val line: String?)
 
-    private val LINE_IN_TEXT = Regex("\\b(IC|IR|ICE|EC|RE|IRE|S|SN|R|PE)\\s?(\\d{1,3})\\b", RegexOption.IGNORE_CASE)
-
     internal suspend fun resolveQuery(q: BriefQuery): Resolved {
         var station = resolve(q.station)
         var from = resolve(q.from)
@@ -273,7 +276,7 @@ class PlaceBrief(
             else if (from == null && to == null && rest.size == 1) station = rest[0]
             else if (to == null && rest.isNotEmpty()) to = rest.last()
             else if (from == null && rest.isNotEmpty()) from = rest[0]
-            if (line == null) line = LINE_IN_TEXT.find(text)?.let { (it.groupValues[1] + it.groupValues[2]).uppercase() }
+            if (line == null) line = lineIn(text)
         }
         if (text != null && from != null && to == null) {
             // "How do I get to Aarau now?" with the passenger's station as the origin
@@ -324,7 +327,7 @@ class PlaceBrief(
         val to = r.to
         val st = r.station
         val route = from != null && to != null
-        val qs = if (route) "from=${enc(from!!.id)}&to=${enc(to!!.id)}" else if (st != null) "station=${enc(st.id)}" else "line=${enc(r.line!!)}"
+        val qs = if (route) "from=${urlEncode(from!!.id)}&to=${urlEncode(to!!.id)}" else if (st != null) "station=${urlEncode(st.id)}" else "line=${urlEncode(r.line!!)}"
         // the twin's own brief (~50 ms): its disruptions and alerts are already filtered to the place or the route
         val twinBriefD = async {
             if (r.line != null && st == null && from == null) null
@@ -398,7 +401,7 @@ class PlaceBrief(
                     lateMin = if (late > 0) late else 0,
                     legs = j.objects("legs").map { l ->
                         val lf = l.obj("from"); val lt = l.obj("to")
-                        val name = if (l.str("category") == "EV") "replacement bus (EV)" else spaced(l.str("line") ?: "")
+                        val name = if (l.str("category") == "EV") "replacement bus (EV)" else spacedLine(l.str("line") ?: "")
                         "$name ${lf.str("name")} ${hhmm(lf.long("expectedDep") ?: lf.long("plannedDep") ?: dep)} → ${lt.str("name")} ${hhmm(lt.long("expectedArr") ?: lt.long("plannedArr") ?: arr)}"
                     },
                     warnings = j.strings("warnings").take(3),
@@ -408,12 +411,12 @@ class PlaceBrief(
             situation = extras?.situation ?: EMPTY_ARRAY
             options = extras?.options ?: EMPTY_ARRAY
         } else {
-            place = if (st != null) (if (r.line != null) "${spaced(r.line)} at ${st.name}" else st.name) else "the ${spaced(r.line!!)}"
+            place = if (st != null) (if (r.line != null) "${spacedLine(r.line)} at ${st.name}" else st.name) else "the ${spacedLine(r.line!!)}"
             disruptions = if (fromTwin != null && r.line == null) fromTwin else relevant(pic, listOfNotNull(st?.id), r.line)
             situation = JsonArray(disruptions.map { d ->
                 buildJsonObject {
                     put("id", d.id); put("title", d.title); put("where", d.where)
-                    put("severity", if (d.severity in setOf("critical", "major", "minor")) d.severity else "info")
+                    put("severity", Severity.parse(d.severity).id)
                     put("source", when (d.kind) { "operator" -> "staff"; "detected" -> "auto"; else -> "sbb" })
                 }
             })
@@ -428,7 +431,7 @@ class PlaceBrief(
                     put("colour", if (d.effect == "interrupted" || d.severity == "critical") "red" else if (d.active) "orange" else "green")
                     put("label", d.title); put("geometry", g)
                 }
-                collectCoords(g, coords)
+                coords += coordsOf(g)
             }
             if (st != null) {
                 vs += stationVisual(st, if (disruptions.any { serious(it) }) "incident" else "origin", st.name)

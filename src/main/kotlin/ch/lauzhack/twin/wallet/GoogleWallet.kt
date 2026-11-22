@@ -26,6 +26,7 @@ import java.security.spec.PKCS8EncodedKeySpec
 import java.time.Duration
 import java.time.Instant
 import java.util.Base64
+import ch.lauzhack.twin.common.EMPTY_ARRAY
 
 internal class GoogleWallet(
     private val classId: String,
@@ -52,7 +53,7 @@ internal class GoogleWallet(
         val claims = buildJsonObject {
             put("iss", email); put("aud", "google"); put("typ", "savetowallet")
             put("iat", Instant.now().epochSecond)
-            put("origins", JsonArray(emptyList()))
+            put("origins", EMPTY_ARRAY)
             put("payload", buildJsonObject {
                 put("genericObjects", buildJsonArray {
                     add(buildJsonObject { put("id", objectId(watch)); put("classId", classId) })

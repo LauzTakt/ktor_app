@@ -5,21 +5,17 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import java.io.IOException
 import java.net.URI
-import java.net.URLEncoder
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
-import java.nio.charset.StandardCharsets
 import java.time.Duration
+import ch.lauzhack.twin.common.urlEncode
 
 /**
  * sbb-twin answered with an error status (`status` > 0) or could not be reached (`status` = 0). An [IOException], so
  * callers can treat every sbb-twin failure as "upstream unavailable" (the passenger app answers 502).
  */
 class TwinException(val status: Int, message: String) : IOException(message)
-
-/** URL-encodes a path segment or query value (spaces as `%20`). */
-fun enc(s: String): String = URLEncoder.encode(s, StandardCharsets.UTF_8).replace("+", "%20")
 
 /**
  * The only HTTP client for the sbb-twin API (`{baseUrl}/api/...`), shared by the assistant and the passenger app.
@@ -53,7 +49,7 @@ class SbbTwinClient(baseUrl: String, private val timeoutMs: Long = 4_000) {
 
     /** GET `/api{path}` with the non-null [params] as query string. */
     suspend fun get(path: String, vararg params: Pair<String, Any?>): JsonElement {
-        val query = params.filter { it.second != null }.joinToString("&") { (k, v) -> k + "=" + enc(v.toString()) }
+        val query = params.filter { it.second != null }.joinToString("&") { (k, v) -> k + "=" + urlEncode(v.toString()) }
         return json("/api$path" + if (query.isEmpty()) "" else "?$query")
     }
 
@@ -71,18 +67,18 @@ class SbbTwinClient(baseUrl: String, private val timeoutMs: Long = 4_000) {
     }
 
     suspend fun stations(q: String) = get("/stations", "q" to q)
-    suspend fun board(stopId: String) = get("/stations/${enc(stopId)}/board")
-    suspend fun train(trainId: String) = get("/trains/${enc(trainId)}")
+    suspend fun board(stopId: String) = get("/stations/${urlEncode(stopId)}/board")
+    suspend fun train(trainId: String) = get("/trains/${urlEncode(trainId)}")
     suspend fun plan(from: String, to: String, after: Long?, limit: Int, onboardTrainId: String? = null) =
         get("/plan", "from" to from, "to" to to, "after" to after, "limit" to limit, "onboardTrainId" to onboardTrainId)
     suspend fun situationAtStation(stopId: String) = get("/situation", "station" to stopId)
     suspend fun situationOfTrain(trainId: String) = get("/situation", "trainId" to trainId)
     suspend fun situationOfTrip(from: String, to: String) = get("/situation", "from" to from, "to" to to)
-    suspend fun arrivals(stopId: String) = get("/stations/${enc(stopId)}/arrivals")
+    suspend fun arrivals(stopId: String) = get("/stations/${urlEncode(stopId)}/arrivals")
     suspend fun bulletins() = get("/bulletins")
     suspend fun disruptions() = get("/disruptions")
     suspend fun sectionGeometry(from: String, to: String) = get("/geometry/section", "from" to from, "to" to to)
-    suspend fun journeyGeometry(journeyId: String) = get("/geometry/journey/${enc(journeyId)}")
+    suspend fun journeyGeometry(journeyId: String) = get("/geometry/journey/${urlEncode(journeyId)}")
     suspend fun trainGeometry(trainId: String, from: String?, to: String?) =
-        get("/geometry/train/${enc(trainId)}", "from" to from, "to" to to)
+        get("/geometry/train/${urlEncode(trainId)}", "from" to from, "to" to to)
 }

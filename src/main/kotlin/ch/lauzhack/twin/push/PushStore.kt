@@ -181,8 +181,6 @@ class PushStore(private val db: Database) {
 
     fun allSubscriptions(): List<PushSubscription> = selectSubs("SELECT * FROM push_subscription")
 
-    fun subscription(id: String): PushSubscription? = selectSubs("SELECT * FROM push_subscription WHERE id=?", id).firstOrNull()
-
     fun deleteSubscription(deviceId: String, id: String): Boolean = db.withConnection { c ->
         c.prepareStatement("DELETE FROM push_subscription WHERE id=? AND device_id=?").use { ps ->
             ps.setString(1, id); ps.setString(2, deviceId); ps.executeUpdate() > 0

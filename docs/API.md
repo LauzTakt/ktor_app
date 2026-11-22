@@ -67,7 +67,7 @@ Trip Watch accepts a `journeyId` from a server-cached planner result, or `trainI
 
 | Endpoint | Parameter | Default | Meaning |
 |---|---|---|---|
-| `/trains` | `line` | | e.g. `IC1`, `S3` (case-insensitive) |
+| `/trains` | `line` | | e.g. `IC1`, `S3` (case and spaces ignored: `IC1` = `IC 1`) |
 | | `category` | | e.g. `IC`, `S`, `RE` |
 | | `status` | | `active`, `cancelled`, `unknown` (position known, info not yet) |
 | | `stationId` | | only trains that will still call at / pass through this station |
@@ -76,7 +76,7 @@ Trip Watch accepts a `journeyId` from a server-cached planner result, or `trainI
 | | `bbox` | | position inside the box |
 | | `limit`, `offset` | 100 (max 2000), 0 | paging; sorted by `trainId` |
 | `/trains/{id}/stops` | `state` | | `passed`, `current`, `next`; `upcoming` = everything not passed |
-| `/stations` | `q` | | substring of the name (case- and accent-insensitive), or exact `stopId`; prefix matches first |
+| `/stations` | `q` | | station name (case- and accent-insensitive; other-language names like `Geneva`/`Genf` and filler words like `station`, `Hauptbahnhof` understood), or exact `stopId`. Best match first: exact name, name + more words, prefix, every word a prefix, substring; ties go to the busier station |
 | | `bbox` | | |
 | | `limit` | 50 (max 5000) | |
 | `/stations/{id}/board` | `type` | `departures` | `departures` (excludes trains ending here), `arrivals` (excludes trains starting here), `all` |
@@ -90,7 +90,7 @@ Trip Watch accepts a `journeyId` from a server-cached planner result, or `trainI
 | | `limit` | 5 (max 20) | |
 | `/stations/nearby` | `lat`, `lon` | required | |
 | | `radiusM`, `limit` | 5000 (max 50000), 8 (max 50) | |
-| `/stations/{id}/destinations` | `q`, `limit` | –, 30 (max 500) | name filter (case- and accent-insensitive) |
+| `/stations/{id}/destinations` | `q`, `limit` | –, 30 (max 500) | name filter, same matching as `/stations?q=`; best match first, then most served |
 | `/stations/{id}/connections` | `to` | required | destination `stopId` |
 | | `windowMin`, `limit` | 180 (1…1440), 10 (max 100) | departures within the window (trains at the station always included) |
 | `/stations/{id}/screen` | `limit` | 6 (max 20) | number of departures |
@@ -387,7 +387,7 @@ Implementation: `push/` (Web Push encryption + VAPID with the JDK, FCM HTTP v1);
   Always: every incident concerning the train (same matching as `/trains/{id}/incidents`) when it starts, and
   `"Resolved: …"` when it is removed. The subscription ends by itself once the train has left that station or has
   left service.
-- **A line** `{ "line": "IC 1" }` (case-insensitive; must have a train in service): incidents only. An incident concerns
+- **A line** `{ "line": "IC 1" }` (case and spaces ignored; must have a train in service): incidents only. An incident concerns
   the line if its scope is the line or the network, or if it concerns any train in service on the line.
 
 Each incident is announced once per subscription (updates do not repeat it); incidents already active when you

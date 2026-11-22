@@ -49,6 +49,18 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import org.slf4j.LoggerFactory
+import kotlinx.serialization.json.buildJsonObject
+import ch.lauzhack.twin.common.opt
+import ch.lauzhack.twin.common.toPlain
+import ch.lauzhack.twin.common.delayMin
+import ch.lauzhack.twin.common.minutes
+import ch.lauzhack.twin.common.simplifyGeometry
+import ch.lauzhack.twin.common.BBoxBuilder
+import ch.lauzhack.twin.common.lineKey
+import ch.lauzhack.twin.common.cleanDashes
+import ch.lauzhack.twin.query.Severity
+import ch.lauzhack.twin.query.sameLine
+import ch.lauzhack.twin.query.lineIn
 
 /** What one tool call gives back: the text the model reads, and the map commands it produced. */
 class ToolOutcome(val content: String, val isError: Boolean = false, val visuals: List<VisualCommand> = emptyList())
@@ -209,7 +221,7 @@ class AssistantTools(
             "Outline live trains on the map: the passenger's train, the one to take, the trains of a line or between two stations.",
             required = listOf("trains"),
         ) {
-            put("trains", jsonOf {
+            put("trains", buildJsonObject {
                 put("type", "array")
                 put("description", "Trains in service (trainId from a tool), with a short label in the passenger's language.")
                 putJsonObject("items") {
@@ -245,7 +257,7 @@ class AssistantTools(
             "Mark stations on the map (origin, destination, transfer, incident, or info such as a train's next stops).",
             required = listOf("stations"),
         ) {
-            put("stations", jsonOf {
+            put("stations", buildJsonObject {
                 put("type", "array")
                 putJsonObject("items") {
                     put("type", "object")
@@ -263,7 +275,7 @@ class AssistantTools(
             "Draw a path along consecutive stations (real track from the twin), e.g. a line's route or a train's remaining run.",
             required = listOf("stopIds"),
         ) {
-            put("stopIds", jsonOf {
+            put("stopIds", buildJsonObject {
                 put("type", "array")
                 put("description", "At least 2 stations in travel order (stopIds or names); only the main stops are needed.")
                 putJsonObject("items") { put("type", "string") }
@@ -302,7 +314,7 @@ class AssistantTools(
             required = emptyList(),
         ) {
             listOf("trainIds" to "Trains in service.", "stopIds" to "Stations (stopIds or names).", "sectionIds" to "Ids of drawn sections (sec-A-B, path:A-B).")
-                .forEach { (k, d) -> put(k, jsonOf { put("type", "array"); put("description", d); putJsonObject("items") { put("type", "string") } }) }
+                .forEach { (k, d) -> put(k, buildJsonObject { put("type", "array"); put("description", d); putJsonObject("items") { put("type", "string") } }) }
         },
         tool(
             "respond",
@@ -313,7 +325,7 @@ class AssistantTools(
                 "Spoken by the voice agent: 10-25 words, 1-2 calm sentences in the passenger's language, the answer first, no preamble; the " +
                     "key fact or recommendation first. Plain text: no markdown, no lists, no ids.")
             prop("summary", "string", "One short line for the screen (at most about 60 characters), same language.")
-            put("options", jsonOf {
+            put("options", buildJsonObject {
                 put("type", "array")
                 put("description", "The journeys you compared, best first. Departure, arrival and transfers are filled in from the journeyId.")
                 putJsonObject("items") {
@@ -327,14 +339,14 @@ class AssistantTools(
                     putJsonArray("required") { add("label"); add("recommended") }
                 }
             })
-            put("unavailable", jsonOf {
+            put("unavailable", buildJsonObject {
                 put("type", "array")
                 put("description", "The out-of-scope topics the passenger asked about (you have no data on them); empty otherwise.")
                 putJsonObject("items") { put("type", "string"); putJsonArray("enum") { Scope.TOPICS.forEach { add(it) } } }
             })
             prop("append", "boolean", "true only for a pure follow-up that adds to the current map picture; by default the picture is replaced.")
             prop("followUp", "string", "One short question for the passenger, only if it really helps (otherwise leave it out).")
-            put("situationIds", jsonOf {
+            put("situationIds", buildJsonObject {
                 put("type", "array")
                 put("description", "ids of the incidents and alerts (from the tools) that matter for this passenger, most important first.")
                 putJsonObject("items") { put("type", "string") }
@@ -412,20 +424,20 @@ class AssistantTools(
         }
         val viewStop = view?.stopId?.trim()?.takeIf { (view.screen == "station" || view.screen == "destinations") && it.isNotEmpty() && it != from }
         val line = if (train == null) guessLine(turn.request.question)
-            ?: view?.line?.trim()?.takeIf { view.screen == "line" && it.isNotEmpty() && viewTrain == null }?.replace(" ", "")?.uppercase()
+            ?: view?.line?.trim()?.takeIf { view.screen == "line" && it.isNotEmpty() && viewTrain == null }?.let(::lineKey)
             else null
         val calls = buildList {
-            if (viewTrain != null) add("train_status" to jsonOf { put("trainId", viewTrain) })
-            if (viewStop != null && to == null && train == null) add("station_board" to jsonOf { put("stopId", viewStop); put("windowMin", 30) })
-            if (line != null) add("train_status" to jsonOf { put("line", line); to?.let { put("destination", it) } })
+            if (viewTrain != null) add("train_status" to buildJsonObject { put("trainId", viewTrain) })
+            if (viewStop != null && to == null && train == null) add("station_board" to buildJsonObject { put("stopId", viewStop); put("windowMin", 30) })
+            if (line != null) add("train_status" to buildJsonObject { put("line", line); to?.let { put("destination", it) } })
             if (from != null && to != null) {
-                add("plan_journey" to jsonOf { put("fromStopId", from); put("toStopId", to) })
-                add("situation" to jsonOf { put("fromStopId", from); put("toStopId", to) })
+                add("plan_journey" to buildJsonObject { put("fromStopId", from); put("toStopId", to) })
+                add("situation" to buildJsonObject { put("fromStopId", from); put("toStopId", to) })
             }
-            if (train != null) add("train_status" to jsonOf { put("trainId", train) })
+            if (train != null) add("train_status" to buildJsonObject { put("trainId", train) })
             if (from != null && to == null && train == null) {
-                add("situation" to jsonOf { put("stopId", from) })
-                add("station_board" to jsonOf { put("stopId", from); put("windowMin", 30) })
+                add("situation" to buildJsonObject { put("stopId", from) })
+                add("station_board" to buildJsonObject { put("stopId", from); put("windowMin", 30) })
             }
         }
         val explored = if (from != null && to != null) {
@@ -436,7 +448,7 @@ class AssistantTools(
         val ex = explored?.await()
         if (ex != null) {
             turn.toolsCalled += "pre:explore"
-            done + Triple("explored_alternatives", jsonOf { put("fromStopId", from); put("toStopId", to) }, ToolOutcome(ex))
+            done + Triple("explored_alternatives", buildJsonObject { put("fromStopId", from); put("toStopId", to) }, ToolOutcome(ex))
         } else done
     }
 
@@ -587,7 +599,7 @@ class AssistantTools(
 
     /** A train line named in the question, e.g. "IC8", "IC 8", "S3" -> "IC8", "S3". */
     fun guessLine(question: String): String? =
-        LINE_PATTERN.find(question)?.let { m -> m.groupValues[1].ifEmpty { m.groupValues[3] } + m.groupValues[2].ifEmpty { m.groupValues[4] } }
+        lineIn(question)
 
     private fun trainText(id: String): String {
         val t = runCatching { queries.trainSummary(id) }.getOrNull()
@@ -603,7 +615,7 @@ class AssistantTools(
             "train" -> id(v.trainId)?.let { t ->
                 "the live view of train ${trainText(t)}" + (st(v.fromStopId)?.let { f -> st(v.toStopId)?.let { " for a trip $f -> $it" } } ?: "")
             }
-            "line" -> id(v.line)?.let { "the status page of line ${it.replace(" ", "").uppercase()} (its incidents and trains in service)" }
+            "line" -> id(v.line)?.let { "the status page of line ${lineKey(it)} (its incidents and trains in service)" }
             "station" -> st(v.stopId)?.let { "the departure board of $it" }
             "destinations" -> st(v.stopId)?.let { "the list of destinations from $it (choosing where to go)" }
             "connections" -> st(v.fromStopId)?.let { f -> st(v.toStopId)?.let { "the live trains from $f to $it" } }
@@ -637,8 +649,8 @@ class AssistantTools(
         val q = input.str("query") ?: throw ToolError("query is required")
         var hits = stations.search(q, 5)
         if (hits.isEmpty()) hits = twinSearch(q).take(5)
-        return ok(jsonOf {
-            put("matches", buildJsonArray { hits.forEach { add(jsonOf { put("stopId", it.stopId); put("name", it.name) }) } })
+        return ok(buildJsonObject {
+            put("matches", buildJsonArray { hits.forEach { add(buildJsonObject { put("stopId", it.stopId); put("name", it.name) }) } })
             if (hits.isEmpty()) put("note", "no station matches \"$q\"")
         })
     }
@@ -655,7 +667,7 @@ class AssistantTools(
             val t = e.time ?: return@forEach
             seen += e.trainId
             if (e.status != "cancelled") turn.publishedDepartures += t
-            rows += t to jsonOf {
+            rows += t to buildJsonObject {
                 put("time", hhmm(t))
                 if (hhmm(e.plannedTime) != hhmm(t)) opt("planned", hhmm(e.plannedTime))
                 opt("delayMin", delayMin(t, e.plannedTime)?.takeIf { it != 0 })
@@ -676,7 +688,7 @@ class AssistantTools(
             val t = o.long("expected") ?: o.long("planned") ?: return@forEach
             if (t > until) return@forEach
             if (o.bool("cancelled") != true) turn.publishedDepartures += t
-            rows += t to jsonOf {
+            rows += t to buildJsonObject {
                 put("time", hhmm(t))
                 val p = o.long("planned")
                 if (hhmm(p) != hhmm(t)) opt("planned", hhmm(p))
@@ -688,8 +700,8 @@ class AssistantTools(
             }
         }
         if (local == null && remote == null) throw ToolError("no departures known for ${st.name}")
-        ok(jsonOf {
-            put("station", jsonOf { put("stopId", st.stopId); put("name", st.name) })
+        ok(buildJsonObject {
+            put("station", buildJsonObject { put("stopId", st.stopId); put("name", st.name) })
             put("now", hhmm(turn.now))
             put("departures", buildJsonArray { rows.sortedBy { it.first }.take(16).forEach { add(it.second) } })
         })
@@ -697,7 +709,7 @@ class AssistantTools(
 
     private suspend fun trainStatus(input: JsonObject, turn: TurnState): ToolOutcome {
         input.str("trainId")?.let { return ok(trainDetail(it, turn)) }
-        val line = input.str("line")?.replace(" ", "")?.uppercase() ?: throw ToolError("give trainId, or line (e.g. IC8)")
+        val line = input.str("line")?.let(::lineKey) ?: throw ToolError("give trainId, or line (e.g. IC8)")
         val dest = input.str("destination")?.let { station(it, "destination") }
         val via = input.str("stopId")?.let { station(it, "stopId") }
         var found = queries.trains(TrainFilter(line = line, stationId = dest?.stopId), 2000, 0).items
@@ -727,7 +739,7 @@ class AssistantTools(
         // The only one stopped on the open line is most likely the passenger's "my train stopped": full detail for it.
         val stoppedOnLine = sorted.filter { it.position?.motion == "stopped" && it.currentStop == null }
         val detailed = stoppedOnLine.singleOrNull()?.let { runCatching { trainDetail(it.trainId, turn) }.getOrNull() }
-        return ok(jsonOf {
+        return ok(buildJsonObject {
             if (detailed != null) put("stoppedOnTheLine", detailed)
             put("candidates", buildJsonArray {
                 sorted.filter { it.trainId != stoppedOnLine.singleOrNull()?.trainId || detailed == null }.take(6).forEach { t ->
@@ -739,20 +751,20 @@ class AssistantTools(
     }
 
     /** A train in a candidates list: enough to answer without a second call (state, delay, next stop, arrival, incidents). */
-    private fun candidateJson(t: TrainSummaryDto, distanceKm: Double?, turn: TurnState): JsonObject = jsonOf {
+    private fun candidateJson(t: TrainSummaryDto, distanceKm: Double?, turn: TurnState): JsonObject = buildJsonObject {
         put("trainId", t.trainId)
         opt("line", t.line)
         opt("number", t.number)
         opt("from", t.origin?.name)
         opt("to", t.destination?.name ?: t.headsign)
         put("now", describe(t, null))
-        opt("delayMin", t.delaySec?.let { (it / 60.0).roundToInt() }?.takeIf { it != 0 })
-        t.nextStop?.let { n -> put("next", jsonOf { put("name", n.name); opt("arr", hhmm(n.expectedArr ?: n.plannedArr)); opt("dep", hhmm(n.expectedDep ?: n.plannedDep)) }) }
+        opt("delayMin", t.delaySec?.let { minutes(it) }?.takeIf { it != 0 })
+        t.nextStop?.let { n -> put("next", buildJsonObject { put("name", n.name); opt("arr", hhmm(n.expectedArr ?: n.plannedArr)); opt("dep", hhmm(n.expectedDep ?: n.plannedDep)) }) }
         val stops = runCatching { queries.trainStops(t.trainId, null) }.getOrNull().orEmpty()
         stops.lastOrNull()?.takeIf { it.stopId != t.nextStop?.stopId }?.let { last -> opt("arrivesAtTerminus", hhmm(last.expectedArr ?: last.plannedArr)) }
         val incidents = runCatching { queries.trainIncidents(t.trainId) }.getOrNull().orEmpty()
         incidents.forEach { turn.note(it.toItem()) }
-        if (incidents.isNotEmpty()) put("incidents", buildJsonArray { incidents.take(3).forEach { i -> add(jsonOf { put("id", i.id); put("title", i.title) }) } })
+        if (incidents.isNotEmpty()) put("incidents", buildJsonArray { incidents.take(3).forEach { i -> add(buildJsonObject { put("id", i.id); put("title", i.title) }) } })
         opt("distanceKm", distanceKm?.let { (it * 10).roundToInt() / 10.0 })
     }
 
@@ -763,7 +775,7 @@ class AssistantTools(
         val sit = sitAsync.await()
         if (local == null && remote == null) throw ToolError("train $trainId is not in service")
         val incidents = LinkedHashMap<String, JsonObject>()
-        val out = jsonOf {
+        val out = buildJsonObject {
             if (local != null) {
                 val t = local.train
                 put("trainId", t.trainId)
@@ -772,11 +784,11 @@ class AssistantTools(
                 opt("from", t.origin?.name)
                 opt("to", t.destination?.name ?: t.headsign)
                 if (t.status == "cancelled") put("status", "cancelled")
-                opt("delayMin", t.delaySec?.let { (it / 60.0).roundToInt() })
+                opt("delayMin", t.delaySec?.let { minutes(it) })
                 put("now", describe(t, local.stops))
                 opt("speedKmh", t.position?.speedKmh?.roundToInt())
                 local.stops.lastOrNull { it.state == StopState.passed }?.let { p ->
-                    put("lastStop", jsonOf { put("name", p.name); opt("left", hhmm(p.actualDep ?: p.expectedDep ?: p.plannedDep)) })
+                    put("lastStop", buildJsonObject { put("name", p.name); opt("left", hhmm(p.actualDep ?: p.expectedDep ?: p.plannedDep)) })
                 }
                 val ahead = local.stops.filter { it.state != StopState.passed }
                 val shown = if (ahead.size > 12) ahead.take(11) + ahead.last() else ahead
@@ -785,7 +797,7 @@ class AssistantTools(
                 local.incidents.forEach { inc ->
                     val item = inc.toItem()
                     turn.note(item)
-                    incidents[inc.id] = jsonOf {
+                    incidents[inc.id] = buildJsonObject {
                         put("id", inc.id); put("title", inc.title); opt("where", inc.where); opt("severity", inc.severity)
                         put("source", item.source); opt("match", inc.match); measure(raw[inc.id], turn.now)
                     }
@@ -801,7 +813,7 @@ class AssistantTools(
                 val id = inc.str("id") ?: return@forEach
                 val item = twinItem(inc)
                 turn.note(item)
-                incidents.putIfAbsent(id, jsonOf {
+                incidents.putIfAbsent(id, buildJsonObject {
                     put("id", id); put("title", item.title); opt("where", item.where); put("severity", item.severity)
                     put("source", item.source); measure(inc, turn.now)
                 })
@@ -821,7 +833,7 @@ class AssistantTools(
         opt("from", info?.obj("origin")?.str("name"))
         opt("to", info?.obj("destination")?.str("name") ?: info?.str("headsign"))
         if (info?.str("status") == "cancelled") put("status", "cancelled")
-        opt("delayMin", pos?.int("delaySec")?.let { (it / 60.0).roundToInt() })
+        opt("delayMin", pos?.int("delaySec")?.let { minutes(it) })
         val at = pos?.obj("atStop")?.str("name")
         val next = pos?.obj("nextStop")?.str("name")
         val prev = pos?.obj("prevStop")?.str("name")
@@ -836,7 +848,7 @@ class AssistantTools(
         val firstAhead = calls.indexOfFirst { it.long("expectedArr") != null || it.long("expectedDep") != null }.takeIf { it >= 0 } ?: calls.size
         put("nextStops", buildJsonArray {
             calls.drop(firstAhead).take(12).forEach { c ->
-                add(jsonOf {
+                add(buildJsonObject {
                     opt("stopId", c.str("stopId"))
                     opt("name", c.str("name"))
                     opt("arr", hhmm(c.long("expectedArr") ?: c.long("plannedArr")))
@@ -865,9 +877,9 @@ class AssistantTools(
             cj.journey.long("departure")?.let { turn.publishedDepartures += it }
         }
         val recommended = r.str("recommendedJourneyId")?.takeIf { id -> list.any { it.id == id } }
-        return ok(jsonOf {
-            put("from", jsonOf { put("stopId", r.obj("from")?.str("id") ?: a.stopId); put("name", r.obj("from")?.str("name") ?: a.name) })
-            put("to", jsonOf { put("stopId", r.obj("to")?.str("id") ?: b.stopId); put("name", r.obj("to")?.str("name") ?: b.name) })
+        return ok(buildJsonObject {
+            put("from", buildJsonObject { put("stopId", r.obj("from")?.str("id") ?: a.stopId); put("name", r.obj("from")?.str("name") ?: a.name) })
+            put("to", buildJsonObject { put("stopId", r.obj("to")?.str("id") ?: b.stopId); put("name", r.obj("to")?.str("name") ?: b.name) })
             opt("plannerRecommends", recommended)
             put("journeys", buildJsonArray { list.forEach { add(journeyJson(it.journey, recommended)) } })
             if (list.isEmpty()) put("note", "No connection found in the timetable the planner covers (the next hours).")
@@ -944,7 +956,7 @@ class AssistantTools(
         // For a trip: the twin's disruptions whose section is off the corridor (e.g. Zürich HB - Winterthur for
         // Zürich HB -> Bern) are left out, so the model never mentions closures that are not on the way.
         val offRoute: Set<String> = if (from != null && to != null) offCorridor(from, to) else emptySet()
-        val out = jsonOf {
+        val out = buildJsonObject {
             fun addTwinStation(part: JsonObject?) {
                 part?.objects("incidents")?.filter { it.str("id") !in offRoute }?.forEach { addIncident(twinItem(it), it.long("since"), it.strings("trainIds").size, it.str("description"), it, incidents, turn) }
                 part?.objects("alerts")?.forEach { addAlert(it, alerts, turn) }
@@ -966,7 +978,7 @@ class AssistantTools(
                     put("for", "train $trainId")
                     val r = twinOrNull { twin.situationOfTrain(trainId) }
                     r?.obj("train")?.let { tr ->
-                        put("train", jsonOf {
+                        put("train", buildJsonObject {
                             opt("line", tr.str("line"))
                             opt("to", tr.str("headsign"))
                             if (tr.str("mode") == "affected") put("affectedByDisruption", true)
@@ -1002,7 +1014,7 @@ class AssistantTools(
 
     private suspend fun bulletins(input: JsonObject, turn: TurnState): ToolOutcome = coroutineScope {
         val st = input.str("stopId")?.let { station(it, "stopId") }
-        val line = input.str("line")?.replace(" ", "")?.uppercase()
+        val line = input.str("line")?.let(::lineKey)
         val bulletinsCall = async { twin.bulletins() }
         val disruptions = runCatching { twin.disruptions() }.getOrNull()?.arr()?.mapNotNull { it.obj() }.orEmpty()
             .associateBy { it.str("id") ?: "" }
@@ -1024,7 +1036,7 @@ class AssistantTools(
             val endedAt = d?.long("endedAt") ?: b.long("ts")
             if (ended && endedAt != null && turn.now - endedAt > 30 * 60_000L) return@filter false
             if (st != null && st.stopId !in stopIds(d)) return@filter false
-            if (line != null && b.strings("lines").none { it.replace(" ", "").uppercase() == line }) return@filter false
+            if (line != null && b.strings("lines").none { sameLine(it, line) }) return@filter false
             true
         }.sortedWith(compareBy<JsonObject>({ if (it.str("lifecycle") == "ENDED") 1 else 0 }, { -(it.long("ts") ?: 0L) }))
 
@@ -1040,7 +1052,7 @@ class AssistantTools(
                 val d = disruptions[id]
                 val title = b.str("title") ?: d?.str("summary") ?: "Disruption"
                 val active = b.str("lifecycle") != "ENDED"
-                turn.note(SituationItem(id, title, d?.str("where"), if (!active) "info" else if (d?.str("effect") == "limited") "major" else "critical", "sbb"))
+                turn.note(SituationItem(id, title, d?.str("where"), (if (!active) Severity.INFO else Severity.fromEffect(d?.str("effect"), unknown = Severity.CRITICAL)).id, "sbb"))
                 appendLine()
                 append("[").append(id).append("] ").append(title)
                 append(" (").append(if (active) "active" else "ended, service resumed").append(", version ").append(b.int("version") ?: 1).appendLine(")")
@@ -1125,7 +1137,7 @@ class AssistantTools(
     ) {
         if (into.containsKey(item.id)) return
         turn.note(item)
-        into[item.id] = jsonOf {
+        into[item.id] = buildJsonObject {
             put("id", item.id)
             put("title", item.title)
             opt("where", item.where)
@@ -1156,7 +1168,7 @@ class AssistantTools(
         if (into.containsKey(id)) return
         val item = alertItem(a)
         turn.note(item)
-        into[id] = jsonOf {
+        into[id] = buildJsonObject {
             put("id", id)
             put("title", item.title)
             put("severity", item.severity)
@@ -1216,7 +1228,7 @@ class AssistantTools(
     }
 
     private suspend fun highlightLine(input: JsonObject): ToolOutcome {
-        val line = input.str("line")?.replace(" ", "")?.uppercase() ?: throw ToolError("line is required")
+        val line = input.str("line")?.let(::lineKey) ?: throw ToolError("line is required")
         val visuals = mutableListOf<VisualCommand>(LineVisual(line, input.str("label")))
         var note = ""
         if (input.bool("route") == true) {
@@ -1237,17 +1249,17 @@ class AssistantTools(
     private suspend fun arrivals(input: JsonObject): ToolOutcome {
         val st = station(input.str("stopId"), "stopId")
         val list = twin.arrivals(st.stopId).arr()?.mapNotNull { it.obj() }.orEmpty().take(12)
-        return ok(jsonOf {
-            put("station", jsonOf { put("stopId", st.stopId); put("name", st.name) })
+        return ok(buildJsonObject {
+            put("station", buildJsonObject { put("stopId", st.stopId); put("name", st.name) })
             put("arrivals", buildJsonArray {
                 list.forEach { a ->
-                    add(jsonOf {
+                    add(buildJsonObject {
                         opt("trainId", a.str("trainId"))
                         opt("line", a.str("line"))
                         opt("headsign", a.str("headsign"))
                         opt("expectedArr", hhmm(a.long("expectedArr") ?: a.long("plannedArr")))
-                        opt("etaMin", a.long("etaSec")?.let { (it / 60.0).roundToInt() })
-                        opt("delayMin", a.long("delaySec")?.let { (it / 60.0).roundToInt() }?.takeIf { it != 0 })
+                        opt("etaMin", a.long("etaSec")?.let { minutes(it) })
+                        opt("delayMin", a.long("delaySec")?.let { minutes(it) }?.takeIf { it != 0 })
                         opt("stopsAway", a.int("stopsAway"))
                         opt("status", a.str("status"))
                     })
@@ -1306,7 +1318,7 @@ class AssistantTools(
             }
         }
         if (lines.isEmpty()) return null
-        return jsonOf { put("type", "MultiLineString"); put("coordinates", JsonArray(lines)) }
+        return buildJsonObject { put("type", "MultiLineString"); put("coordinates", JsonArray(lines)) }
     }
 
     private suspend fun label(input: JsonObject): ToolOutcome {
@@ -1346,14 +1358,6 @@ class AssistantTools(
         } ?: throw ToolError("give journeyId, or until as HH:MM (Swiss time)")
         if (until < turn.now - 60_000 || until > turn.now + 24 * 3_600_000L) throw ToolError("the departure ${hhmm(until)} is not in the next 24 hours")
         return ToolOutcome("ok: countdown to ${hhmm(until)}", visuals = listOf(TimerVisual(label, until)))
-    }
-
-    private suspend fun focusOn(input: JsonObject): ToolOutcome {
-        val ids = input.strings("stopIds").ifEmpty { throw ToolError("stopIds is required") }
-        val box = BBoxBuilder()
-        ids.forEach { s -> runCatching { station(s, "stopIds") }.getOrNull()?.let { box.add(it.lon, it.lat) } }
-        val bbox = box.build() ?: throw ToolError("no coordinates for these stations")
-        return ToolOutcome("ok: map focused", visuals = listOf(FocusVisual(bbox)))
     }
 
     private fun respond(input: JsonObject, turn: TurnState): ToolOutcome {
@@ -1414,7 +1418,7 @@ class AssistantTools(
             Station(id, o.str("name") ?: id, o.double("lat"), o.double("lon"))
         }.orEmpty()
 
-    private fun journeyJson(j: JsonObject, recommended: String?): JsonObject = jsonOf {
+    private fun journeyJson(j: JsonObject, recommended: String?): JsonObject = buildJsonObject {
         put("journeyId", j.str("id") ?: "")
         if (recommended != null && j.str("id") == recommended) put("plannerRecommended", true)
         put("dep", hhmm(j.long("departure")))
@@ -1429,7 +1433,7 @@ class AssistantTools(
             j.objects("legs").forEach { l ->
                 val f = l.obj("from")
                 val t = l.obj("to")
-                add(jsonOf {
+                add(buildJsonObject {
                     opt("line", l.str("line"))
                     opt("trainId", l.str("trainId"))
                     opt("headsign", l.str("headsign"))
@@ -1439,11 +1443,11 @@ class AssistantTools(
                     opt("to", t?.str("name"))
                     opt("toStopId", t?.str("id"))
                     opt("arr", hhmm(t?.long("expectedArr") ?: t?.long("plannedArr")))
-                    opt("delayMin", l.int("delaySec")?.let { (it / 60.0).roundToInt() }?.takeIf { it != 0 })
+                    opt("delayMin", l.int("delaySec")?.let { minutes(it) }?.takeIf { it != 0 })
                     l.str("status")?.takeIf { it != "on time" }?.let { put("status", it) }
                     opt("stopsBetween", l.int("stopsBetween"))
                     val inc = l.objects("incidents")
-                    if (inc.isNotEmpty()) put("incidents", buildJsonArray { inc.forEach { i -> add(jsonOf { opt("id", i.str("id")); opt("title", i.str("title")); opt("severity", i.str("severity")) }) } })
+                    if (inc.isNotEmpty()) put("incidents", buildJsonArray { inc.forEach { i -> add(buildJsonObject { opt("id", i.str("id")); opt("title", i.str("title")); opt("severity", i.str("severity")) }) } })
                 })
             }
         })
@@ -1477,13 +1481,13 @@ class AssistantTools(
             .format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM HH:mm", java.util.Locale.ENGLISH))
     }
 
-    private fun stopJson(s: StopDto): JsonObject = jsonOf {
+    private fun stopJson(s: StopDto): JsonObject = buildJsonObject {
         put("stopId", s.stopId)
         put("name", s.name)
         opt("arr", hhmm(s.expectedArr ?: s.plannedArr))
         opt("dep", hhmm(s.expectedDep ?: s.plannedDep))
         val d = s.arrDelaySec ?: s.depDelaySec
-        opt("delayMin", d?.let { (it / 60.0).roundToInt() }?.takeIf { it != 0 })
+        opt("delayMin", d?.let { minutes(it) }?.takeIf { it != 0 })
         if (s.skipped) put("passesWithoutStopping", true)
         if (s.state == StopState.current) put("standingHereNow", true)
     }
@@ -1543,19 +1547,15 @@ class AssistantTools(
             "(?=\\b(?:to|towards|nach|pour|vers|à|per|verso)\\s+$NAME$END)",
         ).map { Regex(it, RegexOption.IGNORE_CASE) }
         // case-sensitive: "S3" yes, "it's 3" no
-        private val LINE_PATTERN = Regex("\\b(?:(IC|ICN|IR|RE|EC|ICE|TGV|RJX|PE)\\s?(\\d{1,3})|(S|R)(\\d{1,2}))\\b")
         val COLOURS = setOf("red", "orange", "green", "blue", "grey")
         val ROLES = listOf("origin", "destination", "transfer", "incident", "info")
         /** Major hubs used to explore alternative corridors. */
         private val HUBS = listOf("8507000", "8500218", "8503000", "8501120", "8504300", "8505000", "8500010", "8504100")
 
-        private val SEVERITIES = listOf("info", "minor", "major", "critical")
 
-        fun severityOf(s: String?) = s?.lowercase()?.takeIf { it in SEVERITIES } ?: "info"
-        fun severityRank(s: String) = SEVERITIES.indexOf(s)
 
         /** Incidents ingested from MQTT: the twin's automatic detector types them `auto.<rule>`. */
-        fun IncidentDto.toItem() = SituationItem(id, title, where, severityOf(severity), if (type?.startsWith("auto") == true) "auto" else "staff")
+        fun IncidentDto.toItem() = SituationItem(id, title, where, Severity.parse(severity).id, if (type?.startsWith("auto") == true) "auto" else "staff")
 
         /** An incident or alert as the twin's planner/situation lists it (`{id, title, where?, severity, source}`). */
         fun twinItem(o: JsonObject): SituationItem {
@@ -1566,19 +1566,19 @@ class AssistantTools(
                 else -> "sbb"
             }
             val title = o.str("title") ?: ""
-            return SituationItem(o.str("id") ?: "", title, o.str("where") ?: whereFromTitle(title, emptyList()).takeIf { source == "sbb" }, severityOf(o.str("severity")), source)
+            return SituationItem(o.str("id") ?: "", title, o.str("where") ?: whereFromTitle(title, emptyList()).takeIf { source == "sbb" }, Severity.parse(o.str("severity")).id, source)
         }
 
         /** A real SBB alert; `where` from its title ("Limited service: Lausanne - Genève") or its stations. */
         fun alertItem(a: JsonObject): SituationItem {
             val title = a.str("title") ?: "SBB information"
             val names = a.objects("stations").mapNotNull { it.str("name") }
-            return SituationItem(a.str("id") ?: "", title, whereFromTitle(title, names), severityOf(a.str("severity")), "sbb")
+            return SituationItem(a.str("id") ?: "", title, whereFromTitle(title, names), Severity.parse(a.str("severity")).id, "sbb")
         }
 
         /** "Limited service: Lausanne - Genève" -> "Lausanne – Genève"; else the alert's stations, if any. */
         fun whereFromTitle(title: String, stationNames: List<String>): String? = when {
-            ':' in title && title.substringAfter(':').isNotBlank() -> title.substringAfter(':').trim().replace(" - ", " – ")
+            ':' in title && title.substringAfter(':').isNotBlank() -> cleanDashes(title.substringAfter(':').trim())
             " - " in title -> {
                 val (left, right) = title.split(" - ", limit = 2)
                 val start = stationNames.filter { left.endsWith(it) }.maxByOrNull { it.length } ?: left.substringAfterLast(' ')
@@ -1592,7 +1592,7 @@ class AssistantTools(
         private fun JsonElement.toJsonValue(): JsonValue = JsonValue.from(toPlain())
 
         private fun JsonObjectBuilder.prop(name: String, type: String, description: String, enum: List<String>? = null) {
-            put(name, jsonOf {
+            put(name, buildJsonObject {
                 put("type", type)
                 put("description", description)
                 if (enum != null) putJsonArray("enum") { enum.forEach { add(it) } }
@@ -1601,7 +1601,7 @@ class AssistantTools(
 
         private fun tool(name: String, description: String, required: List<String>, props: JsonObjectBuilder.() -> Unit): Tool {
             val properties = Tool.InputSchema.Properties.builder()
-            jsonOf(props).forEach { (k, v) -> properties.putAdditionalProperty(k, v.toJsonValue()) }
+            buildJsonObject(props).forEach { (k, v) -> properties.putAdditionalProperty(k, v.toJsonValue()) }
             return Tool.builder()
                 .name(name)
                 .description(description)
@@ -1611,4 +1611,3 @@ class AssistantTools(
     }
 }
 
-private fun JsonObject.obj(key: String): JsonObject? = this[key] as? JsonObject

@@ -43,7 +43,6 @@ import javax.crypto.KeyAgreement
 import javax.crypto.Mac
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
-import kotlin.io.path.createTempFile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -119,7 +118,7 @@ class PushTest {
 
     private class Env {
         val st = LiveState()
-        val db = Database(createTempFile("twin", ".sqlite").toString())
+        val db = testDb()
         val fake = Fake()
         val q = TwinQueries(st) { db.incidents(activeOnly = true) }
         val push = PushService(PushStore(db), q, st, PushConfig(arrivalLeadSec = 120), mapOf("web" to fake, "fcm" to fake))
@@ -227,7 +226,7 @@ class PushTest {
         st.upsertInfo(info("t1", aheadFrom = 2))
         st.upsertInfo(info("t2", aheadFrom = 0, stops = listOf("X", "Y"), line = "IC 1"))
         st.replacePositions(mapOf("t1" to pos("t1", null), "t2" to pos("t2", "X")), T0 + 1_100_000)
-        val db = Database(createTempFile("twin", ".sqlite").toString())
+        val db = testDb()
         val fake = Fake()
         application { configureHttp(st, db, pushSenders = mapOf("web" to fake)) { true } }
         val json = Json

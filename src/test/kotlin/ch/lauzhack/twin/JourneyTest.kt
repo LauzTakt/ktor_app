@@ -3,7 +3,6 @@ package ch.lauzhack.twin
 import ch.lauzhack.twin.common.angleDiff
 import ch.lauzhack.twin.common.haversineM
 import ch.lauzhack.twin.common.move
-import ch.lauzhack.twin.db.Database
 import ch.lauzhack.twin.model.TrainPosition
 import ch.lauzhack.twin.state.LiveState
 import io.ktor.client.request.get
@@ -17,7 +16,6 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlin.io.path.createTempFile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -32,7 +30,7 @@ class JourneyTest {
         val st = LiveState()
         st.upsertInfo(info("t-ab", aheadFrom = 1))
         if (onlyOneTrain) { // the fixture places stops by index, so other runs would move the stations around
-            application { configureHttp(st, Database(createTempFile("twin", ".sqlite").toString())) { true } }
+            application { configureHttp(st, testDb()) { true } }
             return@testApplication test()
         }                                  // A->B->C->D, between A and B
         st.upsertInfo(info("t-rev", aheadFrom = 1, stops = listOf("D", "C", "B", "A"), line = "S2")) // D->A
@@ -46,7 +44,7 @@ class JourneyTest {
             ),
             T0,
         )
-        val db = Database(createTempFile("twin", ".sqlite").toString())
+        val db = testDb()
         application { configureHttp(st, db) { true } }
         test()
     }
