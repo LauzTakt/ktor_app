@@ -1,6 +1,5 @@
 package ch.lauzhack.twin
 
-import ch.lauzhack.twin.db.Database
 import ch.lauzhack.twin.state.LiveState
 import io.ktor.client.plugins.cookies.HttpCookies
 import io.ktor.client.plugins.websocket.WebSockets
@@ -25,7 +24,6 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlin.io.path.createTempFile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -35,7 +33,7 @@ class ReportsTest {
         val st = LiveState()
         st.upsertInfo(info("t-1", aheadFrom = 1, line = "IC1"))
         st.replacePositions(mapOf("t-1" to pos("t-1", null, delaySec = 240)), T0)
-        val db = Database(createTempFile("twin", ".sqlite").toString())
+        val db = testDb()
         application { configureHttp(st, db) { true } }
         test()
     }

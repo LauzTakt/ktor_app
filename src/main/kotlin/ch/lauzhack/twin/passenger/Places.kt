@@ -129,8 +129,6 @@ class StationCatalog(
         }
     }
 
-    suspend fun byId(id: String?): CatalogStation? = id?.let { i -> list().find { it.id == i } }
-
     /** `GET /api/nearest` body: `{id, name, lon, lat, distanceKm}`. */
     suspend fun nearestJson(lat: Double, lon: Double): JsonObject? {
         val (s, d) = Places.nearest(list(), lat, lon) ?: return null

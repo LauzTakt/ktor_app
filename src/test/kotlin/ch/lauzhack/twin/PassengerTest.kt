@@ -1,6 +1,5 @@
 package ch.lauzhack.twin
 
-import ch.lauzhack.twin.db.Database
 import ch.lauzhack.twin.passenger.PassengerConfig
 import ch.lauzhack.twin.passenger.Places
 import ch.lauzhack.twin.passenger.CatalogStation
@@ -20,7 +19,6 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.net.InetSocketAddress
 import java.util.concurrent.CopyOnWriteArrayList
-import kotlin.io.path.createTempFile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -77,7 +75,7 @@ class PassengerTest {
 
     private fun withApp(backend: FakeBackend, cfg: PassengerConfig = PassengerConfig(twinUrl = backend.url), block: suspend ApplicationTestBuilder.() -> Unit) =
         testApplication {
-            application { configureHttp(LiveState(), Database(createTempFile("twin", ".sqlite").toString()), passenger = cfg) { true } }
+            application { configureHttp(LiveState(), testDb(), passenger = cfg) { true } }
             block()
         }
 
@@ -265,7 +263,7 @@ class PassengerTest {
         val st = LiveState()
         st.upsertInfo(info("t-1", aheadFrom = 0)) // stations A..D at 47.00/8.00 .. 47.03/8.03
         val down = PassengerConfig(twinUrl = "http://127.0.0.1:1")
-        application { configureHttp(st, Database(createTempFile("twin", ".sqlite").toString()), passenger = down) { true } }
+        application { configureHttp(st, testDb(), passenger = down) { true } }
         val r = client.get("/api/nearest?lat=47.011&lon=8.011")
         assertEquals(HttpStatusCode.OK, r.status, r.bodyAsText())
         assertEquals("B", parse(r.bodyAsText())["id"]!!.jsonPrimitive.content)
@@ -274,7 +272,7 @@ class PassengerTest {
     @Test
     fun `twin down and no stations of our own - 502 with an error message`() = testApplication {
         val down = PassengerConfig(twinUrl = "http://127.0.0.1:1")
-        application { configureHttp(LiveState(), Database(createTempFile("twin", ".sqlite").toString()), passenger = down) { true } }
+        application { configureHttp(LiveState(), testDb(), passenger = down) { true } }
         val r = client.get("/api/nearest?lat=47.0&lon=8.0")
         assertEquals(HttpStatusCode.BadGateway, r.status)
         assertTrue(parse(r.bodyAsText())["error"]!!.jsonPrimitive.content.startsWith("sbb-twin unreachable"), r.bodyAsText())

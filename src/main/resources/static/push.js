@@ -59,7 +59,6 @@ export function support() {
 
 export const deviceId = () => localStorage.getItem(DEVICE_KEY);
 export const enabled = () => Boolean(deviceId());
-export const permissionDenied = () => !native && "Notification" in window && Notification.permission === "denied";
 
 const b64ToBytes = (s) => {
   const b = atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4));

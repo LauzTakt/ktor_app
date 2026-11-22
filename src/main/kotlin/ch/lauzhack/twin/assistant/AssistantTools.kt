@@ -1348,14 +1348,6 @@ class AssistantTools(
         return ToolOutcome("ok: countdown to ${hhmm(until)}", visuals = listOf(TimerVisual(label, until)))
     }
 
-    private suspend fun focusOn(input: JsonObject): ToolOutcome {
-        val ids = input.strings("stopIds").ifEmpty { throw ToolError("stopIds is required") }
-        val box = BBoxBuilder()
-        ids.forEach { s -> runCatching { station(s, "stopIds") }.getOrNull()?.let { box.add(it.lon, it.lat) } }
-        val bbox = box.build() ?: throw ToolError("no coordinates for these stations")
-        return ToolOutcome("ok: map focused", visuals = listOf(FocusVisual(bbox)))
-    }
-
     private fun respond(input: JsonObject, turn: TurnState): ToolOutcome {
         val answer = input.str("answer") ?: throw ToolError("answer is required")
         val options = input.objects("options").map { o ->
@@ -1611,4 +1603,3 @@ class AssistantTools(
     }
 }
 
-private fun JsonObject.obj(key: String): JsonObject? = this[key] as? JsonObject
