@@ -34,6 +34,9 @@ export function Welcome({ suggestions, onPick, place, onLocate, locating }: { su
           </li>
         ))}
       </ul>
+      <a className="replay-link" href={`${import.meta.env.BASE_URL}?replay=stettbach`}>
+        Replay the Stettbach disruption <ArrowRight size={15} aria-hidden="true" />
+      </a>
     </div>
   );
 }

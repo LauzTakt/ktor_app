@@ -2,7 +2,7 @@
 // commands (ASSISTANT_CONTRACT.md §2): route, section, train, station, timer, focus, clear.
 import * as maplibregl from "maplibre-gl";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
-import type { GeoJSONSource, LngLatBoundsLike } from "maplibre-gl";
+import type { GeoJSONSource, LngLatBoundsLike, StyleSpecification } from "maplibre-gl";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type { AnyGeoJSON, VisualCommand } from "../contract";
 import { sbbText } from "../format";
@@ -19,9 +19,12 @@ const SWITZERLAND: LngLatBoundsLike = [
   [10.49, 47.81],
 ];
 const COLOURS = { red: "#eb0000", orange: "#f27e00", green: "#00973b", blue: "#2d327d" } as const;
+const SECTION_LAYERS = ["v-section-line", "v-section-dash", "v-section-glow"] as const;
 const empty = (): FeatureCollection => ({ type: "FeatureCollection", features: [] });
 
 export type Timer = { label: string; until: number };
+type ReplayMap = { style: StyleSpecification; bounds: LngLatBoundsLike };
+type BoardingPin = { label: string; coordinates: [number, number] };
 type Line = [number, number][];
 type Route = { id: string; label: string; legs: { line?: string | null; trainId?: string | null; lines: Line[] }[] };
 
@@ -168,19 +171,22 @@ export class MapController {
   /** What is drawn now, in order; every answer replaces it unless it is appended. */
   private picture: { key: string; cmd: VisualCommand; hidden: boolean }[] = [];
   private history: { key: string; cmd: VisualCommand; hidden: boolean }[][] = [];
+  private frame = 0;
+  private boarding?: BoardingPin;
+  private boardingMarker?: maplibregl.Marker;
 
-  constructor(container: HTMLElement) {
+  constructor(container: HTMLElement, private readonly replay?: ReplayMap) {
     this.map = new maplibregl.Map({
       container,
-      style: STYLE,
-      bounds: SWITZERLAND,
+      style: replay?.style ?? STYLE,
+      bounds: replay?.bounds ?? SWITZERLAND,
       fitBoundsOptions: { padding: 24 },
       // room to the south: on a phone Switzerland sits in the top half, above the sheet
       maxBounds: [
         [2.0, 41.0],
         [14.5, 50.0],
       ],
-      minZoom: 6,
+      minZoom: replay ? 10 : 6,
       maxZoom: 17,
       attributionControl: false,
       dragRotate: false,
@@ -190,7 +196,8 @@ export class MapController {
     });
     this.map.touchZoomRotate.disableRotation();
     if (import.meta.env.DEV) (window as unknown as { __map: maplibregl.Map }).__map = this.map;
-    this.map.addControl(new maplibregl.AttributionControl({ compact: true, customAttribution: "© swisstopo" }), "bottom-left");
+    const credit = replay ? "© swisstopo · Route data: Canton of Zürich and ZVV" : "© swisstopo";
+    this.map.addControl(new maplibregl.AttributionControl({ compact: true, customAttribution: credit }), "bottom-left");
     // start folded into its "i" button: the text opens on tap and never covers a label
     this.map.once("load", () => this.map.getContainer().querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show"));
     this.trains = new TrainCanvas(this.map);
@@ -202,14 +209,15 @@ export class MapController {
     this.map.once("style.load", () => {
       this.baseLayers = captureBase(this.map); // the base map's light paint, before our layers exist
       this.recolour();
-      onTheme(() => this.recolour());
+      this.unsubscribeTheme = onTheme(() => this.recolour());
     });
     this.map.on("load", () => this.setup());
     this.map.on("moveend", () => this.placeLabels());
-    this.loop();
+    if (!replay) this.loop();
   }
 
   private baseLayers: ReturnType<typeof captureBase> | null = null;
+  private unsubscribeTheme?: () => void;
   private recolour() {
     if (this.baseLayers) applyMapTheme(this.map, this.baseLayers, currentTheme());
   }
@@ -230,9 +238,11 @@ export class MapController {
     const m = this.map;
     // our layers go under the base map's labels, so town and station names stay readable
     const labels = m.getStyle().layers.find((l) => l.type === "symbol")?.id;
-    m.addSource("network", { type: "geojson", data: "/data/network-lines.geojson", attribution: "© BAV" }); // ktor_app static, BAV lines
-    m.addLayer({ id: "network-halo", type: "line", source: "network", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 6, 2.6, 10, 4.4, 14, 7] } }, labels);
-    m.addLayer({ id: "network-line", type: "line", source: "network", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#444444", "line-opacity": ["interpolate", ["linear"], ["zoom"], 10, 0.75, 14, 0.45], "line-width": ["interpolate", ["linear"], ["zoom"], 6, 0.8, 10, 1.6, 14, 2.6] } }, labels);
+    if (!this.replay) {
+      m.addSource("network", { type: "geojson", data: "/data/network-lines.geojson", attribution: "© BAV" }); // ktor_app static, BAV lines
+      m.addLayer({ id: "network-halo", type: "line", source: "network", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 6, 2.6, 10, 4.4, 14, 7] } }, labels);
+      m.addLayer({ id: "network-line", type: "line", source: "network", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#444444", "line-opacity": ["interpolate", ["linear"], ["zoom"], 10, 0.75, 14, 0.45], "line-width": ["interpolate", ["linear"], ["zoom"], 6, 0.8, 10, 1.6, 14, 2.6] } }, labels);
+    }
 
     m.addSource("v-sections", { type: "geojson", data: empty() });
     m.addLayer({ id: "v-section-glow", type: "line", source: "v-sections", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["get", "colour"], "line-opacity": 0.38, "line-blur": ["interpolate", ["linear"], ["zoom"], 7, 6, 13, 12], "line-width": ["interpolate", ["linear"], ["zoom"], 7, 16, 13, 32] } }, labels);
@@ -251,7 +261,7 @@ export class MapController {
     m.addLayer({ id: "v-section-dash", type: "line", source: "v-sections", filter: ["get", "dashed"], layout: { "line-join": "round" }, paint: { "line-color": ["get", "colour"], "line-width": width, "line-dasharray": [1.6, 1.2] } }, labels);
 
     // taps: a section, a route
-    for (const layer of ["v-section-line", "v-section-dash", "v-section-glow"])
+    for (const layer of SECTION_LAYERS)
       m.on("click", layer, (e) => {
         const f = e.features?.[0];
         if (f) this.onPick({ kind: "section", id: String(f.properties?.id), label: String(f.properties?.label ?? ""), lon: e.lngLat.lng, lat: e.lngLat.lat });
@@ -281,15 +291,16 @@ export class MapController {
     this.recolour(); // our layers, now that they exist
 
     this.ready = true;
-    this.map.fitBounds(SWITZERLAND, { padding: this.padding(), duration: 0 });
-    this.feed.start();
+    this.map.fitBounds(this.replay?.bounds ?? SWITZERLAND, { padding: this.cameraPadding(), absolutePadding: Boolean(this.replay), duration: 0 });
+    if (!this.replay) this.feed.start();
     for (const q of this.queue.splice(0)) this.apply(q);
+    if (this.boarding) this.focusBoarding(this.boarding);
   }
 
   /** One animation loop: the route's flow, the highlighted trains' pulse, gliding trains when zoomed in. */
   private loop() {
     const frame = (now: number) => {
-      requestAnimationFrame(frame);
+      this.frame = requestAnimationFrame(frame);
       if (!this.ready || document.hidden) return;
       let repaint = false;
       if (this.selected && now - this.lastFlow > 70) {
@@ -315,7 +326,14 @@ export class MapController {
       }
       if (repaint) this.map.triggerRepaint();
     };
-    requestAnimationFrame(frame);
+    this.frame = requestAnimationFrame(frame);
+  }
+
+  dispose() {
+    cancelAnimationFrame(this.frame);
+    this.feed.pause();
+    this.unsubscribeTheme?.();
+    this.map.remove();
   }
 
   /** Applies an answer's visuals. By default the answer REPLACES the picture (no stale sections or routes). */
@@ -514,7 +532,7 @@ export class MapController {
       for (const leg of r.legs)
         for (const line of leg.lines) if (line.length > 1) features.push({ type: "Feature", properties: { route: r.id, label: r.label, sel: r.id === this.selected }, geometry: { type: "LineString", coordinates: line } });
     (this.map.getSource("v-routes") as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features });
-    if (this.selected && this.selected !== this.lastSelected) this.drawStart = performance.now();
+    if (!this.replay && this.selected && this.selected !== this.lastSelected) this.drawStart = performance.now();
     this.lastSelected = this.selected;
   }
 
@@ -534,6 +552,9 @@ export class MapController {
       }
     }
     (this.map.getSource("v-sections") as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features });
+    if (this.replay) {
+      for (const layer of SECTION_LAYERS) this.map.setLayoutProperty(layer, "visibility", features.length ? "visible" : "none");
+    }
   }
 
   private station(v: Extract<VisualCommand, { type: "station" }>) {
@@ -556,20 +577,42 @@ export class MapController {
     requestAnimationFrame(() => this.placeLabels());
   }
 
-  fit(bbox: [number, number, number, number], maxZoom = 13) {
-    const [w, s, e, n] = bbox;
-    if (![w, s, e, n].every(Number.isFinite)) return;
+  private cameraPadding() {
     const pad = this.padding();
     const view = this.map.getContainer().getBoundingClientRect();
     // keep the padding sane on small screens, or MapLibre refuses to fit
-    if (pad.top + pad.bottom > view.height - 60) pad.bottom = Math.max(40, view.height - 60 - pad.top);
+    if (pad.top + pad.bottom > view.height - 60) pad.bottom = Math.max(0, view.height - 60 - pad.top);
+    return pad;
+  }
+
+  fit(bbox: [number, number, number, number], maxZoom = 13) {
+    const [w, s, e, n] = bbox;
+    if (![w, s, e, n].every(Number.isFinite)) return;
     this.map.fitBounds(
       [
         [w, s],
         [e, n],
       ],
-      { padding: pad, duration: 1400, maxZoom, essential: true },
+      { padding: this.cameraPadding(), absolutePadding: Boolean(this.replay), duration: this.replay ? 700 : 1400, maxZoom, essential: !this.replay },
     );
+  }
+
+  focusBoarding(point: BoardingPin) {
+    this.clearBoarding();
+    this.boarding = point;
+    if (!this.ready) return;
+    const pin = el("pin pin--boarding", '<span class="pin-dot"></span><span class="pin-label"></span>');
+    pin.querySelector(".pin-label")!.textContent = point.label;
+    pin.setAttribute("role", "img");
+    pin.setAttribute("aria-label", `Boarding point · ${point.label}`);
+    this.boardingMarker = new maplibregl.Marker({ element: pin, anchor: "center" }).setLngLat(point.coordinates).addTo(this.map);
+    this.map.flyTo({ center: point.coordinates, zoom: 17, padding: this.cameraPadding(), duration: 850, essential: false });
+  }
+
+  clearBoarding() {
+    this.boardingMarker?.remove();
+    this.boardingMarker = undefined;
+    this.boarding = undefined;
   }
 
   /** Frame a drawn route (an option the passenger tapped). */

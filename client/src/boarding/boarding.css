@@ -1,0 +1,137 @@
+.boarding-sheet {
+  min-height: min(368px, 53dvh);
+  max-height: min(62dvh, calc(100dvh - 124px));
+  padding-top: 12px;
+}
+
+.boarding-body { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+.boarding-skip {
+  position: absolute;
+  z-index: 7;
+  top: 12px;
+  left: 12px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--charcoal);
+  transform: translateY(-160%);
+}
+.boarding-skip:focus { transform: none; }
+.boarding-card { padding: 16px; }
+.boarding-exit { width: 44px; height: 44px; text-decoration: none; }
+.boarding-exit:hover { background: var(--milk); }
+.boarding-card h2 { font-size: 20px; line-height: 1.15; margin: 0; }
+.boarding-departure {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+
+.boarding-departure time {
+  font-size: clamp(1.85rem, 8vw, 2.375rem);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.boarding-departure h2 span { font-size: 0.9em; font-weight: 400; }
+.boarding-departure p, .boarding-wayfinding p { margin: 3px 0 0; color: var(--iron); line-height: 1.3; }
+.boarding-confirmation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 10px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.boarding-confirmation svg { color: var(--green); flex: none; }
+.boarding-wayfinding {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--milk);
+}
+
+.boarding-wayfinding svg { color: var(--blue); }
+.boarding-wayfinding strong { font-size: 15px; }
+.boarding-status {
+  margin: 8px 0 12px;
+  color: var(--granite);
+  line-height: 1.3;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.boarding-action {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 9px;
+  min-height: 46px;
+  padding: 8px 14px;
+  width: 100%;
+  background: var(--red);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 700;
+  touch-action: manipulation;
+  transition: transform 160ms ease;
+}
+
+.boarding-action:hover { background: var(--red125); }
+.boarding-action:active { background: var(--red125); transform: scale(0.985); transition-duration: 80ms; }
+.boarding-action[data-secondary="true"] { background: var(--white); border-color: var(--silver); color: var(--charcoal); }
+.boarding-action[data-secondary="true"]:hover,
+.boarding-action[data-secondary="true"]:active { background: var(--milk); }
+.boarding-choices { display: grid; gap: 8px; }
+.replay-bulletin { margin: 12px 0 4px; color: var(--granite); font-variant-numeric: tabular-nums; }
+.replay-notice-copy { margin: 0 0 16px; font-size: 1rem; line-height: 1.4; }
+.boarding-replay-controls { display: flex; flex-wrap: wrap; gap: 0 12px; margin-inline: 2px; }
+.boarding-replay-controls button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 44px;
+  padding: 0 4px;
+  background: none;
+  border: 0;
+  color: var(--iron);
+  font-size: 0.8125rem;
+  text-underline-offset: 3px;
+}
+.boarding-replay-controls button:hover { text-decoration: underline; }
+.boarding-replay-controls p { align-self: center; margin: 0; font-size: 0.8125rem; color: var(--iron); }
+
+.app--boarding .maplibregl-ctrl-attrib.maplibregl-compact { min-height: 40px; padding-right: 44px; border-radius: 22px; }
+.app--boarding .maplibregl-ctrl-attrib.maplibregl-compact-show {
+  display: flex;
+  align-items: center;
+  padding: 2px 12px 2px 48px;
+  max-width: calc(100vw - 80px);
+}
+.app--boarding .maplibregl-ctrl-attrib-button {
+  width: 44px;
+  height: 44px;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.pin.pin--boarding { width: 24px; height: 24px; z-index: 1; }
+.pin--boarding .pin-dot { background: var(--blue); border-color: var(--white); box-shadow: 0 0 0 2px var(--blue); }
+.pin--boarding .pin-label { background: var(--blue); color: var(--white); }
+.boarding-map-fallback { position: absolute; top: 85px; left: 16px; right: 16px; text-align: center; }
+
+@media (min-width: 900px) {
+  .boarding-sheet { min-height: 0; max-height: none; bottom: auto; padding-top: 0; }
+  .boarding-departure time { font-size: 2.5rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boarding-action:active { transform: none; }
+}
