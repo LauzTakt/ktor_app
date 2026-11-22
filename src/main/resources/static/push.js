@@ -90,11 +90,18 @@ async function registerWeb() {
 }
 
 async function registerNative() {
-  const cfg = await config();
-  if (!cfg.fcm) throw new Error("Alerts are not set up on the server yet.");
+  // 1. Permission first, so the user always sees the Android prompt (Android 13+; granted by default before).
   let perm = await NativePush.checkPermissions();
   if (perm.receive !== "granted") perm = await NativePush.requestPermissions();
-  if (perm.receive !== "granted") throw new Error("Notifications are blocked. Allow them in the app settings.");
+  if (perm.receive !== "granted") throw new Error("Notifications are blocked. Allow them in Settings > Apps > Train Twin > Notifications.");
+  // 2. The APK must contain the Firebase config: without it register() crashes the app (TwinAppPlugin.java).
+  const app = await cap.Plugins?.TwinApp?.info?.().catch(() => null);
+  if (!app?.firebase) {
+    throw new Error("This version of the app was built without notification support. Install the latest version of the app.");
+  }
+  // 3. The server must accept app tokens (FCM_SERVICE_ACCOUNT_JSON).
+  const cfg = await config();
+  if (!cfg.fcm) throw new Error("Notifications are not set up on the server yet (Firebase key missing). Ask the team.");
   const handles = [];
   try {
     const token = await new Promise((resolve, reject) => {
