@@ -24,6 +24,8 @@ tags:
     description: "Staff login. Click **Authorize** and paste the token from `/auth/login` to call staff-only endpoints. Default user: admin / admin"
   - name: staff
     description: Staff-only calls (Bearer token)
+  - name: passenger-app
+    description: "Passenger voice app server side (outside /api/v1, errors as {error: message}). See docs/API.md"
   - name: assistant
     description: Passenger assistant (Claude Sonnet 5.5 agent over the live data) for the passenger web app
 
@@ -421,6 +423,94 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AskResponse" } } } }
         "400": { description: "`bad_question` or `bad_request`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "503": { description: "`assistant_unavailable` (no ANTHROPIC_API_KEY)", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+  /api/config:
+    get:
+      tags: [passenger-app]
+      summary: Passenger app config (is voice configured)
+      operationId: passengerConfig
+      servers: [ { url: / } ]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object } } } }
+  /api/voice/session:
+    get:
+      tags: [passenger-app]
+      summary: One-time ElevenLabs conversation credentials
+      operationId: voiceSession
+      servers: [ { url: / } ]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { conversationToken: { type: string, nullable: true }, signedUrl: { type: string, nullable: true } } } } } }
+        "502": { description: "ElevenLabs did not answer", content: { application/json: { schema: { type: object, properties: { error: { type: string } } } } } }
+        "503": { description: "ELEVENLABS_API_KEY or PASSENGER_AGENT_ID not set", content: { application/json: { schema: { type: object, properties: { error: { type: string } } } } } }
+  /api/brief:
+    get:
+      tags: [passenger-app]
+      summary: Place brief for a station, a route, a line, free text or a position
+      operationId: placeBrief
+      servers: [ { url: / } ]
+      parameters:
+        - { name: station, in: query, required: false, schema: { type: string }, description: "stopId or name" }
+        - { name: from, in: query, required: false, schema: { type: string }, description: "stopId or name" }
+        - { name: to, in: query, required: false, schema: { type: string }, description: "stopId or name" }
+        - { name: line, in: query, required: false, schema: { type: string }, description: "e.g. IC5" }
+        - { name: q, in: query, required: false, schema: { type: string }, description: "free text (what the passenger said)" }
+        - { name: lat, in: query, required: false, schema: { type: string }, description: "latitude" }
+        - { name: lon, in: query, required: false, schema: { type: string }, description: "longitude" }
+      responses:
+        "200": { description: "Brief (sbb-client src/contract.ts)", content: { application/json: { schema: { type: object } } } }
+        "404": { description: "No station, route or line recognised", content: { application/json: { schema: { type: object, properties: { error: { type: string } } } } } }
+  /api/brief/active:
+    get:
+      tags: [passenger-app]
+      summary: Active disruptions for the voice agent
+      operationId: activeDisruptions
+      servers: [ { url: / } ]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object } } } }
+  /api/brief/item:
+    get:
+      tags: [passenger-app]
+      summary: One disruption in plain words
+      operationId: briefItem
+      servers: [ { url: / } ]
+      parameters:
+        - { name: id, in: query, required: true, schema: { type: string }, description: "incident, disruption or alert id" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object } } } }
+        "404": { description: "unknown disruption", content: { application/json: { schema: { type: object, properties: { error: { type: string } } } } } }
+  /api/fleet:
+    get:
+      tags: [passenger-app]
+      summary: One fleet tick (same rows as /ws/fleet)
+      operationId: fleetSnapshot
+      servers: [ { url: / } ]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object } } } }
+  /api/nearest:
+    get:
+      tags: [passenger-app]
+      summary: Nearest station
+      operationId: nearestStation
+      servers: [ { url: / } ]
+      parameters:
+        - { name: lat, in: query, required: true, schema: { type: string }, description: "latitude" }
+        - { name: lon, in: query, required: true, schema: { type: string }, description: "longitude" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object } } } }
+        "400": { description: "lat and lon required", content: { application/json: { schema: { type: object, properties: { error: { type: string } } } } } }
+        "404": { description: "no station nearby", content: { application/json: { schema: { type: object, properties: { error: { type: string } } } } } }
+  /twin/{path}:
+    get:
+      tags: [passenger-app]
+      summary: Read-only proxy to sbb-twin (GET/HEAD only)
+      operationId: twinProxy
+      servers: [ { url: / } ]
+      parameters:
+        - { name: path, in: path, required: true, schema: { type: string }, description: "twin path, e.g. api/situation" }
+      responses:
+        "200": { description: "The twin's answer, passed through" }
+        "405": { description: "not GET/HEAD", content: { application/json: { schema: { type: object, properties: { error: { type: string } } } } } }
+        "502": { description: "sbb-twin unreachable", content: { application/json: { schema: { type: object, properties: { error: { type: string } } } } } }
 
 components:
   securitySchemes:

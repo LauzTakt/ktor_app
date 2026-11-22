@@ -19,6 +19,9 @@ import ch.lauzhack.twin.auth.staffPages
 import ch.lauzhack.twin.db.Database
 import ch.lauzhack.twin.mqtt.MqttConfig
 import ch.lauzhack.twin.mqtt.MqttIngestor
+import ch.lauzhack.twin.passenger.PassengerConfig
+import ch.lauzhack.twin.passenger.PassengerService
+import ch.lauzhack.twin.passenger.passengerApi
 import ch.lauzhack.twin.state.LiveState
 import ch.lauzhack.twin.web.FleetFeed
 import ch.lauzhack.twin.web.fleetSocket
@@ -86,7 +89,11 @@ fun Application.module() {
         }
     }
 
-    configureHttp(state, db, authConfig, assistant) { ingestor?.isConnected ?: false }
+    // Passenger voice app (brief, voice session, twin proxy): ELEVENLABS_API_KEY from env, the rest from passenger.*
+    val passengerCfg = PassengerConfig.from(conf)
+    if (!passengerCfg.voiceEnabled) log.warn("ELEVENLABS_API_KEY or PASSENGER_AGENT_ID is not set: /api/voice/session will answer 503")
+
+    configureHttp(state, db, authConfig, assistant, passengerCfg) { ingestor?.isConnected ?: false }
 }
 
 /**
@@ -98,6 +105,7 @@ fun Application.configureHttp(
     db: Database,
     authConfig: AuthConfig = AuthConfig(),
     assistant: ((TwinQueries) -> AssistantAgent)? = null,
+    passenger: PassengerConfig = PassengerConfig(),
     mqttConnected: () -> Boolean,
 ) {
     install(CallLogging)
@@ -123,6 +131,7 @@ fun Application.configureHttp(
         authV1(auth)
         reportsV1(state, db)
         assistantV1(agent)
+        passengerApi(PassengerService(passenger, fleet) { localStations(state) })
         liveUpdatesWs(live)
         fleetSocket(fleet)
         // Staff panel (staff only, else -> /login.html): `/admin/` = live map, `/admin/report.html` = report an incident.
@@ -138,3 +147,15 @@ fun Application.configureHttp(
         staticResources("/", "static")
     }
 }
+
+/**
+ * Our stations (from MQTT `info`) in the passenger catalog's shape, for when sbb-twin is unreachable. `trains` is
+ * 10 + the trains in service calling there (the twin counts the whole day), so every station passes the catalog's
+ * minimum and busier ones still rank first.
+ */
+private fun localStations(state: LiveState): List<ch.lauzhack.twin.passenger.Station> =
+    state.stations().mapNotNull { s ->
+        val lat = s.lat ?: return@mapNotNull null
+        val lon = s.lon ?: return@mapNotNull null
+        ch.lauzhack.twin.passenger.Station(s.stopId, s.name, 10 + state.trainsCallingAt(s.stopId).size, lon, lat)
+    }

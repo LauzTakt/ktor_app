@@ -29,3 +29,10 @@ assistant:
   fastMode: "$ASSISTANT_FAST_MODE:false"
   effort: "$ASSISTANT_EFFORT:low"
   maxModelCalls: "$ASSISTANT_MAX_MODEL_CALLS:6"
+
+# Passenger voice app (sbb-client port, passenger/): ElevenLabs agent for /api/voice/session. The ElevenLabs API key is
+# read from ELEVENLABS_API_KEY (env only, never in this file); without key + agent id the endpoint answers 503.
+# sbb-twin is reached at assistant.twinUrl (SBB_TWIN_URL).
+passenger:
+  agentId: "$PASSENGER_AGENT_ID:"
+  elevenLabsUrl: "$ELEVENLABS_API_URL:https://api.elevenlabs.io"

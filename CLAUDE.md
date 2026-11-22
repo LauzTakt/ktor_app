@@ -29,12 +29,15 @@ The prediction model also reads "modified data" from the broker on its own; it i
 | REST API v1 (read: trains, stations, boards, incidents, status) | **done** — see docs/API.md | `api/v1/` |
 | Staff incident reports (REST + SQLite `staff_report`, local only, not published) | **done** | `api/v1/Reports.kt` |
 | Passenger assistant `POST /api/v1/assistant/ask` (Claude Sonnet 5.5 agent, effort low, knowledge pack in `resources/assistant/knowledge.md`: tools over our data + sbb-twin planner/situation/geometry; system prompt in `resources/assistant/system-prompt.md`) | **done** — see docs/API.md | `assistant/` |
+| Passenger voice app server side (port of sbb-client `server/`): `/api/voice/session` (ElevenLabs credentials), `/api/brief*` (place brief from sbb-twin), `/api/nearest`, `/api/fleet`, `/twin/*` read-only proxy. Public; errors `{"error": msg}` | **done** — see docs/API.md | `passenger/` |
 | Swagger UI (`/swagger`) | **done** — OpenAPI spec, hand-written: update it with every API change | `resources/openapi/documentation.yaml` |
 | Staff auth: bearer tokens (`POST /api/v1/auth/login`), SQLite `app_user` + `auth_token`, default `admin`/`admin`. Read API/WebSockets/Swagger public; **staff only: web UI pages (`staffPages`, redirect to `/login.html`, session cookie `twin_staff`) and `POST /api/v1/reports`**; new staff-only calls go inside `staffOnly { }` | **done** — first staff calls: `/auth/me`, `/auth/logout`, `/staff/users` | `auth/Auth.kt` |
 | REST API for predictions (model pushes to us) | todo | |
 | WebSocket `/api/v1/ws`: subscribe to trains/stations (`frequencySec` updates + immediate incident pushes) | **done** — see docs/API.md | `api/v1/LiveUpdates.kt` (incident events via `Database.addIncidentListener`) |
 | WebSocket `/ws/fleet`: whole fleet every `fleet` tick (staff map) | **done** | `web/FleetFeed.kt` |
 | Static web UI: passenger view (`/`, mobile, public) + staff panel behind login (`/admin/` map, `/admin/report.html`), light/dark toggle | **done** (plain JS, no build; MapLibre from unpkg) | `resources/static/` |
+| Passenger voice assistant web app at `/assistant/` (React + Vite, migrated from `lauzhack2026/sbb-client`; ElevenLabs voice agent + map). Built by Gradle (`buildClient`: npm) into the jar; Docker builds it in a Node stage. `-PskipClient=true` skips npm | **done** — see `client/README.md` | `client/` |
+| Android app: Capacitor WebView loading the deployed web UI (`server.url`); APK built + GitHub Release on tag `v*` on main | **done** (iOS: not yet) | `mobile/`, `.github/workflows/android-release.yml` |
 
 ## Data model (step 1: ingest)
 
@@ -107,7 +110,8 @@ validation, `StatusPages` errors) -> `TwinQueries.kt` (joins LiveState + active 
   `MQTT_PASSWORD`, `MQTT_ENABLED` (true), `DB_PATH` (`data/twin.sqlite`), `ADMIN_PASSWORD` (`admin`, only used to seed the
   first user), `AUTH_TOKEN_TTL_HOURS` (12). `./gradlew run` loads `.env` automatically.
   Assistant: `ANTHROPIC_API_KEY` (env only), `SBB_TWIN_URL` (`http://127.0.0.1:8787`), `ASSISTANT_MODEL`,
-  `ASSISTANT_FAST_MODE`, `ASSISTANT_EFFORT`, `ASSISTANT_MAX_MODEL_CALLS`.
+  `ASSISTANT_FAST_MODE`, `ASSISTANT_EFFORT`, `ASSISTANT_MAX_MODEL_CALLS`. Passenger voice app: `ELEVENLABS_API_KEY`
+  (env only), `PASSENGER_AGENT_ID`, `ELEVENLABS_API_URL` (`https://api.elevenlabs.io`).
 - **Never commit `.env`** or any broker credential.
 - Tests (`src/test`) run with `mqtt.enabled=false` and a temp SQLite file.
 
@@ -116,8 +120,10 @@ validation, `StatusPages` errors) -> `TwinQueries.kt` (joins LiveState + active 
 ```sh
 export JAVA_HOME=$(/usr/libexec/java_home -v 21 2>/dev/null || echo /opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home)
 ./gradlew test
-./gradlew run            # http://localhost:8080/api/v1/status
+./gradlew run            # http://localhost:8080/api/v1/status, voice assistant at /assistant/
 ```
+
+The build runs `npm ci && npm run build` in `client/` (Node + npm on the PATH), or pass `-PskipClient=true`.
 
 On the original dev machine the default `java` is 1.8 (too old) and the Gradle wrapper fails to download its
 distribution (TLS `PKIX path building failed`); use the Homebrew `gradle` (9.9.2) instead of `./gradlew` there.

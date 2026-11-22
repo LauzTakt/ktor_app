@@ -352,6 +352,22 @@ the same row layout as the sbb-twin viewer:
 // [trainId, lat, lon, bearing, speedKmh, motion, delaySec, line, category, atStopId, continuity]
 ```
 
+## Passenger voice app (outside `/api/v1`)
+
+Server side of the passenger voice app (ported from `sbb-client/server/`, code in `passenger/`). Public, no login.
+Errors are `{"error": "<message>"}` (the app's own shape, not the v1 envelope). sbb-twin is `SBB_TWIN_URL`.
+
+| Method | Path | What |
+|---|---|---|
+| GET | `/api/config` | `{voice, mock: null}`: `voice` = ElevenLabs is configured |
+| GET | `/api/voice/session` | One-time ElevenLabs credentials `{conversationToken, signedUrl}` (either may be null). `503` without `ELEVENLABS_API_KEY` + `PASSENGER_AGENT_ID`, `502` when ElevenLabs answers neither. The key never leaves the server |
+| GET | `/api/brief?station=\|from=&to=\|line=\|q=\|lat=&lon=` | The place brief (`Brief` in sbb-client `src/contract.ts`): disruptions touching the place or on the way, next journeys, `say` (a plain summary), `shown`, map `visuals`, `situation`, `options`, `departures`, `related` (answer from the brief). `q` = free text: station names and their roles ("from X to Y"), a line ("IC 5"). `lat/lon` = the nearest station is the place (the origin with `to`). Uses the twin's `/api/brief` when it answers (`source: "twin-brief"`), else composes it (`"composed"`). Cached 20 s per place. `404` when nothing is recognised |
+| GET | `/api/brief/active` | `{updatedAt, count, text, items[{id,title,until}]}`: active control-centre disruptions and major SBB alerts (max 30), `text` one `- …` line each, for the agent's `active_disruptions` variable. Cached 20 s |
+| GET | `/api/brief/item?id=` | One disruption (incident id, `disruptionId` or alert id) as a `BriefDisruption` + `lines` (max 12) + `moreLines`. `404` unknown |
+| GET | `/api/fleet` | One `/ws/fleet` tick (`{type:"tick", ts, trains:[rows]}`), from our live state; from the twin's `/api/trains` when we have no fleet yet |
+| GET | `/api/nearest?lat=&lon=` | `{id, name, lon, lat, distanceKm}`: nearest station with ≥ 10 trains, a much busier one when it is < 600 m further. `400` bad params, `404` none |
+| GET/HEAD | `/twin/{path}` | Read-only proxy to sbb-twin (`/twin/api/situation?…` -> `{SBB_TWIN_URL}/api/situation?…`). Other methods `405`; `502` twin unreachable; `/api/{network,abroad,stations}.geojson` cached 10 min |
+
 ## Staff authentication
 
 The read endpoints, the WebSockets and Swagger are **public**. Staff-only: **the staff web UI** (`/`, `/index.html`,
