@@ -49,8 +49,9 @@ class SbbTwinClient(baseUrl: String, private val timeoutMs: Long = 4_000) {
     suspend fun stations(q: String) = get("/stations", "q" to q)
     suspend fun board(stopId: String) = get("/stations/${seg(stopId)}/board")
     suspend fun train(trainId: String) = get("/trains/${seg(trainId)}")
-    suspend fun plan(from: String, to: String, after: Long?, limit: Int, onboardTrainId: String? = null) =
-        get("/plan", "from" to from, "to" to to, "after" to after, "limit" to limit, "onboardTrainId" to onboardTrainId)
+    suspend fun plan(from: String, to: String, after: Long?, limit: Int, onboardTrainId: String? = null, via: String? = null) =
+        get("/plan", "from" to from, "to" to to, "after" to after, "limit" to limit, "onboardTrainId" to onboardTrainId,
+            "via" to via, "includeWait" to true, "maxTransfers" to 3)
     suspend fun situationAtStation(stopId: String) = get("/situation", "station" to stopId)
     suspend fun situationOfTrain(trainId: String) = get("/situation", "trainId" to trainId)
     suspend fun situationOfTrip(from: String, to: String) = get("/situation", "from" to from, "to" to to)

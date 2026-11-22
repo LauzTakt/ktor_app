@@ -189,7 +189,15 @@ model needs another lookup); a question only about an out-of-scope topic is answ
   "append": null }                                                                // true = add to the current map picture                                                             // out-of-scope topics asked about
 ```
 
-- `options`: the recommended journey (first) and at most one alternative. `departure`, `arrival` and `transfers` are
+- `options`: the recommended journey (first) and at most one alternative, each with its `journeyId` (the client can
+  fetch `GET /api/journeys/{id}` from the twin for stop-by-stop cards) and `fastest: true` on the fastest certain one.
+  The backend picks the fastest certain journey in code over everything the tools planned (the twin's `/plan` with
+  `includeWait=true`, `maxTransfers=3`, plus forced `via` hubs): earliest arrival not relying on an unconfirmed
+  reopening (the twin's own `fastest` counts as certain), ties fewer changes, then later departure. The model gets it
+  as "Recommended (fastest certain)". Guard: if the model recommends a journey arriving more than 2 min later without a
+  constraint the passenger stated, the first card is swapped to the pick and the answer ends with "The fastest way is
+  the <line> at HH:MM, arriving HH:MM." (no second model call). If the model gave no option, the pick is added.
+  The other rules of this list: `departure`, `arrival` and `transfers` are
   the planner's live times for the `journeyId`, never values written by the model.
 - `visuals` (`[]` = leave the map as it is, otherwise it starts with `clear`): `route` (`id`, `style`
   `recommended|alternative`, `label`, `legs[{line, trainId, fromName, toName, geometry}]`; the options' journeys are

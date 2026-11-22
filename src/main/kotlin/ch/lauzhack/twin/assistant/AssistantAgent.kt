@@ -261,11 +261,40 @@ class AssistantAgent(
 
     private suspend fun buildResponse(turn: TurnState, drawn: List<VisualCommand>, fallback: String?, started: Long): AskResponse {
         val r = turn.respond
-        val answer = r?.answer?.takeIf { it.isNotBlank() } ?: fallback?.takeIf { it.isNotBlank() } ?: HOLDING_ANSWER
+        var answer = r?.answer?.takeIf { it.isNotBlank() } ?: fallback?.takeIf { it.isNotBlank() } ?: HOLDING_ANSWER
         // One recommended option and at most one alternative (the planner ranks, the model explains).
         val given = r?.options.orEmpty().filter { it.label.isNotBlank() || it.journeyId != null }
-        val chosen = (given.firstOrNull { it.recommended } ?: given.firstOrNull())
+        var chosen = (given.firstOrNull { it.recommended } ?: given.firstOrNull())
             ?.let { best -> listOf(best) + given.filter { it !== best }.take(1) }.orEmpty()
+
+        // Guard: the fastest certain journey (computed in code) is what we recommend, unless the model states a reason.
+        val pick = turn.destination?.let { turn.fastest(it) }
+        if (pick != null && r != null) {
+            val pickArr = pick.journey.long("arrival") ?: Long.MAX_VALUE
+            val pickOption = RespondOption(pick.id, optionLabel(pick.journey), true, "fastest")
+            val sentence = tools.pickSentence(pick.journey)
+            val rec = chosen.firstOrNull()
+            val recJourney = rec?.journeyId?.let { tools.journeys.get(turn.currentJourneyId(it)) }
+            val recArr = recJourney?.long("arrival")
+            // A slower pick is kept only for a constraint the passenger stated (and the model named in why).
+            val asked = (listOf(turn.request.question) + turn.request.history.filter { !it.role.startsWith("assist") }.map { it.text })
+                .any { CONSTRAINT.containsMatchIn(it) }
+            val reasoned = asked && rec?.why?.let { CONSTRAINT.containsMatchIn(it) } == true
+            when {
+                rec == null -> {
+                    chosen = listOf(pickOption)
+                    if (!answer.contains(hhmm(pickArr) ?: "--")) answer = "$answer $sentence"
+                }
+                (recArr == null || recArr > pickArr + 2 * 60_000L) && !reasoned -> {
+                    log.info("assistant guard: model recommended {} (arr {}), fastest certain is {} (arr {}): swapped",
+                        rec.journeyId, hhmm(recArr), pick.id, hhmm(pickArr))
+                    val wrongTimes = listOfNotNull(hhmm(recJourney?.long("departure")), hhmm(recArr))
+                    val kept = answer.split(Regex("(?<=[.!?])\\s+")).filter { s -> wrongTimes.none { s.contains(it) } }
+                    answer = (kept + sentence).joinToString(" ").trim()
+                    chosen = listOf(pickOption) + listOfNotNull(rec.takeIf { it.journeyId != null }?.copy(recommended = false))
+                }
+            }
+        }
 
         // The chosen journeys are drawn even when the model did not draw them itself.
         val routes = drawn.filterIsInstance<RouteVisual>()
@@ -294,6 +323,7 @@ class AssistantAgent(
                 recommended = i == 0,
                 why = o.why,
                 journeyId = id,
+                fastest = pick != null && id == turn.currentJourneyId(pick.id),
             )
         }
 
@@ -336,7 +366,15 @@ class AssistantAgent(
         }
     }
 
+    /** "IC 8 at 06:02, arrives 07:01" */
+    private fun optionLabel(j: JsonObject): String {
+        val lines = j.objects("legs").mapNotNull { it.str("line") ?: it.str("category") }.distinct()
+        return "${lines.joinToString(", ")} at ${hhmm(j.long("departure"))}, arrives ${hhmm(j.long("arrival"))}"
+    }
+
     companion object {
+        /** A reason the model may give for not recommending the fastest journey. */
+        private val CONSTRAINT = Regex("(?i)fewer|direct|no change|without chang|less walking|step|wheelchair|luggage|bike|you asked|prefer|request|avoid|direkt|umsteig|moins de|meno cambi")
         private const val LAST_CALL =
             "This is your last turn: call respond now with the best answer you can give from what you have " +
                 "(drawing tools allowed in the same turn)."

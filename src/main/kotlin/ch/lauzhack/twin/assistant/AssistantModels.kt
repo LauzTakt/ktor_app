@@ -75,6 +75,8 @@ data class AskOption(
     val recommended: Boolean,
     val why: String?,
     val journeyId: String?,
+    /** This option is the fastest certain journey (earliest arrival not relying on an unconfirmed reopening). */
+    val fastest: Boolean = false,
 )
 
 /** A drawing instruction for the passenger app's map. Geometry always comes from sbb-twin, never from the model. */
