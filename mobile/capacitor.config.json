@@ -1,0 +1,15 @@
+{
+  "appId": "ch.lauzhack.twin",
+  "appName": "Train Twin",
+  "webDir": "www",
+  "server": {
+    "url": "https://te3uiwccllmbqi32ye5jpxx6.94.130.67.179.sslip.io/",
+    "errorPath": "index.html",
+    "allowNavigation": [
+      "te3uiwccllmbqi32ye5jpxx6.94.130.67.179.sslip.io"
+    ]
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}
