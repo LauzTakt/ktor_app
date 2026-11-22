@@ -1,9 +1,10 @@
-import { ArrowRight, ArrowUp, Clock3, Keyboard, LocateFixed, Mic, Square } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { ArrowRight, ArrowUp, ChevronDown, Clock3, Footprints, Keyboard, LocateFixed, Mic, Square } from "lucide-react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import type { Option, SituationItem } from "./contract";
 import { countdown, duration, greeting, hhmm, sbbText } from "./format";
 import type { Timer } from "./map/MapController";
 import type { VoiceStatus } from "./voice";
+import { BOARDING_MINUTES, leaveBy, walkingPhase, waitRemaining, type WalkingPlan } from "./walking";
 
 export type Item = { kind: "msg"; key: string; role: "passenger" | "assistant"; text: string; extra: string | null } | { kind: "cards"; key: string };
 
@@ -86,7 +87,15 @@ export function SituationCard({ items }: { items: SituationItem[] }) {
   );
 }
 
-export function OptionsCard({ options, selected, onChoose }: { options: Option[]; selected: string | null; onChoose: (o: Option) => void }) {
+type OptionsProps = {
+  options: Option[];
+  selected: string | null;
+  walking: WalkingPlan | null;
+  onChoose: (o: Option) => void;
+  onWalk: (plan: WalkingPlan | null) => void;
+};
+
+export function OptionsCard({ options, selected, walking, onChoose, onWalk }: OptionsProps) {
   return (
     <article className="card">
       <h3>Your options</h3>
@@ -94,8 +103,9 @@ export function OptionsCard({ options, selected, onChoose }: { options: Option[]
         {options.slice(0, 4).map((o) => {
           const id = o.journeyId ?? o.id;
           const on = selected === id;
+          const plan = walking?.option === o ? walking : null;
           return (
-            <li key={o.id}>
+            <li key={id}>
               <button type="button" className="option" data-on={on} data-rec={Boolean(o.recommended)} onClick={() => onChoose(o)} aria-pressed={on}>
                 <span className="opt-top">
                   <span className="opt-times">
@@ -108,6 +118,9 @@ export function OptionsCard({ options, selected, onChoose }: { options: Option[]
                   {sbbText([duration(o.arrival - o.departure), /\bdirect\b/i.test(o.label) ? null : o.transfers === 0 ? "Direct" : `${o.transfers} change${o.transfers > 1 ? "s" : ""}`, o.why ? o.why.charAt(0).toUpperCase() + o.why.slice(1) : null].filter(Boolean).join(" · "))}
                 </span>
               </button>
+              {(on || plan) && o.departure > Date.now() && (
+                <WalkingTimeControl option={o} plan={plan} replacing={Boolean(walking && !plan)} onWalk={onWalk} />
+              )}
             </li>
           );
         })}
@@ -116,12 +129,96 @@ export function OptionsCard({ options, selected, onChoose }: { options: Option[]
   );
 }
 
-export function TimerChip({ timer }: { timer: Timer }) {
+function WalkingTimeControl({ option, plan, replacing, onWalk }: {
+  option: Option; plan: WalkingPlan | null; replacing: boolean; onWalk: OptionsProps["onWalk"];
+}) {
+  const id = useId();
+  const details = useRef<HTMLDetailsElement>(null);
+  const summary = useRef<HTMLElement>(null);
+  const field = useRef<HTMLInputElement>(null);
+  const [expired, setExpired] = useState(false);
+  const close = () => {
+    if (details.current) details.current.open = false;
+    summary.current?.focus();
+  };
+  return (
+    <details className="walk-settings" ref={details} onToggle={(event) => {
+      if (event.currentTarget.open && field.current) {
+        setExpired(false);
+        field.current.value = plan ? String(plan.minutes) : "";
+        field.current.focus();
+      }
+    }}>
+      <summary ref={summary}>
+        <Footprints size={16} aria-hidden="true" />
+        <span>{plan ? <>{plan.minutes === 0 ? "Be ready by" : "Leave by"} <b>{hhmm(leaveBy(plan))}</b> · {plan.minutes} min walk</> : "Set leave-by timer"}</span>
+        <ChevronDown className="walk-chevron" size={16} aria-hidden="true" />
+      </summary>
+      <form className="walk-form" onSubmit={(event) => {
+        event.preventDefault();
+        const minutes = field.current?.valueAsNumber;
+        if (option.departure <= Date.now()) { setExpired(true); return; }
+        if (minutes === undefined || !Number.isInteger(minutes) || minutes < 0 || minutes > 1440) return;
+        onWalk({ option, minutes });
+        close();
+      }} onKeyDown={(event) => {
+        if (event.key === "Escape") { event.preventDefault(); close(); }
+      }}>
+        <label htmlFor={id}>Your walk to the boarding point</label>
+        <div className="walk-entry">
+          <span className="walk-number"><input ref={field} id={id} type="number" inputMode="numeric" min="0" max="1440" step="1" required aria-describedby={id + "-hint"} /><span>min</span></span>
+          <button className="walk-save" type="submit">{plan ? "Save" : replacing ? "Replace timer" : "Set timer"}</button>
+        </div>
+        <p id={id + "-hint"}>{BOARDING_MINUTES} extra minute to board.</p>
+        {expired && <p role="alert">The departure time has passed. Choose another service.</p>}
+        <div className="walk-actions">
+          {plan && <button type="button" onClick={() => {
+            const optionButton = details.current?.closest("li")?.querySelector<HTMLButtonElement>(".option");
+            onWalk(null);
+            close();
+            optionButton?.focus();
+          }}>Remove timer</button>}
+          <button type="button" onClick={close}>Cancel</button>
+        </div>
+      </form>
+    </details>
+  );
+}
+
+export function TimerChip(props: { timer: Timer } | { walking: WalkingPlan }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 500);
-    return () => window.clearInterval(id);
+    const tick = () => setNow(Date.now());
+    const id = window.setInterval(tick, 500);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", tick);
+    };
   }, []);
+  if ("walking" in props) {
+    const plan = props.walking;
+    const phase = walkingPhase(plan, now);
+    const atStop = plan.minutes === 0;
+    const messages = {
+      waiting: atStop ? "Be ready to board in" : "Start walking in",
+      go: atStop ? "Be ready to board now" : "Start walking now",
+      tight: "You may miss this departure",
+      departed: "Departure time reached",
+    };
+    return (
+      <div className="walk-timer" role="group" aria-label="Leave-by timer" data-phase={phase}>
+        {atStop ? <Clock3 size={22} aria-hidden="true" /> : <Footprints size={22} aria-hidden="true" />}
+        <div className="walk-timer-text">
+          <div className="walk-head"><strong role="status">{messages[phase]}</strong>
+            {phase === "waiting" && <b role="timer" aria-live="off">{waitRemaining(leaveBy(plan) - now)}</b>}
+          </div>
+          <p>{hhmm(plan.option.departure)} · {sbbText(plan.option.label)}</p>
+        </div>
+      </div>
+    );
+  }
+  const { timer } = props;
   const left = timer.until - now;
   if (left < -120_000) return null;
   return (
@@ -133,7 +230,7 @@ export function TimerChip({ timer }: { timer: Timer }) {
           <b>{countdown(left)}</b>
         </>
       ) : (
-        <span>{sbbText(timer.label.replace(/ leaves in$| in$/, ""))} is leaving now</span>
+        <span>{timer.label === "Departure in" ? "Departure time reached" : `${sbbText(timer.label.replace(/ leaves in$| in$/, ""))} is leaving now`}</span>
       )}
     </div>
   );
