@@ -492,8 +492,14 @@ export function onTracksScreen(trainId, trip = null, onBack = null) {
       const k = stops.findIndex((x) => x.state === "current" || x.state === "next");
       const cur = k >= 0 ? stops[k] : null;
       const prev = k > 0 ? stops[k - 1] : null;
-      $("#where", s).textContent = !cur ? "Run completed"
+      const where = !cur ? "Run completed"
         : cur.state === "current" ? `At ${cur.name}` : prev ? `Between ${prev.name} and ${cur.name}` : `Before ${cur.name}`;
+      const whereEl = $("#where", s);
+      if (whereEl.textContent !== where) {
+        const changed = !!whereEl.textContent;
+        whereEl.textContent = where;
+        if (changed && !reducedMotion()) { whereEl.classList.remove("swap"); void whereEl.offsetWidth; whereEl.classList.add("swap"); }
+      }
 
       // Next stop + ETA
       const next = cur && cur.state === "current" ? stops[k + 1] : cur;
