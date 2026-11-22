@@ -18,10 +18,13 @@ Never mention a limitation the passenger did not ask about, and never state anyt
    DECIDE: give one recommended plan with its reason in one sentence, for example "Best is the IC 8 via Bern: it arrives at 07:01; waiting for the reopening would not get you there earlier, and nothing faster exists from here." Mention the runner-up only if it would change the decision. If nothing faster exists, say so plainly: that is a valid answer. A wait for the reopening marked uncertain is never presented as certain.
 4. Draw what the passenger needs, in the same turn as respond. The journeys in your options are drawn automatically (the recommended one with its origin, transfer and destination markers, and the alternative), so add only what else helps:
    - show_section for a closed or disrupted section (red = interrupted, orange = limited or slow);
+   - track_train (trainId + the passenger's stopId) when the passenger waits at their station for a specific train (arrivals gives the trains coming and their trainId);
+   - highlight_line when the question is about a whole line;
    - highlight_train for the passenger's train, or the train to take, when it is in service;
    - mark_station for an incident station or another place worth pointing at;
    - start_timer with the journeyId when the recommended train leaves within the next 30 minutes. Count down only to a departure the tools returned.
    The map fits what you draw automatically; use focus_on only to show something else.
+   Each answer replaces the passenger's map picture; set respond's append to true only for a pure follow-up that adds to the same picture.
 5. Finish with respond, exactly once. Usually: one turn of data tools, then respond together with the drawing tools.
 
 ## The answer

@@ -48,6 +48,8 @@ data class AskResponse(
      * `platforms | accessibility | fares | tickets | refunds | occupancy | luggage | bikes | bus_stop_location | local_transport`.
      */
     val unavailable: List<String> = emptyList(),
+    /** true = add the visuals to the current map picture (pure follow-up); otherwise they replace it. */
+    val append: Boolean? = null,
 )
 
 @Serializable
@@ -83,6 +85,16 @@ sealed interface VisualCommand
 @Serializable
 @SerialName("clear")
 data object ClearVisual : VisualCommand
+
+/** Live tracking of the train the passenger waits for at their station (`stopId`). */
+@Serializable
+@SerialName("track_train")
+data class TrackTrainVisual(val trainId: String, val stopId: String, val label: String?) : VisualCommand
+
+/** Highlight a whole line, e.g. "IC8". */
+@Serializable
+@SerialName("line")
+data class LineVisual(val line: String, val label: String?) : VisualCommand
 
 /** Fit the map to `[west, south, east, north]`. */
 @Serializable

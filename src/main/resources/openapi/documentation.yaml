@@ -581,6 +581,7 @@ components:
           type: array
           description: Out-of-scope topics the passenger asked about (no data); passed as is to the voice agent
           items: { type: string, enum: [platforms, accessibility, fares, tickets, refunds, occupancy, luggage, bikes, bus_stop_location, local_transport] }
+        append: { type: boolean, nullable: true, description: "true = add the visuals to the current map picture; otherwise they replace it" }
 
     SituationItem:
       type: object

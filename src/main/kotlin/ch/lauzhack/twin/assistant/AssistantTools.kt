@@ -50,6 +50,7 @@ data class RespondInput(
     /** null = not given (the backend picks), empty = nothing worth showing. */
     val situationIds: List<String>?,
     val unavailable: List<String> = emptyList(),
+    val append: Boolean = false,
 )
 
 /** What one ask gathers while the agent works. Tool calls of one turn run in parallel, so this is thread-safe. */
@@ -185,6 +186,12 @@ class AssistantTools(
             prop("line", "string", "Only bulletins affecting this line, e.g. IC8, S3.")
         },
         tool(
+            "arrivals",
+            "Trains arriving soon at a station, live: line, headsign, expected arrival, minutes away, delay, stops away, " +
+                "status, trainId. Use it when the passenger waits at a station for a train.",
+            required = listOf("stopId"),
+        ) { prop("stopId", "string", STOP) },
+        tool(
             "show_route",
             "Draw a journey from plan_journey on the passenger's map (the real track geometry is added for you). The journeys " +
                 "in respond's options are drawn automatically: use this only for another journey or a custom label.",
@@ -212,6 +219,23 @@ class AssistantTools(
         ) {
             prop("trainId", "string", "Train id (only trains in service can be shown).")
             prop("label", "string", "Short label in the passenger's language, e.g. \"Your train\".")
+        },
+        tool(
+            "track_train",
+            "Live tracking on the passenger's screen of the train they are waiting for at their station (its position and ETA).",
+            required = listOf("trainId", "stopId"),
+        ) {
+            prop("trainId", "string", "Train id from arrivals, train_status or a journey leg.")
+            prop("stopId", "string", "The station where the passenger waits: $STOP")
+            prop("label", "string", "Short label in the passenger's language, e.g. \"Your IC 8\" (optional).")
+        },
+        tool(
+            "highlight_line",
+            "Highlight a whole line on the map, e.g. when the passenger asks about a line.",
+            required = listOf("line"),
+        ) {
+            prop("line", "string", "Line name, e.g. IC8, S3.")
+            prop("label", "string", "Short label in the passenger's language (optional).")
         },
         tool(
             "mark_station",
@@ -270,6 +294,7 @@ class AssistantTools(
                 put("description", "The out-of-scope topics the passenger asked about (you have no data on them); empty otherwise.")
                 putJsonObject("items") { put("type", "string"); putJsonArray("enum") { Scope.TOPICS.forEach { add(it) } } }
             })
+            prop("append", "boolean", "true only for a pure follow-up that adds to the current map picture; by default the picture is replaced.")
             prop("followUp", "string", "One short question for the passenger, only if it really helps (otherwise leave it out).")
             put("situationIds", jsonOf {
                 put("type", "array")
@@ -294,6 +319,9 @@ class AssistantTools(
                 "show_route" -> showRoute(input, turn)
                 "show_section" -> showSection(input)
                 "highlight_train" -> highlightTrain(input)
+                "track_train" -> trackTrain(input)
+                "highlight_line" -> highlightLine(input)
+                "arrivals" -> arrivals(input)
                 "mark_station" -> markStation(input)
                 "start_timer" -> startTimer(input, turn)
                 "focus_on" -> focusOn(input)
@@ -1063,6 +1091,40 @@ class AssistantTools(
         return ToolOutcome("ok: section drawn", visuals = listOf(SectionVisual("sec-${a.stopId}-${b.stopId}", colour, label, simplifyGeometry(geometry))))
     }
 
+    private suspend fun trackTrain(input: JsonObject): ToolOutcome {
+        val id = input.str("trainId") ?: throw ToolError("trainId is required")
+        val st = station(input.str("stopId"), "stopId")
+        return ToolOutcome("ok: tracking $id to ${st.name}", visuals = listOf(TrackTrainVisual(id, st.stopId, input.str("label"))))
+    }
+
+    private fun highlightLine(input: JsonObject): ToolOutcome {
+        val line = input.str("line")?.replace(" ", "")?.uppercase() ?: throw ToolError("line is required")
+        return ToolOutcome("ok: line $line highlighted", visuals = listOf(LineVisual(line, input.str("label"))))
+    }
+
+    private suspend fun arrivals(input: JsonObject): ToolOutcome {
+        val st = station(input.str("stopId"), "stopId")
+        val list = twin.arrivals(st.stopId).arr()?.mapNotNull { it.obj() }.orEmpty().take(12)
+        return ok(jsonOf {
+            put("station", jsonOf { put("stopId", st.stopId); put("name", st.name) })
+            put("arrivals", buildJsonArray {
+                list.forEach { a ->
+                    add(jsonOf {
+                        opt("trainId", a.str("trainId"))
+                        opt("line", a.str("line"))
+                        opt("headsign", a.str("headsign"))
+                        opt("expectedArr", hhmm(a.long("expectedArr") ?: a.long("plannedArr")))
+                        opt("etaMin", a.long("etaSec")?.let { (it / 60.0).roundToInt() })
+                        opt("delayMin", a.long("delaySec")?.let { (it / 60.0).roundToInt() }?.takeIf { it != 0 })
+                        opt("stopsAway", a.int("stopsAway"))
+                        opt("status", a.str("status"))
+                    })
+                }
+            })
+            if (list.isEmpty()) put("note", "No trains arriving soon.")
+        })
+    }
+
     private suspend fun highlightTrain(input: JsonObject): ToolOutcome {
         val id = input.str("trainId") ?: throw ToolError("trainId is required")
         if (queries.trainState(id) == null && runCatching { twin.train(id) }.isFailure) throw ToolError("train $id is not in service")
@@ -1106,7 +1168,7 @@ class AssistantTools(
         }
         val ids = if (input.containsKey("situationIds")) input.strings("situationIds") else null
         val unavailable = input.strings("unavailable").map { it.trim().lowercase() }.filter { it in Scope.TOPICS }
-        turn.respond = RespondInput(answer.trim(), input.str("summary"), options, input.str("followUp"), ids, unavailable)
+        turn.respond = RespondInput(answer.trim(), input.str("summary"), options, input.str("followUp"), ids, unavailable, input.bool("append") == true)
         return ToolOutcome("ok")
     }
 

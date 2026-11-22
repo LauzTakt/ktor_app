@@ -185,7 +185,8 @@ model needs another lookup); a question only about an out-of-scope topic is answ
   "visuals": [ { "type": "clear" }, { "type": "route", … }, … ],
   "followUp": null,
   "elapsedMs": 2310,
-  "unavailable": [] }                                                             // out-of-scope topics asked about
+  "unavailable": [],
+  "append": null }                                                                // true = add to the current map picture                                                             // out-of-scope topics asked about
 ```
 
 - `options`: the recommended journey (first) and at most one alternative. `departure`, `arrival` and `transfers` are
@@ -195,7 +196,10 @@ model needs another lookup); a question only about an out-of-scope topic is answ
   always drawn), `section` (`id`, `colour` `red|orange|green|blue`, `label`, `geometry`), `train` (`trainId`, `label`,
   `follow`), `station` (`stopId`, `name`, `lon`, `lat`, `role` `origin|destination|transfer|incident`, `label`; the
   recommended route adds its origin, transfers and destination), `timer` (`label`, `until`: only a departure the tools
-  returned) and `focus` (`bbox` `[w, s, e, n]`, fits everything drawn). Geometry is GeoJSON from sbb-twin, simplified
+  returned), `track_train` (`trainId`, `stopId`, `label`: live tracking of the train the passenger waits for at that
+  station), `line` (`line` e.g. `IC8`, `label`) and `focus` (`bbox` `[w, s, e, n]`, fits everything drawn). `remove`
+  (`id`) is client-only. Every answer replaces the map picture unless `append` is `true` (set by the model only for a
+  pure follow-up; then `visuals` has no leading `clear`). Geometry is GeoJSON from sbb-twin, simplified
   to ~8 m.
 - `unavailable`: the topics the passenger asked about that the assistant has no data for, passed as is to the voice
   agent. Values: `platforms`, `accessibility`, `fares`, `tickets`, `refunds`, `occupancy`, `luggage`, `bikes`,
@@ -215,10 +219,11 @@ model needs another lookup); a question only about an out-of-scope topic is answ
   (`after` = the disruption's `until`, flagged uncertain unless `durationType` is `UNTIL`), two journeys via 2-3 hubs
   between origin and destination (Bern, Olten, Zürich HB, Lausanne, Biel/Bienne, Luzern, Basel SBB, Fribourg; not
   inside an interrupted section) plus the nearest hub, and at night the first services after 05:00, with a verdict
-  (earliest arrival). The model then decides one plan. Tools: `find_station`, `station_board`, `train_status`, `plan_journey`, `situation`, `bulletins` (data: the twin's
+  (earliest arrival). The model then decides one plan. Tools: `find_station`, `station_board`, `train_status`, `plan_journey`, `situation`, `arrivals` (twin `/stations/{id}/arrivals`: line, headsign,
+  expectedArr, etaMin, delayMin, stopsAway, status, trainId), `bulletins` (data: the twin's
   SBB/VIA bulletins, latest version each, joined with `/disruptions` for effect, cause, until, durationType, measures and
   bus stops; filters `stopId`, `line`; active first, ENDED ones older than 30 min skipped);
-  `show_route`, `show_section`, `highlight_train`, `mark_station`, `start_timer`, `focus_on` (drawing); `respond`
+  `show_route`, `show_section`, `highlight_train`, `track_train`, `highlight_line`, `mark_station`, `start_timer`, `focus_on` (drawing); `respond`
   (final answer). Independent tool calls of one turn run in parallel; at most 6 model calls. A journey whose geometry
   the twin no longer has (404) is planned again once. System prompt: `src/main/resources/assistant/system-prompt.md`, followed in the same
   cached system block (1 h TTL) by the knowledge pack `src/main/resources/assistant/knowledge.md` (~3k tokens: train

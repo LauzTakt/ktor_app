@@ -54,6 +54,7 @@ class SbbTwinClient(baseUrl: String, private val timeoutMs: Long = 4_000) {
     suspend fun situationAtStation(stopId: String) = get("/situation", "station" to stopId)
     suspend fun situationOfTrain(trainId: String) = get("/situation", "trainId" to trainId)
     suspend fun situationOfTrip(from: String, to: String) = get("/situation", "from" to from, "to" to to)
+    suspend fun arrivals(stopId: String) = get("/stations/${seg(stopId)}/arrivals")
     suspend fun bulletins() = get("/bulletins")
     suspend fun disruptions() = get("/disruptions")
     suspend fun sectionGeometry(from: String, to: String) = get("/geometry/section", "from" to from, "to" to to)

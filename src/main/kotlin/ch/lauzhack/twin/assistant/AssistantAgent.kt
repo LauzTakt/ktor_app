@@ -308,7 +308,7 @@ class AssistantAgent(
         val markers = recommendedRoute?.let { tools.routeMarkers(it) }.orEmpty()
             .filter { m -> unique.none { it is StationVisual && it.stopId == m.stopId } }
         val visuals = if (unique.isEmpty()) emptyList() else buildList {
-            add(ClearVisual)
+            if (r?.append != true) add(ClearVisual)
             // routes first (the recommended one on top of the list), then sections, then the rest as drawn
             recommendedRoute?.let { add(it) }
             addAll(unique.filter { it is RouteVisual && it !== recommendedRoute })
@@ -319,7 +319,7 @@ class AssistantAgent(
             (unique.lastOrNull { it is FocusVisual } ?: tools.autoFocus(unique + markers))?.let { add(it) }
         }
         val unavailable = (r?.unavailable.orEmpty() + Scope.topicsOf(turn.request.question)).toSet().let { u -> Scope.TOPICS.filter { it in u } }
-        return AskResponse(answer, r?.summary, situation, options, visuals, r?.followUp, System.currentTimeMillis() - started, unavailable)
+        return AskResponse(answer, r?.summary, situation, options, visuals, r?.followUp, System.currentTimeMillis() - started, unavailable, r?.append?.takeIf { it })
     }
 
     private class Stats {
