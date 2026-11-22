@@ -1,6 +1,7 @@
 // Passenger view (`/`). Look and feel: docs/STYLE.md. All train / station / incident data comes from /api/v1.
 //
 // Flow:
+//   First visit (no QR / link): Loki's tour (onboarding.js) over a welcome screen, then the location step. "?" replays it.
 //   QR: `/?train=<trainId>` -> on tracks · `/?station=<stopId>` -> pick destination · `/?stop=<stopId>` -> station view
 //   Location: train within 200 m -> "Are you on this train?" (Yes / No / other trains nearby)
 //             else station within 200 m -> "Are you at this station?" (Yes / No)
@@ -12,6 +13,7 @@
 
 import { addRail, applyTheme as applyMapTheme, baseStyle } from "./common.js";
 import * as push from "./push.js";
+import { startTour, tourSeen } from "./onboarding.js";
 
 const TZ = "Europe/Zurich";
 const THEME_KEY = "twin-theme"; // shared with the staff pages
@@ -55,6 +57,7 @@ const ICONS = {
   moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
   chat: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
   bell: '<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/>',
+  help: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
 };
 const ic = (name, cls = "") => `<svg class="icon ${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
@@ -1361,7 +1364,24 @@ $("#alerts-btn").addEventListener("click", () => { buzz(); const back = location
 tripWatchAvailable.then((available) => {
   $(".watched-trips-nav").hidden = !available;
 });
-routeFromUrl(location.search);
+$("#tour-btn").innerHTML = ic("help");
+$("#tour-btn").addEventListener("click", () => { buzz(); startTour(); });
+
+// First visit without a QR / shared link: Loki's tour first, so the location prompt comes after it is explained.
+if (!location.search && !tourSeen()) {
+  welcomeScreen();
+  startTour({ onDone: () => routeFromUrl(location.search) });
+} else routeFromUrl(location.search);
+
+/** Calm screen behind the first-run tour (replaced by the location step when the tour ends). */
+function welcomeScreen() {
+  show((s) => {
+    s.innerHTML = `
+      <div class="illus-box">${ILLUSTRATION.train}</div>
+      <h1>Welcome aboard</h1>
+      <p class="lead">Live trains, delays and incidents across Switzerland, for your trip.</p>`;
+  }, { restart: false });
+}
 
 function routeFromUrl(search, opts = {}) {
 const params = new URLSearchParams(search);
