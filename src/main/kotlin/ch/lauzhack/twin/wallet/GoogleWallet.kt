@@ -175,9 +175,22 @@ internal class GoogleWallet(
     }
 
     companion object {
-        fun load(classId: String, credentialFile: String): GoogleWallet {
+        internal fun serviceAccountJson(value: String): String {
+            val v = value.trim()
+            if (v.startsWith("{")) return v
+            val file = runCatching { Path.of(v) }.getOrNull()
+            if (file != null && Files.isRegularFile(file)) return Files.readString(file)
+            val decoded = runCatching { String(Base64.getMimeDecoder().decode(v)).trim() }.getOrNull()
+            require(decoded?.startsWith("{") == true) {
+                "GOOGLE_APPLICATION_CREDENTIALS must be a JSON file path, or the service account JSON (raw or base64)"
+            }
+            return decoded!!
+        }
+
+        /** [credentials]: path to the service account JSON file, or the JSON itself (raw or base64, for Coolify). */
+        fun load(classId: String, credentials: String): GoogleWallet {
             require(Regex("[0-9]+\\.[a-zA-Z0-9_.-]+").matches(classId)) { "Invalid Google Wallet class ID" }
-            val credential = Json.parseToJsonElement(Files.readString(Path.of(credentialFile))) as JsonObject
+            val credential = Json.parseToJsonElement(serviceAccountJson(credentials)) as JsonObject
             val email = (credential["client_email"] as JsonPrimitive).content
             val pem = (credential["private_key"] as JsonPrimitive).content
                 .replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "").replace(Regex("\\s"), "")

@@ -104,6 +104,24 @@ class WalletProvidersTest {
     }
 
     @Test
+    fun googleCredentialsLoadFromAFileOrTheJsonItself() {
+        val pem = "-----BEGIN PRIVATE KEY-----\n" + Base64.getMimeEncoder().encodeToString(keys.private.encoded) + "\n-----END PRIVATE KEY-----\n"
+        val json = Json.encodeToString(JsonObject.serializer(), kotlinx.serialization.json.buildJsonObject {
+            put("client_email", kotlinx.serialization.json.JsonPrimitive("issuer@example.test"))
+            put("private_key", kotlinx.serialization.json.JsonPrimitive(pem))
+        })
+        val file = java.nio.file.Files.writeString(java.nio.file.Files.createTempFile("wallet-sa", ".json"), json)
+        try {
+            for (value in listOf(file.toString(), json, Base64.getEncoder().encodeToString(json.toByteArray()))) {
+                GoogleWallet.load("123.trip", value) // throws on a bad credential
+            }
+            kotlin.test.assertFailsWith<IllegalArgumentException> { GoogleWallet.load("123.trip", "not-a-file-nor-json") }
+        } finally {
+            java.nio.file.Files.deleteIfExists(file)
+        }
+    }
+
+    @Test
     fun googlePassShowsTheSameTicketFaceAndQrCode() {
         val pass = GoogleWallet("123.trip", "issuer@example.test", keys.private).pass(watch, site)
         assertEquals("#ffffff", pass.text("hexBackgroundColor"))
