@@ -1,11 +1,12 @@
 package ch.lauzhack.twin.passenger
 
-import ch.lauzhack.twin.common.searchKey
 import ch.lauzhack.twin.common.array
 import ch.lauzhack.twin.common.double
 import ch.lauzhack.twin.common.obj
 import ch.lauzhack.twin.common.objects
 import ch.lauzhack.twin.common.str
+import ch.lauzhack.twin.query.StationSearch
+import ch.lauzhack.twin.state.LiveState
 import ch.lauzhack.twin.twinapi.SbbTwinClient
 import kotlin.math.roundToInt
 import kotlinx.coroutines.sync.Mutex
@@ -24,29 +25,16 @@ data class PlaceHit(val st: CatalogStation, val role: String?)
 
 /** Station names in free text (port of sbb-client `server/mock.ts`: placesIn). Pure: the station list is passed in. */
 object Places {
-    private val NON_ALNUM = Regex("[^a-z0-9]+")
+    /** [StationSearch.normalize] padded with one space on each side (whole-word substring matching). */
+    fun norm(s: String): String = " " + StationSearch.normalize(s) + " "
 
-    /** Lower case, accents off, punctuation to spaces, padded with one space on each side. */
-    fun norm(s: String): String =
-        " " + searchKey(s).replace(NON_ALNUM, " ").trim() + " "
-
-    val ALIASES = mapOf(
-        "zurich" to "Zürich HB", "zuerich" to "Zürich HB", "zurich main station" to "Zürich HB", "zurich hauptbahnhof" to "Zürich HB",
-        "zurich airport" to "Zürich Flughafen", "zurich flughafen" to "Zürich Flughafen", "geneva airport" to "Genève-Aéroport", "geneve aeroport" to "Genève-Aéroport",
-        "geneva" to "Genève", "geneve" to "Genève", "genf" to "Genève", "ginevra" to "Genève", "ginebra" to "Genève", "basel" to "Basel SBB", "bale" to "Basel SBB", "basilea" to "Basel SBB",
-        "berne" to "Bern", "berna" to "Bern", "lucerne" to "Luzern", "lucerna" to "Luzern", "biel" to "Biel/Bienne", "bienne" to "Biel/Bienne", "fribourg" to "Fribourg/Freiburg",
-        "freiburg" to "Fribourg/Freiburg", "st gallen" to "St. Gallen", "sankt gallen" to "St. Gallen", "saint gallen" to "St. Gallen", "st gall" to "St. Gallen",
-        "epfl" to "Renens VD", "interlaken" to "Interlaken Ost", "wil" to "Wil SG", "rapperswil" to "Rapperswil SG", "yverdon" to "Yverdon-les-Bains",
-    )
     private val STOPWORDS = setOf("ins", "mies", "alle", "berg", "horn", "sins", "lax", "moos", "steg", "klus", "gais", "birr", "seon", "fey", "wila", "buix", "dorf", "au")
-    private val TO_WORDS = setOf("to", "towards", "nach", "a", "pour", "para", "hacia", "per", "verso", "zum", "zur", "bis", "into", "for")
-    private val FROM_WORDS = setOf("from", "von", "ab", "de", "depuis", "da", "desde", "at", "in", "im", "bei", "en", "leaving")
 
     private class Hit(val st: CatalogStation, val start: Int, val end: Int)
 
     /** Stations named in [question], in order of appearance; the longest non-overlapping names win. */
     fun placesIn(question: String, list: List<CatalogStation>): List<PlaceHit> {
-        val byName = list.associateBy { it.name }
+        val byNorm = list.associateBy { it.norm.trim() }
         val q = norm(question)
         val hits = mutableListOf<Hit>()
         fun add(st: CatalogStation?, key: String) {
@@ -63,7 +51,7 @@ object Places {
             if (s.trains < 8) continue
             add(s, s.norm)
         }
-        for ((alias, name) in ALIASES) add(byName[name], " $alias ")
+        for ((alias, name) in StationSearch.ALIASES) add(byNorm[name], " $alias ")
         // "Zürich Flughafen" over "Zürich"; the busiest station on ties
         hits.sortWith(compareByDescending<Hit> { it.end - it.start }.thenByDescending { it.st.trains })
         val kept = mutableListOf<Hit>()
@@ -72,8 +60,8 @@ object Places {
         return kept.map { h ->
             val before = q.substring(0, h.start).trim().split(" ").takeLast(2)
             val role = when {
-                before.any { it in TO_WORDS } -> "to"
-                before.any { it in FROM_WORDS } -> "from"
+                before.any { it in StationSearch.TO_WORDS } -> "to"
+                before.any { it in StationSearch.FROM_WORDS } -> "from"
                 else -> null
             }
             PlaceHit(h.st, role)
@@ -138,3 +126,15 @@ class StationCatalog(
         }
     }
 }
+
+/**
+ * Our stations (from MQTT `info`) in the catalog's shape, for when sbb-twin is unreachable. `trains` is 10 + the trains
+ * in service calling there (the twin counts the whole day), so every station passes the catalog's minimum and busier
+ * ones still rank first.
+ */
+fun localCatalog(state: LiveState): List<CatalogStation> =
+    state.stations().mapNotNull { s ->
+        val lat = s.lat ?: return@mapNotNull null
+        val lon = s.lon ?: return@mapNotNull null
+        CatalogStation(s.stopId, s.name, 10 + state.trainsCallingAt(s.stopId).size, lon, lat)
+    }

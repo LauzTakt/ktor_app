@@ -92,15 +92,12 @@ class TwinQueries(
     // ------------------------------------------------------------------ stations
 
     fun stations(q: String?, bbox: BBox?, limit: Int): List<StationDto> {
-        val needle = q?.let(::searchKey)?.takeIf { it.isNotEmpty() }
-        return state.stations().asSequence()
-            .filter { needle == null || needle in searchKey(it.name) || it.stopId == needle }
-            .filter { bbox == null || bbox.contains(it.lon, it.lat) }
-            // exact / prefix matches first, then alphabetical
-            .sortedWith(compareBy<Station>({ needle != null && !searchKey(it.name).startsWith(needle) }, { it.name }))
-            .take(limit)
-            .map { it.toDto() }
-            .toList()
+        val inBox = state.stations().filter { bbox == null || bbox.contains(it.lon, it.lat) }
+        val query = q?.trim()?.takeIf { it.isNotEmpty() }
+        val found = if (query == null) inBox.sortedBy { it.name }
+        else inBox.filter { it.stopId == query } +
+            StationSearch.rank(query, inBox, { it.name }) { state.trainsCallingAt(it.stopId).size }.filter { it.stopId != query }
+        return found.take(limit).map { it.toDto() }
     }
 
     fun station(stopId: String): StationDetailDto {
