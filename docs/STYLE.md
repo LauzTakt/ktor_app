@@ -176,6 +176,10 @@ colour inside buttons). Do not mix icon families.
 ## 8. Motion and accessibility
 
 - Transitions 200–300 ms ease; base-map changes cross-fade in 600–700 ms; no bouncing or spinning.
+- On-tracks 3D scene (`static/passenger/train-scene.js`): the world moves under the train at a pace that follows the
+  real speed (wheels turn, coaches sway slightly). A station stop is one continuous braking curve (≈ 5 s) that
+  ends exactly at the platform, which fades in from ahead; the camera turns slowly towards the platform and back after
+  departure. Reduced motion: no movement, the station is simply shown.
 - Text contrast at least 4.5 : 1 (the tokens above meet it on `white`).
 - Keyboard focus always visible (2 px `sky` outline). Every icon-only button has a `title` and an `aria-label`.
 - Respect `prefers-color-scheme` on first visit; remember the user's choice.

@@ -222,6 +222,8 @@ button.stop:hover { background: var(--milk); }
 .scene-cap .main { flex: 1; min-width: 0; }
 .scene-cap .t { font-weight: 700; font-size: 16px; }
 .scene-cap .m { font-size: 13px; color: var(--metal); }
+.scene-cap .swap { animation: cap-swap 300ms var(--ease); } /* "Between A and B" -> "At B" */
+@keyframes cap-swap { from { opacity: 0; transform: translateY(4px); } }
 .nextstop { padding: 12px 14px; }
 .nextstop .k { font-size: 12px; color: var(--metal); }
 .nextstop .nrow { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
