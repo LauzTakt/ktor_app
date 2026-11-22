@@ -13,6 +13,7 @@
     <link rel="preload" href="https://cdn.app.sbb.ch/fonts/v1_6_subset/SBBWeb-Bold.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.1/dist/maplibre-gl.css" />
     <script src="https://unpkg.com/maplibre-gl@5.24.1/dist/maplibre-gl.js" defer></script>
+    <link rel="stylesheet" href="/theme.css" />
     <link rel="stylesheet" href="/passenger.css" />
   </head>
   <body>
@@ -28,6 +29,9 @@
     </header>
 
     <div id="passenger-app">
+      <nav class="watched-trips-nav" aria-label="Saved journeys" hidden>
+        <a href="/trip-watch.html">Watched trips</a>
+      </nav>
       <main id="stage" aria-live="polite"></main>
     </div>
 

@@ -1,0 +1,194 @@
+# Builds the iOS app (Capacitor shell in mobile/) and attaches it to the GitHub Release
+# when a tag v* is pushed that points at a commit on main (same release as the Android APK).
+# Pull requests touching mobile/ only build it (no release), to catch breakage early.
+#
+# Optional repo config:
+#   vars.MOBILE_SERVER_URL          - URL the app loads (default: the one in mobile/capacitor.config.json)
+#   secrets.IOS_CERTIFICATE_P12_BASE64, IOS_CERTIFICATE_PASSWORD, IOS_PROVISIONING_PROFILE_BASE64
+#                                   - Apple signing (needs a paid Apple Developer account). Team, bundle id and
+#                                     export method are read from the provisioning profile.
+#   vars.IOS_EXPORT_METHOD          - override the export method (release-testing | debugging | app-store-connect | enterprise)
+# Without the secrets the workflow produces an UNSIGNED .ipa: install it with a sideloading tool
+# (Sideloadly, AltStore) that re-signs it with a free Apple ID.
+name: iOS release
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths: ["mobile/**", ".github/workflows/ios-release.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  ipa:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check tag is on main
+        if: startsWith(github.ref, 'refs/tags/')
+        working-directory: .
+        run: |
+          git fetch origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not point at a commit on main"
+            exit 1
+          fi
+
+      - name: Version
+        id: version
+        run: |
+          # CFBundleShortVersionString must be numeric (X.Y.Z), so dev builds use 0.0.0.
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            NAME="${GITHUB_REF_NAME#v}"; MARKETING="${NAME%%-*}"
+          else
+            NAME="0.0.0-dev"; MARKETING="0.0.0"
+          fi
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "marketing=$MARKETING" >> "$GITHUB_OUTPUT"
+          echo "build=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Select newest Xcode
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$XCODE" ]; then sudo xcode-select -s "$XCODE"; fi
+          xcodebuild -version
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install and sync Capacitor
+        env:
+          SERVER_URL: ${{ vars.MOBILE_SERVER_URL }}
+        run: |
+          npm ci
+          if [ -n "$SERVER_URL" ]; then
+            HOST=$(echo "$SERVER_URL" | sed -E 's#^[a-z]+://([^/:]+).*#\1#')
+            jq --arg u "$SERVER_URL" --arg h "$HOST" '.server.url=$u | .server.allowNavigation=[$h]' \
+              capacitor.config.json > c.tmp && mv c.tmp capacitor.config.json
+          fi
+          echo "App loads: $(jq -r .server.url capacitor.config.json)"
+          npx cap sync ios
+
+      - name: Signing setup
+        id: signing
+        env:
+          P12_B64: ${{ secrets.IOS_CERTIFICATE_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          PROFILE_B64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+          EXPORT_METHOD: ${{ vars.IOS_EXPORT_METHOD }}
+        run: |
+          if [ -z "$P12_B64" ] || [ -z "$PROFILE_B64" ]; then
+            echo "::warning::No iOS signing secrets: building an UNSIGNED .ipa (sideload with Sideloadly/AltStore)"
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
+          KC_PASS=$(openssl rand -hex 16)
+          echo "$P12_B64" | base64 -d > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KC_PASS" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KC_PASS" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KC_PASS" "$KEYCHAIN" > /dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" | awk 'NR==1 {print $2}')
+
+          PROFILE="$RUNNER_TEMP/profile.mobileprovision"
+          echo "$PROFILE_B64" | base64 -d > "$PROFILE"
+          security cms -D -i "$PROFILE" > "$RUNNER_TEMP/profile.plist"
+          PL="$RUNNER_TEMP/profile.plist"
+          UUID=$(plutil -extract UUID raw "$PL")
+          TEAM=$(plutil -extract TeamIdentifier.0 raw "$PL")
+          APP_ID=$(plutil -extract Entitlements.application-identifier raw "$PL")
+          BUNDLE_ID="${APP_ID#"$TEAM".}"
+          if [[ "$BUNDLE_ID" == *"*"* ]]; then BUNDLE_ID="ch.lauzhack.twin"; fi
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$PROFILE" "$HOME/Library/MobileDevice/Provisioning Profiles/$UUID.mobileprovision"
+
+          if [ -z "$EXPORT_METHOD" ]; then
+            if plutil -extract ProvisionsAllDevices raw "$PL" >/dev/null 2>&1; then EXPORT_METHOD=enterprise
+            elif plutil -extract ProvisionedDevices raw "$PL" >/dev/null 2>&1; then
+              if [ "$(plutil -extract Entitlements.get-task-allow raw "$PL" 2>/dev/null)" = "true" ]; then
+                EXPORT_METHOD=debugging; else EXPORT_METHOD=release-testing; fi
+            else EXPORT_METHOD=app-store-connect; fi
+          fi
+          echo "Signing: team $TEAM, bundle $BUNDLE_ID, profile $UUID, method $EXPORT_METHOD"
+
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>$EXPORT_METHOD</string>
+            <key>teamID</key><string>$TEAM</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>signingCertificate</key><string>$IDENTITY</string>
+            <key>provisioningProfiles</key><dict><key>$BUNDLE_ID</key><string>$UUID</string></dict>
+          </dict></plist>
+          EOF
+          {
+            echo "signed=true"
+            echo "identity=$IDENTITY"
+            echo "team=$TEAM"
+            echo "bundle=$BUNDLE_ID"
+            echo "profile=$UUID"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        working-directory: mobile/ios/App
+        env:
+          SIGNED: ${{ steps.signing.outputs.signed }}
+          IDENTITY: ${{ steps.signing.outputs.identity }}
+          TEAM: ${{ steps.signing.outputs.team }}
+          BUNDLE: ${{ steps.signing.outputs.bundle }}
+          PROFILE: ${{ steps.signing.outputs.profile }}
+        run: |
+          OUT="$GITHUB_WORKSPACE/train-twin-${{ steps.version.outputs.name }}.ipa"
+          COMMON=(-project App.xcodeproj -scheme App -configuration Release -destination generic/platform=iOS
+                  -archivePath "$RUNNER_TEMP/App.xcarchive"
+                  MARKETING_VERSION=${{ steps.version.outputs.marketing }}
+                  CURRENT_PROJECT_VERSION=${{ steps.version.outputs.build }})
+          if [ "$SIGNED" = "true" ]; then
+            xcodebuild archive "${COMMON[@]}" \
+              CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="$TEAM" CODE_SIGN_IDENTITY="$IDENTITY" \
+              PROVISIONING_PROFILE_SPECIFIER="$PROFILE" PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE"
+            xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/App.xcarchive" \
+              -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export"
+            cp "$RUNNER_TEMP"/export/*.ipa "$OUT"
+          else
+            xcodebuild archive "${COMMON[@]}" \
+              CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+            # An .ipa is just Payload/<App>.app zipped.
+            mkdir -p "$RUNNER_TEMP/ipa/Payload"
+            cp -R "$RUNNER_TEMP/App.xcarchive/Products/Applications/App.app" "$RUNNER_TEMP/ipa/Payload/"
+            (cd "$RUNNER_TEMP/ipa" && zip -qry "$OUT" Payload)
+            mv "$OUT" "${OUT%.ipa}-unsigned.ipa"
+          fi
+          ls -la "$GITHUB_WORKSPACE"/train-twin-*.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: train-twin-ipa
+          path: train-twin-*.ipa
+
+      - name: GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: train-twin-*.ipa
+          generate_release_notes: true
+
+      - name: Clean up keychain
+        if: always() && steps.signing.outputs.signed == 'true'
+        run: security delete-keychain "$RUNNER_TEMP/build.keychain-db" || true

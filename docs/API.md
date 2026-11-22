@@ -47,6 +47,16 @@ written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lau
 | `GET /reports/{id}` | `Report` |
 | `POST /reports/{id}/resolve` | `{ "resolution": "text" \| null }` (optional body) → resolved `Report`; `409 already_resolved` if not open |
 | `POST /assistant/ask` | `AskResponse`: the passenger assistant's answer (see [Passenger assistant](#passenger-assistant-post-assistantask)) |
+| `GET /trip-watches/availability` | `{ "enabled": boolean }` |
+| `GET /trip-watches` | Active watches for the calling browser |
+| `POST /trip-watches` | Resolve a selected departure or plan and start watching. Returns the watch and sets its owner cookie. |
+| `GET /trip-watches/{id}` | Read the watch from its opaque link |
+| `PATCH /trip-watches/{id}` | Apply `boarded`, `alighted` or `wait`. The owner's cookie is required. |
+| `DELETE /trip-watches/{id}` | Stop watching. The owner's cookie is required. The response describes the ended watch. |
+| `GET /trip-watches/{id}/apple.pkpass` | Signed pass for the owner when Apple Wallet is configured |
+| `POST /trip-watches/{id}/google` | `{ "url": "…" }` for the owner when Google Wallet is configured |
+
+Trip Watch accepts a `journeyId` from a server-cached planner result, or `trainId`, `fromStopId` and `toStopId` from the live connection screen. Set the optional `onBoard` flag after the passenger confirms they have boarded. Expired or changed selections return 409 with a prompt to select a connection again. The remaining access routes require the feature to be enabled. [Trip Watch](WALLET_TRIP_WATCH.md)
 
 ### Query parameters
 
@@ -61,7 +71,7 @@ written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lau
 | | `bbox` | | position inside the box |
 | | `limit`, `offset` | 100 (max 2000), 0 | paging; sorted by `trainId` |
 | `/trains/{id}/stops` | `state` | | `passed`, `current`, `next`; `upcoming` = everything not passed |
-| `/stations` | `q` | | substring of the name, or exact `stopId`; prefix matches first |
+| `/stations` | `q` | | substring of the name (case- and accent-insensitive), or exact `stopId`; prefix matches first |
 | | `bbox` | | |
 | | `limit` | 50 (max 5000) | |
 | `/stations/{id}/board` | `type` | `departures` | `departures` (excludes trains ending here), `arrivals` (excludes trains starting here), `all` |
@@ -75,7 +85,7 @@ written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lau
 | | `limit` | 5 (max 20) | |
 | `/stations/nearby` | `lat`, `lon` | required | |
 | | `radiusM`, `limit` | 5000 (max 50000), 8 (max 50) | |
-| `/stations/{id}/destinations` | `q`, `limit` | –, 30 (max 500) | name filter |
+| `/stations/{id}/destinations` | `q`, `limit` | –, 30 (max 500) | name filter (case- and accent-insensitive) |
 | `/stations/{id}/connections` | `to` | required | destination `stopId` |
 | | `windowMin`, `limit` | 180 (1…1440), 10 (max 100) | departures within the window (trains at the station always included) |
 | `/stations/{id}/screen` | `limit` | 6 (max 20) | number of departures |

@@ -36,6 +36,7 @@ async function api(path) {
   }
   return r.json();
 }
+const tripWatchAvailable = api("/trip-watches/availability").then((config) => config.enabled).catch(() => false);
 const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 
 // Lucide icons (one family, stroke 2), inlined.
@@ -377,19 +378,20 @@ const allStations = () => (stationsCache ??= api("/stations?limit=5000"));
  * Text search + map, in tabs. `reachable` (optional) = Map stopId -> {trains, nextArrival} to rank and highlight
  * destinations reachable from an origin. Calls onPick({stopId, name}).
  */
-function stationPicker(container, { placeholder, reachable = null, onPick }) {
+function stationPicker(container, { placeholder, reachable = null, onPick, input: external = null }) {
   container.innerHTML = `
     <div class="tabs" role="tablist">
       <button class="tab active" role="tab" data-tab="text">${ic("list")}Text</button>
       <button class="tab" role="tab" data-tab="map">${ic("map")}Map</button>
     </div>
     <div class="pane" data-pane="text">
-      <label class="search">${ic("search")}<input type="text" placeholder="${esc(placeholder)}" aria-label="${esc(placeholder)}" autocomplete="off" enterkeyhint="search" />
-        <button class="clear" type="button" title="Clear" aria-label="Clear">${ic("x")}</button></label>
+      ${external ? "" : `<label class="search">${ic("search")}<input type="text" placeholder="${esc(placeholder)}" aria-label="${esc(placeholder)}" autocomplete="off" enterkeyhint="search" />
+        <button class="clear" type="button" title="Clear" aria-label="Clear">${ic("x")}</button></label>`}
       <div class="list stagger results"></div>
     </div>
     <div class="pane" data-pane="map" hidden><div class="map"></div><p class="note">Tap a station on the map.</p></div>`;
-  const input = $("input", container), results = $(".results", container);
+  // `input` (optional): a text field owned by the caller (e.g. the From / To fields) instead of our own search box.
+  const input = external ?? $("input", container), results = $(".results", container);
   let map = null;
 
   const rows = async () => {
@@ -408,8 +410,12 @@ function stationPicker(container, { placeholder, reachable = null, onPick }) {
     }).join("") : q ? '<p class="empty">No station matches.</p>' : "";
     results.querySelectorAll(".row").forEach((el) => (el.onclick = () => { el.classList.add("selected"); onPick({ stopId: el.dataset.id, name: el.dataset.name }); }));
   };
-  input.addEventListener("input", debounce(rows, 180));
-  $(".clear", container).onclick = () => { input.value = ""; rows(); input.focus(); };
+  const onInput = debounce(rows, 180);
+  const onKey = (e) => { if (e.key === "Enter") { e.preventDefault(); $(".row", results)?.click(); } };
+  input.addEventListener("input", onInput);
+  input.addEventListener("keydown", onKey);
+  const clear = $(".clear", container);
+  if (clear) clear.onclick = () => { input.value = ""; rows(); input.focus(); };
   rows();
 
   container.querySelectorAll(".tab").forEach((tab) => (tab.onclick = async () => {
@@ -421,7 +427,7 @@ function stationPicker(container, { placeholder, reachable = null, onPick }) {
       else map.resize();
     }
   }));
-  return () => map?.remove();
+  return () => { input.removeEventListener("input", onInput); input.removeEventListener("keydown", onKey); map?.remove(); };
 }
 
 async function stationMap(el, { reachable, onPick }) {
@@ -492,52 +498,76 @@ function destinationScreen(from) {
 
 function browseScreen({ note = null, back = false } = {}) {
   const pick = { from: null, to: null };
+  const hint = { from: "Where do you start?", to: "Where do you go?" };
   show((s) => {
+    const field$ = (f) => `<label class="od-field" data-f="${f}"><span class="k">${f === "from" ? "From" : "To"}</span>
+      <input class="v" type="text" placeholder="${hint[f]}" aria-label="${hint[f]}" autocomplete="off" enterkeyhint="search" /></label>`;
     s.innerHTML = `
       <div class="illus-box small">${ILLUSTRATION.search}</div>
       <h1>Plan a trip</h1>
       <p class="lead">${esc(note || "Choose where you start and where you go.")}</p>
       <div class="od card">
-        <button class="od-field" type="button" data-f="from"><span class="k">From</span><span class="v">Choose a station</span></button>
+        ${field$("from")}
         <button class="icon-btn swap" type="button" title="Swap" aria-label="Swap">${ic("swap")}</button>
-        <button class="od-field" type="button" data-f="to"><span class="k">To</span><span class="v">Choose a station</span></button>
+        ${field$("to")}
       </div>
       <div id="picker"></div>
       <div class="actions"><button class="btn primary block" id="go" disabled>Show trains</button></div>`;
+    const inputOf = (f) => $(`.od-field[data-f="${f}"] input`, s);
     let field = "from";
     let close = null;
-    const render = () => {
-      s.querySelectorAll(".od-field").forEach((b) => {
-        const v = pick[b.dataset.f];
-        b.classList.toggle("active", b.dataset.f === field);
-        b.querySelector(".v").textContent = v ? v.name : "Choose a station";
-        b.querySelector(".v").classList.toggle("set", !!v);
+    // syncText: write the picked station names into the fields (not while the user is typing).
+    const render = (syncText = false) => {
+      s.querySelectorAll(".od-field").forEach((el) => {
+        const f = el.dataset.f, inp = $("input", el);
+        el.classList.toggle("active", f === field && !!close);
+        if (syncText) inp.value = pick[f]?.name ?? "";
+        inp.classList.toggle("set", !!pick[f] && inp.value === pick[f].name);
       });
       $("#go", s).disabled = !(pick.from && pick.to && pick.from.stopId !== pick.to.stopId);
     };
+    const closePicker = () => { close?.(); close = null; $("#picker", s).innerHTML = ""; render(); };
     const openPicker = async () => {
       close?.();
-      const reachable = field === "to" && pick.from
+      close = () => {}; // marks the picker as open while `reachable` loads
+      const f = field;
+      const reachable = f === "to" && pick.from
         ? new Map((await api(`/stations/${encodeURIComponent(pick.from.stopId)}/destinations?limit=500`).catch(() => [])).map((d) => [d.station.stopId, d]))
         : null;
+      if (f !== field) return; // the user moved to the other field meanwhile
       close = stationPicker($("#picker", s), {
-        placeholder: field === "from" ? "Where do you start?" : "Where do you go?", reachable,
+        input: inputOf(f), reachable,
         onPick: (st) => {
           buzz();
-          pick[field] = st;
-          field = field === "from" && !pick.to ? "to" : field;
-          render();
-          if (pick.from && pick.to) { close?.(); $("#picker", s).innerHTML = ""; } else openPicker();
+          pick[f] = st;
+          render(true);
+          const next = !pick.from ? "from" : !pick.to ? "to" : null;
+          if (next) { field = next; render(); inputOf(next).focus({ preventScroll: true }); openPicker(); }
+          else { inputOf(f).blur(); closePicker(); }
         },
       });
-      onLeave(() => close?.());
-      setTimeout(() => $("#picker input", s)?.focus({ preventScroll: true }), 250);
+      render();
     };
-    s.querySelectorAll(".od-field").forEach((b) => (b.onclick = () => { field = b.dataset.f; render(); openPicker(); }));
-    $(".swap", s).onclick = () => { [pick.from, pick.to] = [pick.to, pick.from]; render(); };
+    onLeave(() => close?.());
+    s.querySelectorAll(".od-field").forEach((el) => {
+      const f = el.dataset.f, inp = $("input", el);
+      inp.addEventListener("focus", () => {
+        if (field === f && close) return;
+        field = f;
+        inp.select();
+        openPicker();
+      });
+      inp.addEventListener("input", () => { pick[f] = null; render(); });
+    });
+    $(".swap", s).onclick = () => {
+      [pick.from, pick.to] = [pick.to, pick.from];
+      render(true);
+      if (close) openPicker(); // the destination list depends on the origin
+    };
     $("#go", s).onclick = () => { buzz(15); connectionsScreen(pick.from, pick.to); };
     render();
     openPicker();
+    setTimeout(() => inputOf("from")?.focus({ preventScroll: true }), 250);
   }, { back });
 }
 
@@ -575,7 +605,10 @@ function connectionsScreen(from, to) {
           <div class="l2">Arrival ${hhmm(c.arrivalTime)}${c.durationMin != null ? ` · ${c.durationMin} min` : ""} · ${c.stopsBetween ? `${c.stopsBetween} stop${c.stopsBetween > 1 ? "s" : ""}` : "Direct"}${c.incidents.length ? ` · <span class="warn">${c.incidents.length} incident${c.incidents.length > 1 ? "s" : ""}</span>` : ""}</div>
         </button>`;
       }).join("");
-      list.querySelectorAll(".conn").forEach((el) => (el.onclick = () => { buzz(15); onTracksScreen(el.dataset.id); }));
+      list.querySelectorAll(".conn").forEach((el) => (el.onclick = () => {
+        buzz(15);
+        onTracksScreen(el.dataset.id, { fromStopId: from.stopId, toStopId: to.stopId });
+      }));
     };
     const refresh = () => api(`/stations/${encodeURIComponent(from.stopId)}/connections?to=${encodeURIComponent(to.stopId)}&windowMin=240&limit=12`)
       .then(draw).catch(() => toast("Connection problem. Retrying…"));
@@ -593,8 +626,8 @@ function connectionsScreen(from, to) {
 
 // ------------------------------------------------------------------ 5. on tracks (on a train)
 
-function onTracksScreen(trainId) {
-  setUrl({ train: trainId });
+function onTracksScreen(trainId, trip = null) {
+  setUrl(trip ? { train: trainId, from: trip.fromStopId, to: trip.toStopId } : { train: trainId });
   show((s) => {
     s.innerHTML = `
       <div id="alerts" class="list"></div>
@@ -602,8 +635,15 @@ function onTracksScreen(trainId) {
         <div class="scene-cap"><span id="line"></span><div class="main"><div class="t" id="to"></div><div class="m" id="where"></div></div><span id="state"></span></div>
       </div>
       <div class="nextstop card" id="next"></div>
+      ${trip ? '<a id="watch-train" class="btn block watch-entry" hidden>Watch this trip</a>' : ''}
       <h2>Route</h2>
       <div class="route" id="route">${placeholders(4)}</div>`;
+    if (trip) tripWatchAvailable.then((available) => {
+      const link = $("#watch-train", s);
+      if (!available || !link?.isConnected) return;
+      link.href = `/trip-watch.html?${new URLSearchParams({ trainId, ...trip })}`;
+      link.hidden = false;
+    });
     const incidents = new Map();
     let last = null;
     const scene = trainScene($("#scene", s));
@@ -871,10 +911,17 @@ async function trainScene(canvas) {
 // ------------------------------------------------------------------ boot
 
 live.connect();
+tripWatchAvailable.then((available) => {
+  $(".watched-trips-nav").hidden = !available;
+});
 const params = new URLSearchParams(location.search);
 const qrTrain = params.get("train");
 const qrStation = params.get("station");
-if (qrTrain) onTracksScreen(qrTrain);
+if (qrTrain) {
+  const from = params.get("from");
+  const to = params.get("to");
+  onTracksScreen(qrTrain, from && to ? { fromStopId: from, toStopId: to } : null);
+}
 else if (qrStation) {
   api(`/stations/${encodeURIComponent(qrStation)}`).then((d) => {
     const from = { stopId: d.station.stopId, name: d.station.name };

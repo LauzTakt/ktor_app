@@ -8,6 +8,8 @@ import type { AnyGeoJSON, VisualCommand } from "../contract";
 import { sbbText } from "../format";
 import { FleetFeed } from "./feed";
 import { TrainCanvas } from "./trains";
+import { applyMapTheme, captureBase } from "./mapTheme";
+import { currentTheme, onTheme } from "../theme";
 
 (maplibregl as unknown as { setWorkerUrl?: (u: string) => void }).setWorkerUrl?.(workerUrl);
 
@@ -203,9 +205,21 @@ export class MapController {
       this.trains.update(rows, interval);
       this.onFleet(rows.length, source);
     });
+    // dark mode: recolour as soon as the style is parsed (no white flash while tiles load), and on every change
+    this.map.once("style.load", () => {
+      this.baseLayers = captureBase(this.map); // the base map's light paint, before our layers exist
+      this.recolour();
+      this.unsubscribeTheme = onTheme(() => this.recolour());
+    });
     this.map.on("load", () => this.setup());
     this.map.on("moveend", () => this.placeLabels());
     if (!replay) this.loop();
+  }
+
+  private baseLayers: ReturnType<typeof captureBase> | null = null;
+  private unsubscribeTheme?: () => void;
+  private recolour() {
+    if (this.baseLayers) applyMapTheme(this.map, this.baseLayers, currentTheme());
   }
 
   /** Keep pin labels on screen: near the left or right edge a label leans inwards instead of centring. */
@@ -274,6 +288,8 @@ export class MapController {
     });
     for (const ev of ["touchend", "touchmove", "movestart"] as const) m.on(ev, () => window.clearTimeout(press));
 
+    this.recolour(); // our layers, now that they exist
+
     this.ready = true;
     this.map.fitBounds(this.replay?.bounds ?? SWITZERLAND, { padding: this.cameraPadding(), absolutePadding: Boolean(this.replay), duration: 0 });
     if (!this.replay) this.feed.start();
@@ -316,6 +332,7 @@ export class MapController {
   dispose() {
     cancelAnimationFrame(this.frame);
     this.feed.pause();
+    this.unsubscribeTheme?.();
     this.map.remove();
   }
 

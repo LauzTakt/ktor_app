@@ -124,6 +124,16 @@ class ApiTest {
     fun stationSearch() = api {
         val r = json("/api/v1/stations?q=station%20b").jsonArray
         assertEquals(listOf("B"), r.map { it.s("stopId") })
+        // accent- and case-insensitive: "stätion b" and "STATION B" both find "Station B"
+        assertEquals(listOf("B"), json("/api/v1/stations?q=st%C3%A4tion%20b").jsonArray.map { it.s("stopId") })
+        assertEquals(listOf("B"), json("/api/v1/stations?q=STATION%20B").jsonArray.map { it.s("stopId") })
+    }
+
+    @Test
+    fun searchKeyIgnoresAccents() {
+        assertEquals("zurich hb", ch.lauzhack.twin.api.v1.searchKey(" Zürich HB "))
+        assertEquals("geneve", ch.lauzhack.twin.api.v1.searchKey("Genève"))
+        assertEquals("strasse", ch.lauzhack.twin.api.v1.searchKey("Straße"))
     }
 
     @Test
