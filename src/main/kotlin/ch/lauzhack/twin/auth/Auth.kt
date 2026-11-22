@@ -4,7 +4,8 @@ import ch.lauzhack.twin.common.ConflictException
 import ch.lauzhack.twin.common.InvalidInputException
 import ch.lauzhack.twin.common.NotFoundException
 import ch.lauzhack.twin.common.UnauthorizedException
-import ch.lauzhack.twin.db.Database
+import ch.lauzhack.twin.db.TokenRepository
+import ch.lauzhack.twin.db.UserRepository
 import ch.lauzhack.twin.db.UserRow
 import io.ktor.http.Cookie
 import io.ktor.http.HttpStatusCode
@@ -116,58 +117,58 @@ internal fun sha256(s: String): String =
 
 // ---------------------------------------------------------------- service
 
-class AuthService(private val db: Database, private val cfg: AuthConfig = AuthConfig(), private val clock: () -> Long = System::currentTimeMillis) {
+class AuthService(private val users: UserRepository, private val tokens: TokenRepository, private val cfg: AuthConfig = AuthConfig(), private val clock: () -> Long = System::currentTimeMillis) {
     private val log = LoggerFactory.getLogger(AuthService::class.java)
 
     /** Creates `admin` when there is no user at all; warns while it still has the default password. */
     fun ensureDefaultAdmin() {
-        if (db.userCount() == 0) {
+        if (users.count() == 0) {
             val now = clock()
-            db.insertUser(UserRow(DEFAULT_ADMIN, Passwords.hash(cfg.adminPassword), ROLE_STAFF, now, now))
+            users.insert(UserRow(DEFAULT_ADMIN, Passwords.hash(cfg.adminPassword), ROLE_STAFF, now, now))
             log.warn("Created default staff user '{}'{}", DEFAULT_ADMIN, if (cfg.adminPassword == "admin") " with password 'admin': change it" else "")
         } else {
-            db.user(DEFAULT_ADMIN)?.takeIf { Passwords.verify("admin", it.passwordHash) }
+            users.get(DEFAULT_ADMIN)?.takeIf { Passwords.verify("admin", it.passwordHash) }
                 ?.let { log.warn("Staff user 'admin' still has the default password 'admin': change it") }
         }
-        db.deleteExpiredTokens(clock())
+        tokens.deleteExpired(clock())
     }
 
     fun login(username: String, password: String): LoginResultDto? {
-        val u = db.user(username)
+        val u = users.get(username)
         val ok = Passwords.verify(password, u?.passwordHash ?: Passwords.dummyHash) && u != null
         if (!ok) return null
         val token = newToken()
         val now = clock()
         val expiresAt = now + cfg.tokenTtlHours * 3_600_000L
-        db.insertToken(sha256(token), u!!.username, now, expiresAt)
+        tokens.insert(sha256(token), u!!.username, now, expiresAt)
         log.info("staff login: {}", u.username)
         return LoginResultDto(token = token, expiresAt = expiresAt, user = u.toDto())
     }
 
     fun principal(token: String): StaffPrincipal? {
         val h = sha256(token)
-        val username = db.tokenUser(h, clock()) ?: return null
-        val u = db.user(username) ?: return null
+        val username = tokens.userOf(h, clock()) ?: return null
+        val u = users.get(username) ?: return null
         return StaffPrincipal(u.username, u.role, h)
     }
 
-    fun logout(p: StaffPrincipal) = db.deleteToken(p.tokenHash)
+    fun logout(p: StaffPrincipal) = tokens.delete(p.tokenHash)
 
     /** Staff behind this call (Bearer header first, then the cookie), or null. Never throws: for page gating. */
     fun principalOf(call: ApplicationCall): StaffPrincipal? = staffToken(call)?.let { principal(it) }
 
     val tokenTtlSeconds: Long get() = cfg.tokenTtlHours * 3600
 
-    fun users(): List<UserDto> = db.users().map { it.toDto() }
+    fun users(): List<UserDto> = users.all().map { it.toDto() }
 
-    fun user(username: String): UserDto = db.user(username)?.toDto() ?: throw userNotFound(username)
+    fun user(username: String): UserDto = users.get(username)?.toDto() ?: throw userNotFound(username)
 
     fun createUser(req: CreateUserDto): UserDto {
         validateUsername(req.username)
         validatePassword(req.password)
         val now = clock()
         val row = UserRow(req.username, Passwords.hash(req.password), ROLE_STAFF, now, now)
-        if (!db.insertUser(row)) throw ConflictException("user_exists", "user '${req.username}' already exists")
+        if (!users.insert(row)) throw ConflictException("user_exists", "user '${req.username}' already exists")
         log.info("staff user created: {}", req.username)
         return row.toDto()
     }
@@ -175,14 +176,14 @@ class AuthService(private val db: Database, private val cfg: AuthConfig = AuthCo
     /** Changing a password revokes the user's other sessions (the caller keeps its own when changing its own password). */
     fun setPassword(caller: StaffPrincipal, username: String, password: String) {
         validatePassword(password)
-        if (!db.updatePassword(username, Passwords.hash(password), clock())) throw userNotFound(username)
-        db.deleteTokensOf(username, keepHash = caller.tokenHash.takeIf { caller.username == username })
+        if (!users.updatePassword(username, Passwords.hash(password), clock())) throw userNotFound(username)
+        tokens.deleteAllOf(username, keepHash = caller.tokenHash.takeIf { caller.username == username })
         log.info("password of {} changed by {}", username, caller.username)
     }
 
     fun deleteUser(caller: StaffPrincipal, username: String) {
         if (caller.username == username) throw ConflictException("cannot_delete_self", "you cannot delete your own account")
-        if (!db.deleteUser(username)) throw userNotFound(username)
+        if (!users.delete(username)) throw userNotFound(username)
         log.info("staff user {} deleted by {}", username, caller.username)
     }
 

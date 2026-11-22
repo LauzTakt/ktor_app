@@ -12,7 +12,8 @@ import ch.lauzhack.twin.common.obj
 import ch.lauzhack.twin.common.objects
 import ch.lauzhack.twin.common.str
 import ch.lauzhack.twin.common.strings
-import ch.lauzhack.twin.db.Database
+import ch.lauzhack.twin.query.IncidentQueries
+import ch.lauzhack.twin.report.ReportService
 import ch.lauzhack.twin.db.StaffReportRow
 import ch.lauzhack.twin.query.BoardType
 import ch.lauzhack.twin.query.IncidentDto
@@ -21,7 +22,7 @@ import ch.lauzhack.twin.query.StopState
 import ch.lauzhack.twin.query.TrainFilter
 import ch.lauzhack.twin.query.TrainSummaryDto
 import ch.lauzhack.twin.query.TwinQueries
-import ch.lauzhack.twin.state.Station
+import ch.lauzhack.twin.model.Station
 import ch.lauzhack.twin.twinapi.SbbTwinClient
 import ch.lauzhack.twin.twinapi.PlanQuery
 import ch.lauzhack.twin.twinapi.CachedJourney
@@ -114,7 +115,8 @@ class TurnState(val request: AskRequest, val now: Long) {
  */
 class AssistantTools(
     private val queries: TwinQueries,
-    private val db: Database,
+    private val incidents: IncidentQueries,
+    private val reports: ReportService,
     val stations: StationResolver,
     private val twin: SbbTwinClient,
     val journeys: JourneyCache = JourneyCache(),
@@ -1129,7 +1131,7 @@ class AssistantTools(
     }
 
     private fun reports(filter: (StaffReportRow) -> Boolean): List<StaffReportRow> =
-        runCatching { db.reports("open", limit = 200) }.getOrDefault(emptyList()).filter(filter)
+        runCatching { reports.open(limit = 200) }.getOrDefault(emptyList()).filter(filter)
 
     private fun addIncident(
         item: SituationItem, since: Long?, trains: Int?, description: String?, raw: JsonObject?,
@@ -1152,7 +1154,7 @@ class AssistantTools(
 
     /** Raw MQTT payloads of ktor_app's incidents (they carry the cause / effect / until fields the table does not). */
     private fun rawPayloads(ids: Collection<String>): Map<String, JsonObject> =
-        runCatching { db.latestIncidentPayloads(ids) }.getOrDefault(emptyMap())
+        runCatching { incidents.latestPayloads(ids) }.getOrDefault(emptyMap())
             .mapNotNull { (id, json) -> runCatching { Json.parseToJsonElement(json).obj() }.getOrNull()?.let { id to it } }.toMap()
 
     private fun addLocal(list: List<IncidentDto>, into: MutableMap<String, JsonObject>, turn: TurnState) {

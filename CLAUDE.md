@@ -27,17 +27,17 @@ The prediction model also reads "modified data" from the broker on its own; it i
 |---|---|---|
 | MQTT client (Paho mqttv3) | **done**: `status`, `incidents/+`, `trains/+/info`, `fleet` | `mqtt/MqttIngestor.kt` |
 | Last known train state (memory) | **done** | `state/LiveState.kt` |
-| SQLite: incident history + station catalog | **done** | `db/Database.kt` |
+| SQLite: incident history + station catalog (one repository per aggregate over `db/Sqlite.kt`) | **done** | `db/` |
 | REST API v1 (read: trains, stations, boards, incidents, status) | **done** — see docs/API.md | `api/v1/` |
-| Staff incident reports (REST + SQLite `staff_report`, local only, not published) | **done** | `api/v1/Reports.kt` |
+| Staff incident reports (REST + SQLite `staff_report`, local only, not published) | **done** | `report/ReportService.kt`, routes `api/v1/Reports.kt` |
 | Passenger assistant `POST /api/v1/assistant/ask` (Claude Sonnet 5.5 agent, effort low, knowledge pack in `resources/assistant/knowledge.md`: tools over our data + sbb-twin planner/situation/geometry; system prompt in `resources/assistant/system-prompt.md`). Knows what the passenger has open behind it (`context.onScreen`: train, line, station, connections; `passenger.js` `setView` -> `assistant-launcher.js` postMessage -> `client/src/screenView.ts`) | **done** — see docs/API.md | `assistant/` |
 | Passenger voice app server side (port of sbb-client `server/`): `/api/voice/session` (ElevenLabs credentials), `/api/brief*` (place brief from sbb-twin), `/api/nearest`, `/api/fleet`, `/twin/*` read-only proxy. Public; errors `{"error": msg}` | **done** — see docs/API.md | `passenger/` |
 | Swagger UI (`/swagger`) | **done** — OpenAPI spec, hand-written: update it with every API change | `resources/openapi/documentation.yaml` |
 | Staff auth: bearer tokens (`POST /api/v1/auth/login`), SQLite `app_user` + `auth_token`, default `admin`/`admin`. Read API/WebSockets/Swagger public; **staff only: web UI pages (`staffPages`, redirect to `/login.html`, session cookie `twin_staff`) and `POST /api/v1/reports`**; new staff-only calls go inside `staffOnly { }` | **done** — first staff calls: `/auth/me`, `/auth/logout`, `/staff/users` | `auth/Auth.kt` |
 | Push notifications (web + Android app): follow a train (arrival at your stop + its incidents) or a line (incidents only). Web Push (VAPID + RFC 8291 with the JDK, keys auto-generated in SQLite `push_setting`) for browsers and the iPhone Home Screen web app; FCM HTTP v1 for the Android app (`FCM_SERVICE_ACCOUNT_JSON`). Tables `push_device`, `push_subscription`, `push_notified`. Lines: `GET /lines`, `/lines/{line}` | **done** — see docs/API.md "Push notifications" (iOS native app: needs a paid Apple account) | `push/`, `static/push.js`, `static/sw.js`, `static/manifest.json` |
 | REST API for predictions (model pushes to us) | todo | |
-| WebSocket `/api/v1/ws`: subscribe to trains/stations (`frequencySec` updates + immediate incident pushes) | **done** — see docs/API.md | `api/v1/LiveUpdates.kt` (incident events via `Database.addIncidentListener`) |
-| WebSocket `/ws/fleet`: whole fleet every `fleet` tick (staff map) | **done** | `web/FleetFeed.kt` |
+| WebSocket `/api/v1/ws`: subscribe to trains/stations (`frequencySec` updates + immediate incident pushes) | **done** — see docs/API.md | `api/v1/LiveUpdates.kt` (incident events via `IncidentRepository.addListener`) |
+| WebSocket `/ws/fleet`: whole fleet every `fleet` tick (staff map) | **done** | `query/FleetFeed.kt`, `web/FleetSocket.kt` |
 | Static web UI: passenger view (`/`, mobile, public) + staff panel behind login (`/admin/` map, `/admin/report.html`), light/dark toggle | **done** (plain JS, no build; MapLibre from unpkg) | `resources/static/` |
 | Mascot "Loki" (flat vector train): loading scenes (`lokiLoading()`), the travel assistant speaks as Loki (header mark, message avatar, mouth follows the voice). Drawing duplicated in `static/loki.js` and `client/src/Loki.tsx` (Docker builds `client/` alone): change both; styles shared via `/loki.css` | **done** — docs/STYLE.md "9. Mascot" | `static/loki.js`, `static/loki.css`, `client/src/Loki.tsx` |
 | First-run tour of the passenger view, guided by "Loki" (flat vector train mascot): dims the page and spotlights the assistant, alerts, watched trips, theme and "?" (replay) buttons, then starts the location step. Once per browser (`localStorage` `twin-tour-v1`), skipped when opened from a QR / shared link | **done** — rules in docs/STYLE.md "Mascot" | `static/onboarding.js`, `static/onboarding.css` |
@@ -56,7 +56,7 @@ few seconds from the retained `trains/+/info` topics plus the next `fleet` messa
   `LiveState.trainsCallingAt(stopId)` + `TrainState.nextCallIndex` (first stop not yet left) -> `TwinQueries.board`.
 - `LiveState.stations`: stopId -> name/lat/lon, learned from `calls` (≈2,200 stations).
 
-**SQLite** (`data/twin.sqlite`, WAL, single writer thread; schema in `Database.migrate()`):
+**SQLite** (`data/twin.sqlite`, WAL, single writer thread in `db/Sqlite.kt`; each repository in `db/` creates its own tables):
 
 - `incident`: one row per incident, current version + `first_seen_at` + `removed_at` (NULL = active).
   Scope flattened into `scope_kind/scope_from/scope_to/scope_train` (indexed) + raw `scope_json`; GeoJSON in `geometry_json`.

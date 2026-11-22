@@ -14,14 +14,14 @@ how data moves between them at runtime. Keep it in sync when a package or a depe
             |            |           |          |
             v            v           v          v
  +-----------------------------------------------------------------+
- | query (TwinQueries, JourneyQueries, IncidentQueries, read models)|   2. read side: pure functions over state + incidents
- | AssistantAgent / Tools, PlaceBrief, TripWatchService, PushService|      feature services (own logic, no Ktor in them)
+ | query (TwinQueries, JourneyQueries, IncidentQueries, StationSearch,|  2. read side: pure functions over state + incidents
+ |   Severity, Lines, FleetFeed, read models)   report (ReportService)|     domain services (own rules, no Ktor in them)
  +-----------------------------------------------------------------+
             |                    |                         |
             v                    v                         v
  +-------------------+  +-------------------+  +--------------------------+
- | state (LiveState) |  | db (Database)     |  | twinapi (SbbTwinClient,  |    3. data sources
- | memory, 1 Hz      |  | SQLite, 1 writer  |  |  JourneyCache)           |
+ | state (LiveState) |  | db (Sqlite +      |  | twinapi (SbbTwinClient,  |    3. data sources
+ | memory, 1 Hz      |  |  repositories)    |  |  JourneyCache)           |
  +-------------------+  +-------------------+  +--------------------------+
             ^                    ^                         |
             |  mqtt (MqttIngestor): the only writer        |  HTTP GET, read only
@@ -39,25 +39,29 @@ same object graph over a seeded state and a temporary SQLite file.
 
 | Package | Responsibility | May depend on |
 |---|---|---|
-| `model` | MQTT payload shapes (`TrainInfo`, `TrainPosition`, `Incident`, `TwinStatus`) | — |
+| `model` | MQTT payload shapes (`TrainInfo`, `TrainPosition`, `Incident`, `TwinStatus`) and `Station` | — |
 | `common` | Domain errors (`AppException` and subclasses), geo (`haversineM`, `distanceKm`, `move`), GeoJSON (`forEachCoord`, `coordsOf`, `BBoxBuilder`, `simplifyGeometry`), Swiss time (`ZURICH`, `hhmm`, `dayTime`, `dayMonth`, `delayMin`, `minutes`), loose JSON access (`str`, `obj`, `objects`, `geometry`, `truthy`, `opt`, `toPlain`, `toJsonElement`, …), text (`searchKey` for accent-free station search, `lineKey`, `spacedLine`, `cleanDashes`, `urlEncode`) | — |
 | `state` | `LiveState`: latest train infos, fleet positions, stop index, station catalog. Memory only | `model` |
-| `db` | `Database`: SQLite incidents + history, station catalog, staff reports, users, tokens. Incident change listeners | `model`, `state` (`Station`) |
+| `db` | `Sqlite`: one connection, the `sqlite-writer` thread (`submit`), `withConnection`, `transaction`, `migrate`. One repository per aggregate, each owning its tables: `IncidentRepository` (incidents + history + change listeners), `StationRepository`, `ReportRepository`, `UserRepository`, `TokenRepository`. `Database` = the main file and its repositories | `model`, `common` |
 | `mqtt` | `MqttIngestor`: subscribes to sbb-twin and writes into `state` and `db` | `model`, `state`, `db` |
 | `twinapi` | `SbbTwinClient`: the only HTTP client for sbb-twin (GET only). `JourneyCache`: planner journeys shared by the features | `common` |
-| `query` | Read side: `TwinQueries` (trains, stations, boards, screens, incident matching), `JourneyQueries` (nearby, destinations, connections), `IncidentQueries`; `Severity` (rank, colour, wording of incident severities) and `Lines.kt` (`sameLine`, `lineIn`, `mentionsLine`, `TrainState.line`): the one place for these rules, and `StationSearch` (name normalisation, aliases, to/from words, ranking) behind every station search: REST, `assistant.StationResolver`, `passenger.Places`; `ReadModels.kt` = the response types, which are also the public API v1 contract | `common`, `model`, `state`, `db` |
-| `api/v1` | REST `/api/v1/*` routes, `ScreenText`, staff reports, WebSocket hub `LiveUpdates`, HTTP mapping of domain errors (`Errors.kt`) | `query`, `common`, `auth`, `db`, `state` |
-| `auth` | Staff accounts, bearer tokens + session cookie, `staffOnly { }`, staff pages | `db`, `common` |
-| `assistant` | Passenger assistant: Claude agent loop (`AssistantAgent`), tools (`AssistantTools`), `StationResolver`, `POST /api/v1/assistant/ask` | `query`, `state`, `db`, `twinapi`, `common` |
-| `passenger` | Server side of the voice app: ElevenLabs session, place brief, nearest station, fleet snapshot, read-only `/twin/*` proxy | `twinapi`, `common`, `web` (`FleetFeed`) |
-| `wallet` | Trip Watch: Apple / Google Wallet passes kept up to date for a planned journey (own SQLite file) | `query`, `twinapi`, `common` |
-| `push` | Push notifications (Web Push + FCM for the Android app): follow a train (arrival at your stop + incidents) or a line (incidents). `PushStore` = its tables in the shared SQLite file (through `Database.withConnection`), `Senders` = Web Push / FCM HTTP clients | `query`, `state`, `db`, `common` |
-| `web` | `FleetFeed` + `/ws/fleet`: whole fleet once per tick for the staff map; `AppLinks`: `/.well-known/` files for mobile deep links (env config, no data) | `state` |
+| `query` | Read side: `TwinQueries` (trains, stations, boards, screens, incident matching), `JourneyQueries` (nearby, destinations, connections), `IncidentQueries`; `Severity` (rank, colour, wording of incident severities) and `Lines.kt` (`sameLine`, `lineIn`, `mentionsLine`, `TrainState.line`): the one place for these rules, and `StationSearch` (name normalisation, aliases, to/from words, ranking) behind every station search: REST, `assistant.StationResolver`, `passenger.Places`; `FleetFeed` (the fleet encoded once per tick); `ReadModels.kt` = the response types, which are also the public API v1 contract | `common`, `model`, `state`, `db` |
+| `report` | `ReportService`: staff incident reports (validation, location from the live state, atomic open -> resolved). Used by the `/api/v1/reports` routes and the assistant | `common`, `model`, `state`, `db`, `query` |
+| `api/v1` | REST `/api/v1/*` routes, `ScreenText`, staff report routes (over `ReportService`), WebSocket hub `LiveUpdates`, HTTP mapping of domain errors (`Errors.kt`) | `query`, `report`, `common`, `auth`, `db` |
+| `auth` | Staff accounts, bearer tokens + session cookie, `staffOnly { }`, staff pages (`AuthService` over `UserRepository` + `TokenRepository`) | `db`, `common` |
+| `assistant` | Passenger assistant: Claude agent loop (`AssistantAgent`), tools (`AssistantTools`), `StationResolver`, `POST /api/v1/assistant/ask`. Staff reports through `ReportService`, raw incident payloads through `IncidentQueries` | `query`, `report`, `state`, `twinapi`, `common`, `model` |
+| `passenger` | Server side of the voice app: ElevenLabs session, place brief, nearest station, fleet snapshot, read-only `/twin/*` proxy | `twinapi`, `query`, `state`, `common` |
+| `wallet` | Trip Watch: Apple / Google Wallet passes kept up to date for a planned journey (own SQLite file, opened with `Sqlite.open`) | `query`, `twinapi`, `db`, `common` |
+| `push` | Push notifications (Web Push + FCM for the Android app): follow a train (arrival at your stop + incidents) or a line (incidents). `PushStore` = its tables in the main SQLite file (through `Sqlite.withConnection` / `transaction`), `Senders` = Web Push / FCM HTTP clients | `query`, `state`, `db`, `common` |
+| `web` | `/ws/fleet`: `query.FleetFeed` pushed once per tick to the staff map; `AppLinks`: `/.well-known/` files for mobile deep links (env config, no data) | `query` |
 
 ### Dependency rules
 
-1. **Nothing depends on a delivery package.** `api/v1`, `assistant`, `passenger`, `wallet` and `web` routes are
-   leaves. A feature that needs another feature's data reads it from `query`, `state`, `db` or `twinapi`, never from
+Rules 1 and 2 and the "May depend on" column of the lower layers are checked by `src/test/.../ArchitectureTest.kt`.
+
+
+1. **Nothing depends on a delivery package.** `api/v1`, `auth`, `assistant`, `passenger`, `wallet`, `push` and `web`
+   are leaves (only `auth`'s `staffOnly { }` is shared). A feature that needs another feature's data reads it from `query`, `state`, `db` or `twinapi`, never from
    the other feature's package. Example: the assistant, the passenger app and Trip Watch share planned journeys
    through `twinapi.JourneyCache`, not through each other.
 2. **No HTTP below the routes.** Queries and services throw `common` errors (`NotFoundException`,
@@ -67,7 +71,7 @@ same object graph over a seeded state and a temporary SQLite file.
 3. **One way to reach sbb-twin**: `twinapi.SbbTwinClient`. Every failure is a `TwinException` (an `IOException`:
    status 0 = unreachable, otherwise the HTTP status), so callers handle "twin down" in one place.
 4. **Writes go through one path.** Train state is written only by `MqttIngestor` (MQTT callback thread). SQLite is
-   written by `Database`'s single writer thread; routes, the assistant and Trip Watch only read or call `Database`
+   written by `Sqlite`'s single writer thread; routes, the assistant and Trip Watch only read or call repository
    methods that queue writes.
 5. **Shared helpers live in `common`**, not in a feature. Before adding a JSON accessor, a time format, a distance or
    a name normalisation to a feature, check `common`.
@@ -78,12 +82,12 @@ same object graph over a seeded state and a temporary SQLite file.
 
 ```
 broker --status, trains/+/info, incidents/+, fleet--> MqttIngestor (Paho callback thread)
-   info      -> LiveState.upsertInfo()  -> new stations -> Database.saveStations()   (queued)
+   info      -> LiveState.upsertInfo()  -> new stations -> StationRepository.save()    (queued)
    info ""   -> LiveState.removeInfo()                                               (tombstone)
    fleet     -> LiveState.replacePositions()  (one immutable map per second)
-   incident  -> Database.upsertIncident() / removeIncident()                         (queued)
+   incident  -> IncidentRepository.upsert() / remove()                               (queued)
    status    -> LiveState.updateStatus()
-reconnect + 15 s -> Database.reconcileActiveIncidents(retained ids)   (incidents unmarked while offline -> `missing`)
+reconnect + 15 s -> IncidentRepository.reconcile(retained ids)   (incidents unmarked while offline -> `missing`)
 ```
 
 At startup `Application.module()` builds `LiveState(db.stations())`, so the station catalog is complete before the
@@ -94,7 +98,7 @@ first MQTT message; trains come back within seconds from the retained `info` top
 ```
 GET /api/v1/...  -> api/v1/Routes.kt (params, limits)  -> TwinQueries / JourneyQueries / IncidentQueries
                                                             |-> LiveState (trains, positions, stations)
-                                                            |-> Database.incidents(activeOnly) (via a lambda)
+                                                            |-> IncidentRepository.list(activeOnly) (via a lambda)
                  <- read model (ReadModels.kt) serialized as JSON, or AppException -> installApiErrors
 ```
 
@@ -104,7 +108,7 @@ inputs in tests. `/stations/{id}/screen.txt` renders the same `ScreenDto` as tex
 ### 3. Live updates (WebSocket)
 
 ```
-Database writer thread --incident change--> listeners:
+sqlite-writer thread --incident change--> IncidentRepository listeners:
    LiveUpdates (SharedFlow) --> each /api/v1/ws connection: pushes the incident if it matches a subscription
    Trip Watch worker        --> wakes up and refreshes the passes (else every 20 s)
 /api/v1/ws subscription loops (every frequencySec) --> TwinQueries.trainLive / board / screen
@@ -119,7 +123,7 @@ station screen and assistant use the same rules.
 ```
 POST /api/v1/assistant/ask -> assistant/AssistantRoutes (validation) -> AssistantAgent (Claude loop, parallel tools)
    AssistantTools -> TwinQueries (trains, boards, incidents of ours)
-                  -> Database   (open staff reports, raw incident payloads)
+                  -> ReportService (open staff reports), IncidentQueries (raw incident payloads)
                   -> StationResolver -> LiveState.stations()
                   -> SbbTwinClient (plan, situation, geometry) + JourneyCache
    <- AskResponse (text, options, situation, visual commands)
@@ -146,14 +150,14 @@ tripWatchRoutes -> TripWatchService -> TripWatchStore (own SQLite file)
                                     -> TripWatchJourneys -> TwinQueries.trainLive (our live data)
                                                          -> SbbTwinClient + JourneyCache (planned legs)
                                     -> AppleWallet / GoogleWallet (pass updates)
-worker loop: refresh on every incident change (Database listener) or every 20 s
+worker loop: refresh on every incident change (IncidentRepository listener) or every 20 s
 ```
 
 ### 7. Push notifications
 
 ```
 pushV1 (/api/v1/push/...) -> PushService -> PushStore (devices, subscriptions, notified incidents; shared SQLite)
-Database incident listener --> PushService.onIncident -> TwinQueries.trainIncidentMatch / lineIncidentMatch
+IncidentRepository listener --> PushService.onIncident -> TwinQueries.trainIncidentMatch / lineIncidentMatch
 ticker                     --> PushService.tick      -> LiveState + TwinQueries.upcomingIndexAt (arrival at your stop)
                            -> PushSender: WebPushSender (VAPID) | FcmSender (Android app)
 ```
@@ -164,7 +168,7 @@ the board shows.
 ### 8. Staff auth
 
 ```
-POST /api/v1/auth/login -> AuthService -> Database (app_user, auth_token) -> bearer token + HttpOnly cookie
+POST /api/v1/auth/login -> AuthService -> UserRepository + TokenRepository (app_user, auth_token) -> bearer token + HttpOnly cookie
 staffOnly { ... } (Ktor bearer auth) and staffPages(...) (redirect to /login.html) -> AuthService.principal(token)
 ```
 
@@ -196,14 +200,9 @@ or keeping the static pages and extracting the shared pieces (map style, formatt
 
 `LiveState` uses concurrent maps and immutable values, so readers never lock.
 
-## Known deviations (to fix)
+## Deliberate choices
 
-- `db` depends on `state.Station` (persistence importing the in-memory model), and `Database` holds five unrelated
-  aggregates (incidents, stations, reports, users, tokens): to split into repositories.
-- Staff reports: validation and the resolve flow are in `api/v1/Reports.kt`, and the route calls `Database`
-  directly. They should move to a `ReportService`.
-- `passenger` depends on `web.FleetFeed` for `/api/fleet`.
-- The assistant reads staff reports and raw payloads straight from `Database`.
-- `wallet` keeps its own SQLite file (`TripWatchStore`) while `push` shares the main one (`PushStore` over
-  `Database.withConnection`): pick one convention when `Database` is split into repositories (the shared-connection
-  repository of `push` is the target shape).
+- `wallet` keeps its own SQLite file (`TripWatchStore`, opened with `Sqlite.open`), while every other table lives in
+  the main file: wallet passes already issued must survive independently of the main database.
+- `client/` (React) and `static/` repeat a few small pieces (the Loki drawing, the map dark theme, train colours):
+  Docker builds `client/` on its own, so it cannot import from `static/`. Change both together.

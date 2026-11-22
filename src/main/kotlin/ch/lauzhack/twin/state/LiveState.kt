@@ -1,13 +1,11 @@
 package ch.lauzhack.twin.state
 
+import ch.lauzhack.twin.model.Station
 import ch.lauzhack.twin.model.TrainInfo
 import ch.lauzhack.twin.model.TrainPosition
 import ch.lauzhack.twin.model.TwinStatus
 import kotlinx.serialization.Serializable
 import java.util.concurrent.ConcurrentHashMap
-
-@Serializable
-data class Station(val stopId: String, val name: String, val lat: Double?, val lon: Double?)
 
 /** Last known state of one train: its run (info) joined with its latest position (fleet). Either may be missing. */
 @Serializable

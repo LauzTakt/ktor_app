@@ -1,11 +1,6 @@
-package ch.lauzhack.twin.web
+package ch.lauzhack.twin.query
 
 import ch.lauzhack.twin.state.LiveState
-import io.ktor.server.routing.Route
-import io.ktor.server.websocket.webSocket
-import io.ktor.websocket.Frame
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -44,17 +39,4 @@ class FleetFeed(private val state: LiveState) {
             }
         }
     }.toString()
-}
-
-/** `GET /ws/fleet` (WebSocket): one `tick` text frame per new `fleet` message (~1 Hz). Server push only. */
-fun Route.fleetSocket(feed: FleetFeed) = webSocket("/ws/fleet") {
-    var last = -1L
-    while (isActive) {
-        val snap = feed.current()
-        if (snap != null && snap.ts != last) {
-            send(Frame.Text(snap.text))
-            last = snap.ts
-        }
-        delay(200)
-    }
 }

@@ -1,6 +1,7 @@
 package ch.lauzhack.twin.mqtt
 
-import ch.lauzhack.twin.db.Database
+import ch.lauzhack.twin.db.IncidentRepository
+import ch.lauzhack.twin.db.StationRepository
 import ch.lauzhack.twin.model.Incident
 import ch.lauzhack.twin.model.TrainInfo
 import ch.lauzhack.twin.model.TrainPosition
@@ -55,7 +56,8 @@ object Topics {
 class MqttIngestor(
     private val cfg: MqttConfig,
     private val state: LiveState,
-    private val db: Database,
+    private val incidents: IncidentRepository,
+    private val stations: StationRepository,
 ) : AutoCloseable {
     private val log = LoggerFactory.getLogger(MqttIngestor::class.java)
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
@@ -73,7 +75,7 @@ class MqttIngestor(
                 val filters = Topics.SUBSCRIPTIONS.keys.toTypedArray()
                 client.subscribe(filters, Topics.SUBSCRIPTIONS.values.toIntArray())
                 // Retained messages arrive right after subscribing; give them time before reconciling.
-                scheduler.schedule({ db.reconcileActiveIncidents(retainedIncidents.toSet()) }, RECONCILE_DELAY_S, TimeUnit.SECONDS)
+                scheduler.schedule({ incidents.reconcile(retainedIncidents.toSet()) }, RECONCILE_DELAY_S, TimeUnit.SECONDS)
             }
 
             override fun connectionLost(cause: Throwable?) = log.warn("MQTT connection lost: {}", cause?.message)
@@ -115,17 +117,17 @@ class MqttIngestor(
             topic.endsWith("/info") && topic.startsWith("${Topics.ROOT}/trains/") -> {
                 val trainId = topic.removePrefix("${Topics.ROOT}/trains/").removeSuffix("/info")
                 if (payload.isEmpty()) state.removeInfo(trainId) // tombstone: run ended
-                else db.saveStations(state.upsertInfo(json.decodeFromString<TrainInfo>(payload.decodeToString())))
+                else stations.save(state.upsertInfo(json.decodeFromString<TrainInfo>(payload.decodeToString())))
             }
             topic.startsWith("${Topics.ROOT}/incidents/") -> {
                 val id = topic.removePrefix("${Topics.ROOT}/incidents/")
                 if (payload.isEmpty()) {
-                    if (!msg.isRetained) db.removeIncident(id) // retained empty = nothing there, ignore
+                    if (!msg.isRetained) incidents.remove(id) // retained empty = nothing there, ignore
                 } else {
                     val raw = payload.decodeToString()
                     val inc = json.decodeFromString<Incident>(raw)
                     if (msg.isRetained) retainedIncidents += inc.id
-                    db.upsertIncident(inc, raw)
+                    incidents.upsert(inc, raw)
                 }
             }
             topic == Topics.STATUS -> if (payload.isNotEmpty()) state.updateStatus(json.decodeFromString<TwinStatus>(payload.decodeToString()))

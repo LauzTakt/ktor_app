@@ -1,10 +1,8 @@
 package ch.lauzhack.twin.wallet
 
+import ch.lauzhack.twin.db.Sqlite
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import java.nio.file.Files
-import java.nio.file.Path
-import java.sql.DriverManager
 import java.sql.ResultSet
 
 @Serializable
@@ -37,19 +35,16 @@ internal data class TripWatch(
 internal data class WatchRegistration(val device: String, val pushToken: String)
 internal data class WatchDelivery(val watch: TripWatch, val appleSynced: Long, val googleSynced: Long, val googleIssued: Boolean)
 
-/** A dedicated SQLite connection for watch state and provider cursors. */
+/**
+ * Watch state and provider cursors, in their own SQLite file (kept apart from the main database so wallet passes
+ * survive independently). Opened with the same settings as the main file ([Sqlite.open]).
+ */
 internal class TripWatchStore(path: String) : AutoCloseable {
-    private val connection = run {
-        if (path != ":memory:") Path.of(path).parent?.let { Files.createDirectories(it) }
-        DriverManager.getConnection("jdbc:sqlite:$path")
-    }
+    private val connection = Sqlite.open(path)
     private val json = Json { ignoreUnknownKeys = true }
 
     init {
         connection.createStatement().use { st ->
-            st.execute("PRAGMA busy_timeout = 5000")
-            st.execute("PRAGMA journal_mode = WAL")
-            st.execute("PRAGMA foreign_keys = ON")
             st.execute(
                 """CREATE TABLE IF NOT EXISTS watch (
                     id TEXT PRIMARY KEY, owner TEXT NOT NULL, ended INTEGER NOT NULL, revision INTEGER NOT NULL UNIQUE,
