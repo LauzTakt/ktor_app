@@ -1,5 +1,28 @@
 # Passenger voice assistant (`/assistant/`)
 
+## Zürich HB boarding pilot
+
+Open `/assistant/?replay=stettbach`, or follow **Replay the Stettbach disruption** from the assistant.
+Choose **Wait for the S 9** and advance the bulletin twice. The 19:37 update identifies the 19:58
+S 9 (train 18975) toward Uster. **Board this one** centers the map on the published tracks 43–44
+and shows the access beside ZVV-Contact in Halle Landesmuseum. **Back to rail map** returns to the trip.
+The other choice shows the tram 7 boarding stop on Bahnhofstrasse.
+
+With the replay open, turn off the network. The station map and directions are bundled with the
+replay. **Simulate track change** queues a sample update when offline. Reconnect and the card and
+pin move to tracks 41–42 together. This correction is labelled as a simulation.
+
+The replay uses the 25 September 2026 SBB Liveticker incident `2195005195846` and the September
+challenge stop records. The 23 September GTFS timetable supplies the published platform group
+`ch:1:sloid:3000:503:43` for trip `.ojp-91-9-D.1.TA.482.j26`. The historical stop record supplies
+the observed Stettbach call. A live launch needs a current platform assignment for the exact service.
+[Swiss timetable archive](https://data.opentransportdata.swiss/en/dataset/timetable-2026-gtfs2020) ·
+[VBZ landmark](https://www.stadt-zuerich.ch/vbz/en/beratung-service/zvv-contact/service-centres.html) ·
+[SBB station plan](https://cdnsource.sbb.ch/content/dam/infrastruktur/trafimage/bahnhofplaene/plan-zuerich-hb-a4.pdf.sbbdownload.pdf)
+
+Basemaps © swisstopo, rendered from the [Light Base Map](https://docs.geo.admin.ch/visualize-data/vector-tiles.html).
+Route alignments are from [Canton Zürich and ZVV](https://geolion.zh.ch/geodatensatz/2150.html).
+
 Migrated from [`lauzhack2026/sbb-client`](https://github.com/lauzhack2026/sbb-client). A phone-first React app:
 talk to a calm travel assistant (ElevenLabs agent on Claude Haiku), and the live map shows the route, the train that
 is coming, the closed section and a countdown.
