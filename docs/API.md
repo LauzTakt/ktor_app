@@ -238,7 +238,9 @@ model needs another lookup); a question only about an out-of-scope topic is answ
 ```jsonc
 // Request. question: required, ≤ 2000 chars. context fields: stopIds (station names also work), all optional.
 { "question": "My IC to Bern was cancelled, how do I get there?",
-  "context": { "fromStopId": "8503000", "toStopId": "8507000", "trainId": null, "lat": null, "lon": null },
+  "context": { "fromStopId": "8503000", "toStopId": "8507000", "trainId": null, "lat": null, "lon": null,
+               "onScreen": { "screen": "train", "label": "IC 1 to Genève-Aéroport", "trainId": "…", "line": null,
+                             "stopId": null, "fromStopId": null, "toStopId": null } },   // what is open behind the assistant
   "history": [ { "role": "passenger", "text": "…" }, { "role": "assistant", "text": "…" } ],   // last turns, optional
   "sessionId": "…" }
 
@@ -256,6 +258,14 @@ model needs another lookup); a question only about an out-of-scope topic is answ
   "append": null }                                                                // true = add to the current map picture                                                             // out-of-scope topics asked about
 ```
 
+- `context.onScreen`: what the passenger has open in the passenger view (`/`) behind the assistant panel, so "this
+  train", "this line" or "here" need no explanation. `screen` is `train` (`trainId`, optional trip `fromStopId`/`toStopId`),
+  `line` (`line`), `station` (departure board, `stopId`), `destinations` ("where to?" from `stopId`) or `connections`
+  (`fromStopId` → `toStopId`); `label` is the text the page shows. The page publishes it (`static/passenger.js`
+  `setView`), `static/assistant-launcher.js` posts it to the `/assistant/` frame (`postMessage` `twin-view`, same
+  origin; the frame asks with `twin-view-request` at start), and the client sends it with every question and tells a
+  live voice conversation when it changes. The backend adds it to the first message (names resolved) and prefetches
+  `train_status` of that train or line, the station's board, or, with no destination given, the `connections` trip.
 - `options`: the recommended journey (first) and at most one alternative. `departure`, `arrival` and `transfers` are
   the planner's live times for the `journeyId`, never values written by the model.
 - `visuals` (`[]` = leave the map as it is, otherwise it starts with `clear`): `route` (`id`, `style`

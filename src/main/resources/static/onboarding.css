@@ -21,49 +21,11 @@ html.tour-open { overflow: hidden; }
 .tour-rail { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.85); }
 .tour-guide[data-side="center"] .tour-rail { left: 15%; right: 15%; }
 
-/* ---------- Loki ---------- */
-.loki { position: absolute; left: 0; bottom: 2px; width: 84px; cursor: pointer; transform: translateX(var(--mx, 0px));
-  transition: transform 520ms cubic-bezier(0.45, 0, 0.25, 1); }
+/* ---------- Loki on the tour (the mascot itself: loki.css) ---------- */
+.tour .loki { position: absolute; left: 0; bottom: 2px; width: 84px; cursor: pointer; transform: translateX(var(--mx, 0px));
+  transition: transform 520ms cubic-bezier(0.45, 0, 0.25, 1); --loki-panto: #dcdcdc; }
 .tour.out .loki { transition-duration: 700ms; }
-.loki-svg { display: block; width: 84px; height: auto; overflow: visible; animation: lokiIdle 2.6s ease-in-out infinite alternate; }
-.loki.moving .loki-svg { animation: lokiRoll 160ms linear infinite alternate; }
-.loki.hop .loki-body { animation: lokiNod 420ms var(--ease); }
-.loki-body { transform-box: fill-box; transform-origin: 50% 100%; }
-
-.loki-red { fill: var(--red); }
-.loki-glass { fill: #fff; }
-.loki-ink { fill: #212121; }
-.loki-glint { fill: #fff; }
-.loki-hub { fill: #8d8d8d; }
-.loki-lamp { fill: #fff; }
-.loki-skirt { fill: #444; }
-:root[data-theme="dark"] .loki-skirt { fill: #686868; }
-.loki-panto { fill: none; stroke: #dcdcdc; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round;
-  transform-box: fill-box; transform-origin: 50% 100%; transition: transform 260ms var(--ease); }
-.loki-brow { fill: none; stroke: #212121; stroke-width: 2.4; stroke-linecap: round; transition: transform 260ms var(--ease); }
-.loki-smile { fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; }
-.loki-mouth { fill: #fff; opacity: 0; transform-box: fill-box; transform-origin: center; }
-
-/* Eyes follow the target; they blink every few seconds. */
-.loki-eyes { transform: translate(var(--lx, 0px), var(--ly, 0px)); transition: transform 300ms var(--ease); }
-.loki-eye { transform-box: fill-box; transform-origin: center; animation: lokiBlink 4.2s infinite; }
-
-/* Talking: the smile turns into an opening and closing mouth while the text appears. */
-.loki.talking .loki-smile { opacity: 0; }
-.loki.talking .loki-mouth { opacity: 1; animation: lokiTalk 180ms ease-in-out infinite alternate; }
-
-/* Moods */
-.loki[data-mood="hello"] .loki-panto { animation: lokiWave 900ms var(--ease) 2; }
-.loki[data-mood="cheer"] .loki-brow { transform: translateY(-2px); }
-.loki[data-mood="cheer"] .loki-panto { transform: scaleY(1.25); }
-.loki[data-mood="point"] .loki-brow.l { transform: translateY(-1.5px); }
-
-@keyframes lokiIdle { from { transform: translateY(0); } to { transform: translateY(-3px); } }
-@keyframes lokiRoll { from { transform: translateY(0); } to { transform: translateY(-1.2px); } }
-@keyframes lokiNod { 0% { transform: rotate(0); } 35% { transform: rotate(-5deg); } 70% { transform: rotate(2deg); } 100% { transform: rotate(0); } }
-@keyframes lokiBlink { 0%, 93%, 100% { transform: scaleY(1); } 96% { transform: scaleY(0.1); } }
-@keyframes lokiTalk { from { transform: scaleY(0.35); } to { transform: scaleY(1); } }
-@keyframes lokiWave { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(0.6); } }
+.tour .loki-svg { width: 84px; }
 
 /* ---------- speech bubble ---------- */
 .tour-bubble { position: relative; background: var(--white); color: var(--charcoal); border: 1px solid var(--cloud); border-radius: 16px;
@@ -88,6 +50,5 @@ html.tour-open { overflow: hidden; }
 .tour-dots i.on { width: 18px; border-radius: 3px; background: var(--red); }
 
 @media (prefers-reduced-motion: reduce) {
-  .tour, .tour-guide, .tour-spot, .loki, .loki-eyes { transition: none !important; }
-  .loki *, .loki-svg { animation: none !important; }
+  .tour, .tour-guide, .tour-spot, .tour .loki { transition: none !important; }
 }

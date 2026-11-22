@@ -279,6 +279,7 @@ async function selectTrain(id) {
         .join("")}</table>
       <div class="actions">
         <button class="btn" id="follow">${trains.following ? "Stop following" : "Follow"}</button>
+        <button class="btn" type="button" aria-haspopup="dialog" data-train-qr="${esc(id)}" data-train-name="${esc([t.line, t.number].filter(Boolean).join(" "))}" data-train-to="${esc(t.headsign ?? t.destination?.name ?? "")}">Train QR</button>
         <a class="btn primary" href="/admin/report.html?scope=train&trainId=${encodeURIComponent(id)}">Report an incident</a>
       </div>`;
     $("closeTrain").onclick = () => selectTrain(undefined);

@@ -26,6 +26,22 @@ data class AskContext(
     val trainId: String? = null,
     val lat: Double? = null,
     val lon: Double? = null,
+    /** What the passenger has open in the passenger view behind the assistant (not necessarily their own trip). */
+    val onScreen: ScreenView? = null,
+)
+
+/** A screen of the passenger view (static/passenger.js `setView`). Fields not relevant to [screen] are null. */
+@Serializable
+data class ScreenView(
+    /** `train | line | station | destinations | connections` */
+    val screen: String? = null,
+    /** Text the page shows, e.g. "IC 1 to Genève-Aéroport", "Bern to Thun". */
+    val label: String? = null,
+    val trainId: String? = null,
+    val line: String? = null,
+    val stopId: String? = null,
+    val fromStopId: String? = null,
+    val toStopId: String? = null,
 )
 
 @Serializable

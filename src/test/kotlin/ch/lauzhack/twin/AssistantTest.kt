@@ -3,7 +3,9 @@ package ch.lauzhack.twin
 import ch.lauzhack.twin.query.TwinQueries
 import ch.lauzhack.twin.assistant.AnthropicLlm
 import ch.lauzhack.twin.assistant.AssistantConfig
+import ch.lauzhack.twin.assistant.AskContext
 import ch.lauzhack.twin.assistant.AssistantTools
+import ch.lauzhack.twin.assistant.ScreenView
 import ch.lauzhack.twin.twinapi.SbbTwinClient
 import ch.lauzhack.twin.assistant.StationResolver
 import ch.lauzhack.twin.assistant.buildAssistant
@@ -212,5 +214,15 @@ class AssistantTest {
         assertEquals(null, tools.guessTrip("The IC 8 I'm on stopped, what's happening?"))
         assertEquals("IC8", tools.guessLine("the IC 8 I'm on stopped, what's happening?"))
         assertEquals(null, tools.guessLine("it's 3 minutes late"))
+
+        // What is open on the passenger's screen goes into the first message, with names resolved.
+        val train = tools.describeScreen(ScreenView(screen = "train", trainId = "t1"))!!
+        assertTrue("IC8" in train && "Bern" in train && "t1" in train, train)
+        assertEquals("the status page of line IC8 (its incidents and trains in service)", tools.describeScreen(ScreenView(screen = "line", line = "ic 8")))
+        assertEquals("the live trains from Lausanne (8501120) to Genève (8501008)",
+            tools.describeScreen(ScreenView(screen = "connections", fromStopId = "8501120", toStopId = "8501008")))
+        assertEquals(null, tools.describeScreen(ScreenView(screen = "alerts")))
+        val ctx = tools.describeContext(AskContext(onScreen = ScreenView(screen = "station", stopId = "8507000")))
+        assertTrue(ctx.single().startsWith("Open on the passenger's screen right now: the departure board of Bern (8507000)"), ctx.toString())
     }
 }

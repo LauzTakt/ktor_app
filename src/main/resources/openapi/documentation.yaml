@@ -1223,6 +1223,21 @@ components:
             trainId: { type: string, nullable: true, description: The train the passenger is on }
             lat: { type: number, nullable: true }
             lon: { type: number, nullable: true }
+            onScreen:
+              type: object
+              nullable: true
+              description: >-
+                What the passenger has open in the passenger view behind the assistant (sent by /assistant/ when it is
+                embedded there). "This train", "this line" or "here" refer to it; it is not necessarily their own trip.
+                With no destination given, a `connections` screen is planned as the trip.
+              properties:
+                screen: { type: string, enum: [train, line, station, destinations, connections] }
+                label: { type: string, nullable: true, example: "IC 1 to Genève-Aéroport" }
+                trainId: { type: string, nullable: true }
+                line: { type: string, nullable: true, example: "IC1" }
+                stopId: { type: string, nullable: true, description: "station / destinations screens" }
+                fromStopId: { type: string, nullable: true, description: "connections screen, or the trip of a train screen" }
+                toStopId: { type: string, nullable: true }
         history:
           type: array
           description: Last turns of the conversation, oldest first
