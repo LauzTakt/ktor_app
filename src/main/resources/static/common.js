@@ -66,7 +66,7 @@ export function severityBadge(sev) {
   return `<span class="severity-label" style="--signal:${SEVERITY_COLOURS[sev] ?? "#767676"}">${esc(sev ?? "?")}</span>`;
 }
 
-// ---------------------------------------------------------------- staff session (pages are staff-only, see auth/Auth.kt)
+// ---------------------------------------------------------------- staff session (pages are staff-only, see auth/AuthRoutes.kt)
 
 export function toLogin() {
   location.href = `/login.html?next=${encodeURIComponent(location.pathname + location.search)}`;

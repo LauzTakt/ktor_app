@@ -1,4 +1,4 @@
-package ch.lauzhack.twin
+package ch.lauzhack.twin.routing
 
 import ch.lauzhack.twin.common.UnavailableException
 import ch.lauzhack.twin.query.IncidentDto
@@ -6,7 +6,6 @@ import ch.lauzhack.twin.query.StopDto
 import ch.lauzhack.twin.query.StopState
 import ch.lauzhack.twin.query.TrainLiveDto
 import ch.lauzhack.twin.query.TrainSummaryDto
-import ch.lauzhack.twin.routing.RoutePlanner
 import ch.lauzhack.twin.twinapi.TwinException
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json

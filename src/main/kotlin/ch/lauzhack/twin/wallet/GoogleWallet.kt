@@ -1,5 +1,6 @@
 package ch.lauzhack.twin.wallet
 
+import ch.lauzhack.twin.common.EMPTY_ARRAY
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -26,7 +27,6 @@ import java.security.spec.PKCS8EncodedKeySpec
 import java.time.Duration
 import java.time.Instant
 import java.util.Base64
-import ch.lauzhack.twin.common.EMPTY_ARRAY
 
 internal class GoogleWallet(
     private val classId: String,

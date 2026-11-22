@@ -1,6 +1,6 @@
-package ch.lauzhack.twin
+package ch.lauzhack.twin.auth
 
-import ch.lauzhack.twin.auth.AuthConfig
+import ch.lauzhack.twin.configureHttp
 import ch.lauzhack.twin.db.Database
 import ch.lauzhack.twin.state.LiveState
 import io.ktor.client.request.bearerAuth

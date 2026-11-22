@@ -4,6 +4,7 @@ import com.sun.net.httpserver.HttpServer
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -18,6 +19,7 @@ import java.io.ByteArrayInputStream
 import java.math.BigInteger
 import java.net.InetSocketAddress
 import java.net.http.HttpClient
+import java.nio.file.Files
 import java.security.KeyPairGenerator
 import java.security.MessageDigest
 import java.security.Signature
@@ -107,17 +109,17 @@ class WalletProvidersTest {
     fun googleCredentialsLoadFromAFileOrTheJsonItself() {
         val pem = "-----BEGIN PRIVATE KEY-----\n" + Base64.getMimeEncoder().encodeToString(keys.private.encoded) + "\n-----END PRIVATE KEY-----\n"
         val json = Json.encodeToString(JsonObject.serializer(), kotlinx.serialization.json.buildJsonObject {
-            put("client_email", kotlinx.serialization.json.JsonPrimitive("issuer@example.test"))
-            put("private_key", kotlinx.serialization.json.JsonPrimitive(pem))
+            put("client_email", JsonPrimitive("issuer@example.test"))
+            put("private_key", JsonPrimitive(pem))
         })
-        val file = java.nio.file.Files.writeString(java.nio.file.Files.createTempFile("wallet-sa", ".json"), json)
+        val file = Files.writeString(Files.createTempFile("wallet-sa", ".json"), json)
         try {
             for (value in listOf(file.toString(), json, Base64.getEncoder().encodeToString(json.toByteArray()))) {
                 GoogleWallet.load("123.trip", value) // throws on a bad credential
             }
             kotlin.test.assertFailsWith<IllegalArgumentException> { GoogleWallet.load("123.trip", "not-a-file-nor-json") }
         } finally {
-            java.nio.file.Files.deleteIfExists(file)
+            Files.deleteIfExists(file)
         }
     }
 

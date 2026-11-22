@@ -1,13 +1,13 @@
 package ch.lauzhack.twin.wallet
 
 import ch.lauzhack.twin.common.ZURICH
+import kotlinx.serialization.Serializable
 import java.awt.Color
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 import javax.imageio.ImageIO
-import kotlinx.serialization.Serializable
 
 /**
  * The front of every Trip Watch pass, laid out like a rail ticket in Wallet. Apple Wallet, Google Wallet and the web

@@ -298,6 +298,20 @@ button:not(:disabled) { cursor: pointer; }
 .pick-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 @media (min-width: 900px) { .legend { top: 84px; } .pick { left: auto; right: 64px; top: 84px; width: 380px; } }
 .pick-rows { list-style: none; margin: 8px 0 0; padding: 0; }
+.pick-incidents { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.pick-inc { border: 1px solid var(--cloud); border-radius: 10px; }
+.pick-inc > summary { display: flex; align-items: flex-start; gap: 8px; padding: 7px 10px; cursor: pointer; list-style: none; font-size: 13.5px; font-weight: 700; color: var(--charcoal); }
+.pick-inc > summary::-webkit-details-marker { display: none; }
+.pick-inc .t { flex: 1; min-width: 0; }
+.pick-inc .dot { flex: none; width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: var(--sky); }
+.pick-inc.sev-critical .dot, .pick-inc.sev-major .dot { background: var(--red); }
+.pick-inc.sev-minor .dot { background: var(--orange); }
+.pick-inc .more { flex: none; color: var(--granite); transition: transform 160ms ease; }
+.pick-inc[open] .more { transform: rotate(90deg); }
+.pick-inc .why { padding: 0 10px 8px 26px; }
+.pick-inc .why p { margin: 0 0 4px; font-size: 13px; color: var(--iron); }
+.pick-inc .why .since { color: var(--metal); }
+.pick-inc .end { display: flex; align-items: center; gap: 4px; margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--metal); }
 .pick-rows li button { width: 100%; display: flex; align-items: center; gap: 8px; border: 0; border-top: 1px solid var(--milk); background: none; padding: 8px 2px; font-size: 13.5px; color: var(--charcoal); text-align: left; }
 .pick-rows span { flex: 1; font-weight: 600; }
 .pick-rows em { font-style: normal; color: var(--iron); }

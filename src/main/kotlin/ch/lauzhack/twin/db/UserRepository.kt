@@ -2,12 +2,12 @@ package ch.lauzhack.twin.db
 
 import java.sql.ResultSet
 
-/** `app_user`: staff accounts (see auth/Auth.kt); seeded with admin/admin. Synchronous. */
+/** `app_user`: staff accounts (see auth/AuthService.kt); seeded with admin/admin. Synchronous. */
 class UserRepository(private val db: Sqlite) {
     init {
         db.migrate(
             """
-            CREATE TABLE IF NOT EXISTS app_user (       -- staff accounts (see auth/Auth.kt); seeded with admin/admin
+            CREATE TABLE IF NOT EXISTS app_user (       -- staff accounts (see auth/AuthService.kt); seeded with admin/admin
               username      TEXT PRIMARY KEY,
               password_hash TEXT NOT NULL,              -- pbkdf2-sha256$<iterations>$<salt b64>$<hash b64>
               role          TEXT NOT NULL DEFAULT 'staff',

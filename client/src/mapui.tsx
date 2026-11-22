@@ -1,11 +1,20 @@
 // What is drawn on the map (a small legend with hide / remove, clear and undo) and the card for a tapped item.
-import { Eye, EyeOff, Layers, MapPin, Navigation, RotateCcw, Trash2, X } from "lucide-react";
+import { ChevronRight, Clock, ExternalLink, Eye, EyeOff, Layers, MapPin, Navigation, RotateCcw, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Arrival } from "./contract";
 import type { DrawnItem } from "./map/MapController";
 
 export type PickRow = { label: string; detail: string; late: boolean; onTap: () => void };
-export type PickInfo = { kind: "section" | "station" | "route" | "point" | "train"; title: string; lines: string[]; rows?: PickRow[]; stationId?: string; lon?: number; lat?: number; ask?: string };
+export type PickIncident = { id: string; title: string; severity: string; reason: string[]; since?: string; /** "at least until 12:25" */ end?: string };
+export type PickInfo = {
+  kind: "section" | "station" | "route" | "point" | "train"; title: string; lines: string[]; rows?: PickRow[]; stationId?: string; lon?: number; lat?: number; ask?: string;
+  /** Label of the ask button (default "Ask about this"). */
+  askLabel?: string;
+  /** Active incidents, tap one for its reason. */
+  incidents?: PickIncident[];
+  /** Opens the normal passenger view of this item (a train: "on tracks"). */
+  onOpen?: () => void;
+};
 export type Tracking = { trainId: string; stopId: string; stationName: string; follow: boolean; arrival: Arrival | null; at: number; gone?: boolean };
 
 /** The train the passenger waits for, live: ETA ticking every second (red under 2 minutes), delay, stops away. */
@@ -112,6 +121,30 @@ export function PickCard({ info, onClose, onAction }: { info: PickInfo; onClose:
           <p key={i}>{l}</p>
         ))}
       </div>
+      {info.incidents && info.incidents.length > 0 && (
+        <div className="pick-incidents">
+          {info.incidents.map((i) => (
+            <details key={i.id} className={`pick-inc sev-${i.severity}`}>
+              <summary>
+                <span className="dot" aria-hidden="true" />
+                <span className="t">
+                  {i.title}
+                  {i.end && (
+                    <span className="end">
+                      <Clock size={12} aria-hidden="true" /> {i.end}
+                    </span>
+                  )}
+                </span>
+                <ChevronRight size={16} className="more" aria-hidden="true" />
+              </summary>
+              <div className="why">
+                {(i.reason.length ? i.reason : ["No reason given yet."]).map((l, k) => <p key={k}>{l}</p>)}
+                {i.since && <p className="since">Since {i.since}</p>}
+              </div>
+            </details>
+          ))}
+        </div>
+      )}
       {info.rows && info.rows.length > 0 && (
         <ul className="pick-rows">
           {info.rows.map((r, i) => (
@@ -136,9 +169,14 @@ export function PickCard({ info, onClose, onAction }: { info: PickInfo; onClose:
             </button>
           </>
         )}
+        {info.onOpen && (
+          <button type="button" className="btn btn-sm" onClick={info.onOpen}>
+            <ExternalLink size={15} /> Open train view
+          </button>
+        )}
         {info.ask && (
           <button type="button" className="btn btn-primary btn-sm" onClick={() => onAction("ask")}>
-            Ask about this
+            {info.askLabel ?? "Ask about this"}
           </button>
         )}
       </div>

@@ -1,6 +1,8 @@
-package ch.lauzhack.twin
+package ch.lauzhack.twin.state
 
-import ch.lauzhack.twin.state.LiveState
+import ch.lauzhack.twin.T0
+import ch.lauzhack.twin.info
+import ch.lauzhack.twin.pos
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue

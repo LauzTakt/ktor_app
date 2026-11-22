@@ -1,7 +1,5 @@
-package ch.lauzhack.twin
+package ch.lauzhack.twin.web
 
-import ch.lauzhack.twin.web.AppLinksConfig
-import ch.lauzhack.twin.web.appLinks
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType

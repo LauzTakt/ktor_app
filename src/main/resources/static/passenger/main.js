@@ -17,6 +17,7 @@ import { startTour, tourSeen } from "../onboarding.js";
 import { ILLUSTRATION, buzz, ic, restartBtn, setUrl, show, toast, tripWatchAvailable } from "./ui.js";
 import { geo, live } from "./location.js";
 import { browseScreen, connectionsScreen, destinationScreen, detectScreen, onTracksScreen, stationScreen } from "./screens.js";
+import { loadTrip } from "./trip.js";
 import { alerts, alertsScreen, lineScreen } from "./alerts.js";
 
 // ------------------------------------------------------------------ boot
@@ -48,8 +49,12 @@ function welcomeScreen() {
   }, { restart: false });
 }
 
+// The assistant's map asked to open a train in this view (assistant-launcher.js closes the panel first).
+window.addEventListener("twin-open-train", (e) => { if (e.detail?.trainId) onTracksScreen(e.detail.trainId); });
+
 function routeFromUrl(search, opts = {}) {
 const params = new URLSearchParams(search);
+
 const qrTrain = params.get("train");
 const qrStation = params.get("station");
 const qrLine = params.get("line");
@@ -57,7 +62,11 @@ const qrStop = params.get("stop");
 if (qrTrain) {
   const from = params.get("from");
   const to = params.get("to");
-  onTracksScreen(qrTrain, from && to ? { fromStopId: from, toStopId: to } : null);
+  // a trip with changes saved on this device (trip.js): back to the same trip, on the train of the link
+  const trip = params.get("trip") && loadTrip(params.get("trip"));
+  const k = trip ? trip.legs.findIndex((l) => l.trainId === qrTrain) : -1;
+  if (trip && k >= 0) onTracksScreen(qrTrain, { ...trip, leg: k });
+  else onTracksScreen(qrTrain, from && to ? { fromStopId: from, toStopId: to } : null);
 }
 else if (qrStop) {
   api(`/stations/${encodeURIComponent(qrStop)}`)

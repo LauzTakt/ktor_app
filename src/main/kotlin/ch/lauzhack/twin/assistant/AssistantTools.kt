@@ -2,47 +2,51 @@ package ch.lauzhack.twin.assistant
 
 import ch.lauzhack.twin.common.ZURICH
 import ch.lauzhack.twin.common.arr
+import ch.lauzhack.twin.common.cleanDashes
+import ch.lauzhack.twin.common.delayMin
 import ch.lauzhack.twin.common.double
 import ch.lauzhack.twin.common.hhmm
 import ch.lauzhack.twin.common.int
 import ch.lauzhack.twin.common.long
+import ch.lauzhack.twin.common.minutes
 import ch.lauzhack.twin.common.obj
 import ch.lauzhack.twin.common.objects
+import ch.lauzhack.twin.common.opt
 import ch.lauzhack.twin.common.str
 import ch.lauzhack.twin.common.strings
-import ch.lauzhack.twin.query.IncidentQueries
-import ch.lauzhack.twin.report.ReportService
+import ch.lauzhack.twin.common.toPlain
+import ch.lauzhack.twin.model.Station
 import ch.lauzhack.twin.query.IncidentDto
+import ch.lauzhack.twin.query.IncidentQueries
+import ch.lauzhack.twin.query.Severity
 import ch.lauzhack.twin.query.StopDto
 import ch.lauzhack.twin.query.StopState
 import ch.lauzhack.twin.query.TrainSummaryDto
 import ch.lauzhack.twin.query.TwinQueries
-import ch.lauzhack.twin.model.Station
-import ch.lauzhack.twin.twinapi.SbbTwinClient
+import ch.lauzhack.twin.report.ReportService
 import ch.lauzhack.twin.twinapi.JourneyCache
+import ch.lauzhack.twin.twinapi.SbbTwinClient
 import ch.lauzhack.twin.twinapi.TwinException
 import com.anthropic.core.JsonValue
 import com.anthropic.models.messages.Tool
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import org.slf4j.LoggerFactory
-import kotlinx.serialization.json.buildJsonObject
-import ch.lauzhack.twin.common.opt
-import ch.lauzhack.twin.common.toPlain
-import ch.lauzhack.twin.common.delayMin
-import ch.lauzhack.twin.common.minutes
-import ch.lauzhack.twin.common.cleanDashes
-import ch.lauzhack.twin.query.Severity
+import java.time.Instant
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicInteger
 
 /** What one tool call gives back: the text the model reads, and the map commands it produced. */
 class ToolOutcome(val content: String, val isError: Boolean = false, val visuals: List<VisualCommand> = emptyList())
@@ -209,7 +213,7 @@ class AssistantTools(
         opt("until", untilText(until, now))
         opt("durationType", o.str("durationType"))
         when (val bus = o["replacementBus"]) {
-            null, is kotlinx.serialization.json.JsonNull -> Unit
+            null, is JsonNull -> Unit
             is JsonPrimitive -> if (bus.content == "true") put("replacementBus", true) else opt("replacementBus", bus.content.takeIf { it != "false" })
             else -> if (bus.toString().length <= 600) put("replacementBus", bus)
         }
@@ -218,10 +222,10 @@ class AssistantTools(
 
     internal fun untilText(t: Long?, now: Long): String? {
         if (t == null) return null
-        val day = java.time.Instant.ofEpochMilli(t).atZone(ZURICH).toLocalDate()
-        val today = java.time.Instant.ofEpochMilli(now).atZone(ZURICH).toLocalDate()
-        return if (day == today) hhmm(t) else java.time.Instant.ofEpochMilli(t).atZone(ZURICH)
-            .format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM HH:mm", java.util.Locale.ENGLISH))
+        val day = Instant.ofEpochMilli(t).atZone(ZURICH).toLocalDate()
+        val today = Instant.ofEpochMilli(now).atZone(ZURICH).toLocalDate()
+        return if (day == today) hhmm(t) else Instant.ofEpochMilli(t).atZone(ZURICH)
+            .format(DateTimeFormatter.ofPattern("EEE d MMM HH:mm", Locale.ENGLISH))
     }
 
     internal fun stopJson(s: StopDto): JsonObject = buildJsonObject {

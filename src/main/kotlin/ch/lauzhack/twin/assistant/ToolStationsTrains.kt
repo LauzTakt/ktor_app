@@ -1,21 +1,25 @@
 package ch.lauzhack.twin.assistant
 
 import ch.lauzhack.twin.assistant.AssistantTools.Companion.toItem
+import ch.lauzhack.twin.assistant.AssistantTools.Companion.twinItem
 import ch.lauzhack.twin.common.arr
 import ch.lauzhack.twin.common.bool
+import ch.lauzhack.twin.common.delayMin
 import ch.lauzhack.twin.common.distanceKm
 import ch.lauzhack.twin.common.double
 import ch.lauzhack.twin.common.hhmm
 import ch.lauzhack.twin.common.int
+import ch.lauzhack.twin.common.lineKey
 import ch.lauzhack.twin.common.long
+import ch.lauzhack.twin.common.minutes
 import ch.lauzhack.twin.common.obj
 import ch.lauzhack.twin.common.objects
+import ch.lauzhack.twin.common.opt
 import ch.lauzhack.twin.common.str
 import ch.lauzhack.twin.query.BoardType
 import ch.lauzhack.twin.query.StopState
 import ch.lauzhack.twin.query.TrainFilter
 import ch.lauzhack.twin.query.TrainSummaryDto
-import kotlin.math.roundToInt
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.JsonArray
@@ -23,13 +27,9 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.put
 import kotlinx.serialization.json.buildJsonObject
-import ch.lauzhack.twin.common.opt
-import ch.lauzhack.twin.common.delayMin
-import ch.lauzhack.twin.common.minutes
-import ch.lauzhack.twin.common.lineKey
-import ch.lauzhack.twin.assistant.AssistantTools.Companion.twinItem
+import kotlinx.serialization.json.put
+import kotlin.math.roundToInt
 
 /* Data tools: stations, boards, trains. Part of [AssistantTools]. */
 

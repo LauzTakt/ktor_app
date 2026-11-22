@@ -2,22 +2,22 @@ package ch.lauzhack.twin.push
 
 import ch.lauzhack.twin.common.NotFoundException
 import ch.lauzhack.twin.common.UnavailableException
+import ch.lauzhack.twin.common.delayMin
 import ch.lauzhack.twin.common.hhmm
 import ch.lauzhack.twin.common.invalid
+import ch.lauzhack.twin.common.lineKey
+import ch.lauzhack.twin.common.urlEncode
 import ch.lauzhack.twin.db.IncidentRow
+import ch.lauzhack.twin.query.Severity
 import ch.lauzhack.twin.query.TwinQueries
+import ch.lauzhack.twin.query.line
 import ch.lauzhack.twin.state.LiveState
 import ch.lauzhack.twin.state.TrainState
 import io.ktor.server.config.ApplicationConfig
+import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-import org.slf4j.LoggerFactory
-import ch.lauzhack.twin.common.urlEncode
-import ch.lauzhack.twin.common.lineKey
-import ch.lauzhack.twin.common.delayMin
-import ch.lauzhack.twin.query.Severity
-import ch.lauzhack.twin.query.line
 
 /**
  * Push configuration. VAPID keys: from env, else generated once and kept in SQLite (`push_setting`), so Web Push
@@ -130,14 +130,16 @@ class PushService(
 
     fun subscriptions(deviceId: String): List<PushSubscription> { device(deviceId); return store.subscriptions(deviceId) }
 
-    fun followTrain(deviceId: String, trainId: String, stopId: String?): PushSubscription {
+    fun followTrain(deviceId: String, trainId: String, stopId: String?, then: List<TripLeg> = emptyList()): PushSubscription {
         device(deviceId)
+        if (then.isNotEmpty() && stopId == null) bad("bad_stopId", "a trip with changes needs stopId (the first change station)")
+        if (then.size > 5) bad("bad_then", "at most 5 changes")
         val t = queries.trainState(trainId) ?: throw NotFoundException("train_not_found", "train '$trainId' not found")
         val stopName = stopId?.let { id ->
             val i = queries.upcomingIndexAt(t, id) ?: bad("bad_stopId", "train '$trainId' does not call at '$id' any more")
             t.info!!.calls[i].name
         }
-        val sub = store.upsertSubscription(deviceId, "train", trainId, stopId, trainLabel(t), stopName, now())
+        val sub = store.upsertSubscription(deviceId, "train", trainId, stopId, trainLabel(t), stopName, now(), then)
         queries.activeIncidentRows().filter { queries.trainIncidentMatch(it, t) != null }.forEach { store.markNotified(sub.id, it.id) }
         return sub
     }
@@ -195,6 +197,8 @@ class PushService(
             if (s.kind != "train") continue
             val t = queries.trainState(s.target)
             if (t?.info == null) {
+                // After a change: the next train may only start its run at the change station; wait for it.
+                if (s.waitUntil != null && now < s.waitUntil) continue
                 // Gone for 2 min while the feed is live = left service. (Right after a restart the state is still empty.)
                 if (stateFresh) {
                     val since = missingSince.getOrPut(s.id) { now }
@@ -205,10 +209,27 @@ class PushService(
             missingSince.remove(s.id)
             val stopId = s.stopId ?: continue
             val idx = queries.upcomingIndexAt(t, stopId)
-            if (idx == null) { store.deleteSubscription(s.id); continue } // left the station: the trip is over
+            if (idx == null) { // left the station: the trip is over, or on to the next train
+                if (s.then.isEmpty()) store.deleteSubscription(s.id) else moveOn(s, now)
+                continue
+            }
             val call = t.info.calls[idx]
             val stopName = s.stopName ?: call.name
             val standing = idx == t.nextCallIndex && t.position?.atStopId == stopId
+            val change = s.then.firstOrNull()
+            if (change != null) {
+                // trip with changes: "change at X" once the train has left the stop before it, then the next train
+                val eta = call.expectedArr ?: call.plannedArr
+                val take = "take ${trainWords(change)}${change.departure?.let { " at ${hhmm(it)}" } ?: ""}"
+                if (standing) {
+                    if (!s.arrivedSent) send(s, PushMessage("Change here: $stopName", "Get off and ${take}.", urlOf(s), "arr-${s.id}"))
+                    moveOn(s, now)
+                } else if (!s.approachingSent && (idx == t.nextCallIndex || (eta != null && eta - now <= config.arrivalLeadSec * 1000L))) {
+                    send(s, PushMessage("Next stop: $stopName, change trains", "Get off at $stopName${eta?.let { " (${hhmm(it)})" } ?: ""} and ${take}.", urlOf(s), "arr-${s.id}"))
+                    store.markArrivalSent(s.id, approaching = true, arrived = false)
+                }
+                continue
+            }
             if (standing) {
                 if (!s.arrivedSent) {
                     send(s, PushMessage("Now at $stopName", "${s.label ?: "Your train"} has arrived at $stopName.", urlOf(s), "arr-${s.id}"))
@@ -250,6 +271,20 @@ class PushService(
         val line = t.line ?: t.info?.category ?: "Train"
         val to = t.info?.headsign ?: t.info?.destination?.name
         return if (to != null) "$line to $to" else line
+    }
+
+    /** At the change station: the subscription follows the next train of the trip from now on. */
+    private fun moveOn(s: PushSubscription, now: Long) {
+        val next = s.then.first()
+        val wait = maxOf(now, next.departure ?: now) + 20 * 60_000L
+        store.moveToNextTrain(s, next, trainWords(next).replaceFirstChar { it.uppercase() }, s.then.drop(1), wait)
+        missingSince.remove(s.id)
+    }
+
+    /** "the IR 16 to Zürich HB" */
+    private fun trainWords(l: TripLeg): String {
+        val line = l.line?.replace(Regex("^([A-Za-z]+)(\\d)"), "$1 $2") ?: "train"
+        return "the $line${l.headsign?.let { " to $it" } ?: ""}"
     }
 
     private fun urlOf(s: PushSubscription) =

@@ -5,6 +5,7 @@ import java.security.SecureRandom
 import java.sql.Connection
 import java.sql.ResultSet
 import java.util.Base64
+import kotlinx.serialization.json.Json
 
 /** A device that can receive push notifications: a browser (Web Push) or a native app (FCM token). */
 data class PushDevice(
@@ -38,7 +39,13 @@ data class PushSubscription(
     /** Labels stored at creation, for notification texts and the subscription list. */
     val label: String? = null,
     val stopName: String? = null,
+    /** Trip with changes: the next trains (the subscription moves on to the first at the change station). */
+    val then: List<TripLeg> = emptyList(),
+    /** After a change: keep waiting for the new train to start its run until then (epoch ms). */
+    val waitUntil: Long? = null,
 )
+
+private val planJson = Json { ignoreUnknownKeys = true }
 
 /**
  * SQLite tables for push notifications (the main SQLite file, through [Sqlite.withConnection]):
@@ -84,6 +91,10 @@ class PushStore(private val db: Sqlite) {
                     )""",
                 )
                 st.executeUpdate("CREATE INDEX IF NOT EXISTS ix_push_subscription_device ON push_subscription(device_id)")
+                // trips with changes (added later: older files get the columns here)
+                val cols = st.executeQuery("PRAGMA table_info(push_subscription)").use { rs -> buildSet { while (rs.next()) add(rs.getString("name")) } }
+                if ("plan_json" !in cols) st.executeUpdate("ALTER TABLE push_subscription ADD COLUMN plan_json TEXT") // next trains (JSON TripLeg[])
+                if ("wait_until" !in cols) st.executeUpdate("ALTER TABLE push_subscription ADD COLUMN wait_until INTEGER") // waiting for the next train
                 st.executeUpdate(
                     """
                     CREATE TABLE IF NOT EXISTS push_notified (
@@ -161,20 +172,41 @@ class PushStore(private val db: Sqlite) {
     // ---------------------------------------------------------------- subscriptions
 
     /** Creates the subscription, or replaces the one the device already has for the same train / line. */
-    fun upsertSubscription(deviceId: String, kind: String, target: String, stopId: String?, label: String?, stopName: String?, now: Long): PushSubscription =
+    fun upsertSubscription(
+        deviceId: String, kind: String, target: String, stopId: String?, label: String?, stopName: String?, now: Long,
+        then: List<TripLeg> = emptyList(),
+    ): PushSubscription =
         db.transaction { c ->
             c.prepareStatement("DELETE FROM push_subscription WHERE device_id=? AND kind=? AND target=?").use { ps ->
                 ps.setString(1, deviceId); ps.setString(2, kind); ps.setString(3, target); ps.executeUpdate()
             }
-            val s = PushSubscription(newId("s-"), deviceId, kind, target, stopId, now, label = label, stopName = stopName)
+            val s = PushSubscription(newId("s-"), deviceId, kind, target, stopId, now, label = label, stopName = stopName, then = then)
             c.prepareStatement(
-                "INSERT INTO push_subscription(id, device_id, kind, target, stop_id, label, stop_name, created_at) VALUES (?,?,?,?,?,?,?,?)",
+                "INSERT INTO push_subscription(id, device_id, kind, target, stop_id, label, stop_name, created_at, plan_json) VALUES (?,?,?,?,?,?,?,?,?)",
             ).use { ps ->
                 ps.setString(1, s.id); ps.setString(2, deviceId); ps.setString(3, kind); ps.setString(4, target)
-                ps.setString(5, stopId); ps.setString(6, label); ps.setString(7, stopName); ps.setLong(8, now); ps.executeUpdate()
+                ps.setString(5, stopId); ps.setString(6, label); ps.setString(7, stopName); ps.setLong(8, now)
+                ps.setString(9, then.takeIf { it.isNotEmpty() }?.let { planJson.encodeToString(it) }); ps.executeUpdate()
             }
             s
         }
+
+    /**
+     * Trip with changes, at the change station: the subscription now follows the next train ([next]), with fresh
+     * arrival alerts, the remaining trains in [rest], and waits for that train to start its run until [waitUntil].
+     */
+    fun moveToNextTrain(s: PushSubscription, next: TripLeg, label: String, rest: List<TripLeg>, waitUntil: Long) = db.transaction { c ->
+        c.prepareStatement("DELETE FROM push_subscription WHERE device_id=? AND kind='train' AND target=? AND id<>?").use { ps ->
+            ps.setString(1, s.deviceId); ps.setString(2, next.trainId); ps.setString(3, s.id); ps.executeUpdate()
+        }
+        c.prepareStatement(
+            "UPDATE push_subscription SET target=?, stop_id=?, label=?, stop_name=?, plan_json=?, wait_until=?, approaching_sent=0, arrived_sent=0 WHERE id=?",
+        ).use { ps ->
+            ps.setString(1, next.trainId); ps.setString(2, next.toStopId); ps.setString(3, label); ps.setString(4, next.toName)
+            ps.setString(5, rest.takeIf { it.isNotEmpty() }?.let { planJson.encodeToString(it) }); ps.setLong(6, waitUntil); ps.setString(7, s.id)
+            ps.executeUpdate()
+        }
+    }
 
     fun subscriptions(deviceId: String): List<PushSubscription> =
         selectSubs("SELECT * FROM push_subscription WHERE device_id=? ORDER BY created_at", deviceId)
@@ -209,6 +241,8 @@ class PushStore(private val db: Sqlite) {
         stopId = getString("stop_id"), createdAt = getLong("created_at"),
         approachingSent = getInt("approaching_sent") != 0, arrivedSent = getInt("arrived_sent") != 0,
         label = getString("label"), stopName = getString("stop_name"),
+        then = getString("plan_json")?.let { runCatching { planJson.decodeFromString<List<TripLeg>>(it) }.getOrNull() }.orEmpty(),
+        waitUntil = getLong("wait_until").takeIf { !wasNull() },
     )
 
     // ---------------------------------------------------------------- incidents already announced

@@ -1,5 +1,6 @@
 package ch.lauzhack.twin.twinapi
 
+import ch.lauzhack.twin.common.urlEncode
 import kotlinx.coroutines.future.await
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -9,7 +10,6 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
-import ch.lauzhack.twin.common.urlEncode
 
 /**
  * sbb-twin answered with an error status (`status` > 0) or could not be reached (`status` = 0). An [IOException], so

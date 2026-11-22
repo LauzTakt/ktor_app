@@ -1,19 +1,19 @@
 package ch.lauzhack.twin.assistant
 
-import ch.lauzhack.twin.common.long
-import ch.lauzhack.twin.model.Station
-import com.anthropic.models.messages.Tool
-import kotlinx.serialization.json.add
-import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonArray
-import kotlinx.serialization.json.putJsonObject
-import kotlinx.serialization.json.buildJsonObject
-import ch.lauzhack.twin.common.minutes
 import ch.lauzhack.twin.assistant.AssistantTools.Companion.COLOURS
 import ch.lauzhack.twin.assistant.AssistantTools.Companion.ROLES
 import ch.lauzhack.twin.assistant.AssistantTools.Companion.STOP
 import ch.lauzhack.twin.assistant.AssistantTools.Companion.prop
 import ch.lauzhack.twin.assistant.AssistantTools.Companion.tool
+import ch.lauzhack.twin.common.long
+import ch.lauzhack.twin.common.minutes
+import ch.lauzhack.twin.model.Station
+import com.anthropic.models.messages.Tool
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
 
 /** The tool definitions sent to the model. Keep them stable: they are part of the cached prompt. */
 internal val TOOL_DEFINITIONS: List<Tool> = listOf(

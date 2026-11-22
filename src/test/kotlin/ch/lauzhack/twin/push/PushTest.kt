@@ -1,23 +1,16 @@
-package ch.lauzhack.twin
+package ch.lauzhack.twin.push
 
-import ch.lauzhack.twin.query.TwinQueries
+import ch.lauzhack.twin.T0
+import ch.lauzhack.twin.configureHttp
 import ch.lauzhack.twin.db.Database
+import ch.lauzhack.twin.info
+import ch.lauzhack.twin.eventually
 import ch.lauzhack.twin.model.Incident
 import ch.lauzhack.twin.model.IncidentScope
-import ch.lauzhack.twin.push.FcmSender
-import ch.lauzhack.twin.push.P256
-import ch.lauzhack.twin.push.PushConfig
-import ch.lauzhack.twin.push.PushDevice
-import ch.lauzhack.twin.push.PushMessage
-import ch.lauzhack.twin.push.PushSender
-import ch.lauzhack.twin.push.PushService
-import ch.lauzhack.twin.push.PushStore
-import ch.lauzhack.twin.push.SendResult
-import ch.lauzhack.twin.push.VapidKeys
-import ch.lauzhack.twin.push.WebPushCrypto
-import ch.lauzhack.twin.push.b64url
-import ch.lauzhack.twin.push.unb64url
+import ch.lauzhack.twin.pos
+import ch.lauzhack.twin.query.TwinQueries
 import ch.lauzhack.twin.state.LiveState
+import ch.lauzhack.twin.testDb
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.post
@@ -32,9 +25,11 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.nio.ByteBuffer
+import java.security.KeyPairGenerator
 import java.security.Signature
 import java.security.interfaces.ECPrivateKey
 import java.security.interfaces.ECPublicKey
+import java.util.Base64
 import java.util.concurrent.CopyOnWriteArrayList
 import javax.crypto.Cipher
 import javax.crypto.KeyAgreement
@@ -94,8 +89,8 @@ class PushTest {
 
     @Test
     fun fcmMessageCarriesTitleUrlAndTag() {
-        val kp = java.security.KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
-        val pem = "-----BEGIN PRIVATE KEY-----\n" + java.util.Base64.getMimeEncoder().encodeToString(kp.private.encoded) + "\n-----END PRIVATE KEY-----\n"
+        val kp = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
+        val pem = "-----BEGIN PRIVATE KEY-----\n" + Base64.getMimeEncoder().encodeToString(kp.private.encoded) + "\n-----END PRIVATE KEY-----\n"
         val s = FcmSender(ch.lauzhack.twin.push.ServiceAccount("p", "sa@p.iam.gserviceaccount.com", pem))
         val m = s.body("tok", PushMessage("T", "B", "/?train=x", "inc-1"))["message"]!!.jsonObject
         assertEquals("tok", m["token"]!!.jsonPrimitive.content)
@@ -164,6 +159,33 @@ class PushTest {
         e.push.tick()
         assertTrue(e.push.subscriptions(e.device.id).isEmpty())
         assertEquals(2, e.fake.sent.size)
+    }
+
+    @Test
+    fun tripWithAChangeWarnsBeforeAndMovesOnToTheNextTrain() {
+        val e = Env()
+        val next = TripLeg("t4", line = "IR16", headsign = "Station Z", fromStopId = "C", fromName = "Station C", toStopId = "Z", toName = "Station Z", departure = T0 + 1_500_000)
+        e.push.followTrain(e.device.id, "t1", "C", listOf(next))
+        e.push.tick()                                                   // t1 has left B: C is the next stop
+        e.fake.await(1)
+        assertEquals(listOf("Next stop: Station C, change trains"), e.fake.titles())
+        assertTrue(e.fake.sent[0].second.body.contains("take the IR 16 to Station Z at"), e.fake.sent[0].second.body)
+
+        e.st.replacePositions(mapOf("t1" to pos("t1", "C")), T0 + 1_330_000) // standing at C
+        e.push.tick()
+        e.fake.await(2)
+        assertEquals("Change here: Station C", e.fake.titles()[1])
+        val moved = eventually({ e.push.subscriptions(e.device.id) }) { it.singleOrNull()?.target == "t4" }.single()
+        assertEquals("Z", moved.stopId)
+        assertTrue(moved.then.isEmpty())
+
+        e.push.tick()                                                   // t4 not running yet: kept, waiting for it
+        assertEquals(1, e.push.subscriptions(e.device.id).size)
+        e.st.upsertInfo(info("t4", aheadFrom = 0, stops = listOf("C", "Z"), line = "IR16"))
+        e.st.replacePositions(mapOf("t4" to pos("t4", null)), T0 + 500_000) // 100 s before Z
+        e.push.tick()
+        e.fake.await(3)
+        assertEquals("Station Z in 2 min", e.fake.titles()[2])
     }
 
     @Test

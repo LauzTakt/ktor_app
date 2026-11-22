@@ -1,19 +1,19 @@
 package ch.lauzhack.twin.wallet
 
+import ch.lauzhack.twin.common.double
+import ch.lauzhack.twin.common.hhmm
+import ch.lauzhack.twin.common.long
+import ch.lauzhack.twin.common.objects
+import ch.lauzhack.twin.common.str
 import ch.lauzhack.twin.query.StopDto
 import ch.lauzhack.twin.query.StopState
 import ch.lauzhack.twin.query.TwinQueries
 import ch.lauzhack.twin.twinapi.JourneyCache
 import ch.lauzhack.twin.twinapi.SbbTwinClient
 import ch.lauzhack.twin.twinapi.TwinException
-import ch.lauzhack.twin.common.hhmm
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
-import ch.lauzhack.twin.common.str
-import ch.lauzhack.twin.common.long
-import ch.lauzhack.twin.common.double
-import ch.lauzhack.twin.common.objects
 
 @Serializable
 data class TripWatchSelection(

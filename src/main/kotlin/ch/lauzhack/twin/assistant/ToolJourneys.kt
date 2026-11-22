@@ -1,12 +1,15 @@
 package ch.lauzhack.twin.assistant
 
+import ch.lauzhack.twin.assistant.AssistantTools.Companion.twinItem
 import ch.lauzhack.twin.common.int
 import ch.lauzhack.twin.common.long
 import ch.lauzhack.twin.common.obj
 import ch.lauzhack.twin.common.objects
+import ch.lauzhack.twin.common.opt
+import ch.lauzhack.twin.common.simplifyGeometry
 import ch.lauzhack.twin.common.str
-import ch.lauzhack.twin.twinapi.PlanQuery
 import ch.lauzhack.twin.twinapi.CachedJourney
+import ch.lauzhack.twin.twinapi.PlanQuery
 import ch.lauzhack.twin.twinapi.TwinException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -15,11 +18,8 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.put
 import kotlinx.serialization.json.buildJsonObject
-import ch.lauzhack.twin.common.opt
-import ch.lauzhack.twin.common.simplifyGeometry
-import ch.lauzhack.twin.assistant.AssistantTools.Companion.twinItem
+import kotlinx.serialization.json.put
 
 /* Data tools: journey planning (validated against our live data) and journey geometry. Part of [AssistantTools]. */
 

@@ -13,7 +13,7 @@ mqtt:
   password: "$MQTT_PASSWORD:"
   clientIdPrefix: "ktor-app"
 
-# Staff accounts (auth/Auth.kt). `admin` is created with this password only when there are no users yet.
+# Staff accounts (auth/AuthService.kt). `admin` is created with this password only when there are no users yet.
 auth:
   adminPassword: "$ADMIN_PASSWORD:admin"
   tokenTtlHours: "$AUTH_TOKEN_TTL_HOURS:12"

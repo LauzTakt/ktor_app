@@ -1,9 +1,9 @@
 package ch.lauzhack.twin.passenger
 
+import ch.lauzhack.twin.common.capitalised
 import ch.lauzhack.twin.common.objects
 import ch.lauzhack.twin.common.str
 import kotlinx.serialization.json.JsonArray
-import ch.lauzhack.twin.common.capitalised
 
 /* What the brief says and what it shows, in words for the voice agent. Part of [PlaceBrief]. */
 

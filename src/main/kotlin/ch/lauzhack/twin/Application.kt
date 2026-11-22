@@ -1,17 +1,14 @@
 package ch.lauzhack.twin
 
-import ch.lauzhack.twin.assistant.AssistantAgent
-import ch.lauzhack.twin.assistant.AssistantConfig
-import ch.lauzhack.twin.twinapi.JourneyCache
-import ch.lauzhack.twin.twinapi.SbbTwinClient
-import ch.lauzhack.twin.routing.RoutePlanner
-import ch.lauzhack.twin.assistant.assistantV1
-import ch.lauzhack.twin.assistant.assistantFactory
-import ch.lauzhack.twin.api.v1.apiV1
 import ch.lauzhack.twin.api.v1.LiveUpdates
+import ch.lauzhack.twin.api.v1.apiV1
 import ch.lauzhack.twin.api.v1.installApiErrors
 import ch.lauzhack.twin.api.v1.liveUpdatesWs
 import ch.lauzhack.twin.api.v1.reportsV1
+import ch.lauzhack.twin.assistant.AssistantAgent
+import ch.lauzhack.twin.assistant.AssistantConfig
+import ch.lauzhack.twin.assistant.assistantFactory
+import ch.lauzhack.twin.assistant.assistantV1
 import ch.lauzhack.twin.auth.AuthConfig
 import ch.lauzhack.twin.auth.AuthService
 import ch.lauzhack.twin.auth.authV1
@@ -20,40 +17,43 @@ import ch.lauzhack.twin.auth.staffPages
 import ch.lauzhack.twin.db.Database
 import ch.lauzhack.twin.mqtt.MqttConfig
 import ch.lauzhack.twin.mqtt.MqttIngestor
-import ch.lauzhack.twin.passenger.localCatalog
 import ch.lauzhack.twin.passenger.PassengerConfig
 import ch.lauzhack.twin.passenger.PassengerService
+import ch.lauzhack.twin.passenger.localCatalog
 import ch.lauzhack.twin.passenger.passengerApi
 import ch.lauzhack.twin.push.PushConfig
 import ch.lauzhack.twin.push.PushSender
 import ch.lauzhack.twin.push.PushService
 import ch.lauzhack.twin.push.PushStore
 import ch.lauzhack.twin.push.pushV1
+import ch.lauzhack.twin.query.FleetFeed
 import ch.lauzhack.twin.query.IncidentQueries
 import ch.lauzhack.twin.query.JourneyQueries
 import ch.lauzhack.twin.query.TwinQueries
 import ch.lauzhack.twin.report.ReportService
+import ch.lauzhack.twin.routing.RoutePlanner
 import ch.lauzhack.twin.state.LiveState
+import ch.lauzhack.twin.twinapi.JourneyCache
+import ch.lauzhack.twin.twinapi.SbbTwinClient
 import ch.lauzhack.twin.wallet.TripWatchConfig
 import ch.lauzhack.twin.wallet.startTripWatch
 import ch.lauzhack.twin.wallet.tripWatchRoutes
 import ch.lauzhack.twin.web.AppLinksConfig
-import ch.lauzhack.twin.query.FleetFeed
 import ch.lauzhack.twin.web.appLinks
 import ch.lauzhack.twin.web.fleetSocket
-import io.ktor.server.http.content.staticResources
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationStopped
 import io.ktor.server.application.install
 import io.ktor.server.application.log
+import io.ktor.server.http.content.staticResources
 import io.ktor.server.plugins.calllogging.CallLogging
 import io.ktor.server.plugins.compression.Compression
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.plugins.swagger.swaggerUI
 import io.ktor.server.request.path
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondRedirect
-import io.ktor.server.plugins.swagger.swaggerUI
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
 import io.ktor.server.websocket.WebSockets
@@ -142,7 +142,7 @@ fun Application.configureHttp(
         pingPeriod = 20.seconds
         timeout = 60.seconds
     }
-    // Staff auth: existing routes stay public; staff-only calls go inside `staffOnly { }` (see auth/Auth.kt).
+    // Staff auth: existing routes stay public; staff-only calls go inside `staffOnly { }` (see auth/AuthRoutes.kt).
     val auth = AuthService(db.users, db.tokens, authConfig).also { it.ensureDefaultAdmin() }
     installStaffAuth(auth)
     val queries = TwinQueries(state) { db.incidents.list(activeOnly = true) }

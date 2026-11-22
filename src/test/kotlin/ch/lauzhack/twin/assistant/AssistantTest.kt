@@ -1,21 +1,22 @@
-package ch.lauzhack.twin
+package ch.lauzhack.twin.assistant
 
-import ch.lauzhack.twin.query.TwinQueries
-import ch.lauzhack.twin.assistant.AnthropicLlm
-import ch.lauzhack.twin.assistant.AssistantConfig
-import ch.lauzhack.twin.assistant.AskContext
-import ch.lauzhack.twin.assistant.AssistantTools
-import ch.lauzhack.twin.assistant.ScreenView
-import ch.lauzhack.twin.twinapi.SbbTwinClient
-import ch.lauzhack.twin.assistant.StationResolver
-import ch.lauzhack.twin.assistant.buildAssistant
+import ch.lauzhack.twin.T0
+import ch.lauzhack.twin.awaitIncidents
+import ch.lauzhack.twin.configureHttp
 import ch.lauzhack.twin.db.Database
+import ch.lauzhack.twin.info
 import ch.lauzhack.twin.model.Call
 import ch.lauzhack.twin.model.Incident
 import ch.lauzhack.twin.model.IncidentScope
 import ch.lauzhack.twin.model.StopRef
 import ch.lauzhack.twin.model.TrainInfo
+import ch.lauzhack.twin.pos
+import ch.lauzhack.twin.query.IncidentQueries
+import ch.lauzhack.twin.query.TwinQueries
+import ch.lauzhack.twin.report.ReportService
 import ch.lauzhack.twin.state.LiveState
+import ch.lauzhack.twin.testDb
+import ch.lauzhack.twin.twinapi.SbbTwinClient
 import com.anthropic.client.okhttp.AnthropicOkHttpClient
 import com.sun.net.httpserver.HttpServer
 import io.ktor.client.request.post
@@ -40,13 +41,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
-import ch.lauzhack.twin.query.IncidentQueries
-import ch.lauzhack.twin.report.ReportService
-import ch.lauzhack.twin.assistant.describeContext
-import ch.lauzhack.twin.assistant.describeScreen
-import ch.lauzhack.twin.assistant.guessDestination
-import ch.lauzhack.twin.assistant.guessLine
-import ch.lauzhack.twin.assistant.guessTrip
 
 class AssistantTest {
     /** One local HTTP server standing in for the Claude API (`/v1/messages`) and for sbb-twin (`/api/...`). */

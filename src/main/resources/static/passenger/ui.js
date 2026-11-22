@@ -30,6 +30,7 @@ export const ICONS = {
   moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
   chat: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
   bell: '<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
   help: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
 };
@@ -89,10 +90,45 @@ export function untilText(ms) {
 }
 
 export const SEVERITY = { critical: "Critical", major: "Major", minor: "Minor", info: "Information" };
-export const alertHtml = (i) => `
-  <div class="alert sev-${esc(i.severity || "info")}"><span class="dot"></span>
-    <div><div class="at">${esc(i.title)}</div>
-      <div class="ad">${esc(SEVERITY[i.severity] || "Information")}${i.where ? ` · ${esc(i.where)}` : ""}</div></div></div>`;
+/** The reason of an incident, when the feed gives one: its description, without a line that only repeats the title. */
+export function incidentReason(i) {
+  const title = (i.title || "").trim().toLowerCase();
+  return (i.description || "").split("\n").map((l) => l.trim()).filter((l) => l && l.toLowerCase() !== title && !title.endsWith(l.toLowerCase()));
+}
+
+/** "at least until 12:25" / "until about 03:31" (date added when not today); null when no end was announced. */
+export function endText(i) {
+  if (!i.expectedEnd) return null;
+  const d = new Date(i.expectedEnd);
+  const t = d.toDateString() === new Date().toDateString() ? hhmm(i.expectedEnd)
+    : `${d.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Europe/Zurich" })}, ${hhmm(i.expectedEnd)}`;
+  if (i.expectedEnd < Date.now()) return `was due to end ${t}`;
+  return i.endKind === "at_least" ? `at least until ${t}` : i.endKind === "approx" ? `until about ${t}` : `until ${t}`;
+}
+
+/** An active incident: severity, title and place at a glance; tap to read the reason (docs/STYLE.md: no emoji). */
+export const alertHtml = (i) => {
+  const why = incidentReason(i);
+  const end = endText(i);
+  return `
+  <details class="alert sev-${esc(i.severity || "info")}" data-inc="${esc(i.id)}">
+    <summary><span class="dot"></span>
+      <div class="main"><div class="at">${esc(i.title)}</div>
+        <div class="ad">${esc(SEVERITY[i.severity] || "Information")}${i.where ? ` · ${esc(i.where)}` : ""}${end ? ` <span class="end">${ic("clock")}${esc(end)}</span>` : ""}</div></div>${ic("chevron", "more")}</summary>
+    <div class="why">${why.length ? why.map((l) => `<p>${esc(l)}</p>`).join("") : "<p>No reason given yet.</p>"}
+      ${i.firstSeenAt || i.createdAt ? `<p class="since">Since ${hhmm(i.firstSeenAt || i.createdAt)}</p>` : ""}</div>
+  </details>`;
+};
+
+/** Re-render incidents in [el] keeping the ones the passenger opened open. */
+export function drawIncidents(el, list) {
+  const open = new Set([...el.querySelectorAll("details[open]")].map((d) => d.dataset.inc));
+  el.innerHTML = list.map(alertHtml).join("");
+  open.forEach((id) => el.querySelector(`details[data-inc="${CSS.escape(id)}"]`)?.setAttribute("open", ""));
+}
+
+/** Opens the travel assistant with [question] (assistant-launcher.js); false when the page has no assistant. */
+export const askAssistant = (question) => (typeof window.askAssistant === "function" ? (window.askAssistant(question), true) : false);
 
 export function toast(msg, ms = 3500) {
   const t = document.createElement("div");

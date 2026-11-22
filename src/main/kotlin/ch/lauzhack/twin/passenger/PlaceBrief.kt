@@ -1,21 +1,25 @@
 package ch.lauzhack.twin.passenger
 
-import ch.lauzhack.twin.twinapi.CachedJourney
-import ch.lauzhack.twin.twinapi.JourneyCache
-import ch.lauzhack.twin.twinapi.PlanQuery
 import ch.lauzhack.twin.common.EMPTY_ARRAY
 import ch.lauzhack.twin.common.array
+import ch.lauzhack.twin.common.coordsOf
 import ch.lauzhack.twin.common.double
+import ch.lauzhack.twin.common.geometry
 import ch.lauzhack.twin.common.hhmm
 import ch.lauzhack.twin.common.long
 import ch.lauzhack.twin.common.obj
 import ch.lauzhack.twin.common.objects
+import ch.lauzhack.twin.common.spacedLine
 import ch.lauzhack.twin.common.str
 import ch.lauzhack.twin.common.strings
+import ch.lauzhack.twin.common.truthy
+import ch.lauzhack.twin.common.urlEncode
+import ch.lauzhack.twin.query.Severity
+import ch.lauzhack.twin.query.lineIn
+import ch.lauzhack.twin.twinapi.CachedJourney
+import ch.lauzhack.twin.twinapi.JourneyCache
+import ch.lauzhack.twin.twinapi.PlanQuery
 import ch.lauzhack.twin.twinapi.SbbTwinClient
-import kotlin.math.hypot
-import kotlin.math.max
-import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -36,13 +40,9 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import org.slf4j.LoggerFactory
-import ch.lauzhack.twin.common.spacedLine
-import ch.lauzhack.twin.common.urlEncode
-import ch.lauzhack.twin.common.geometry
-import ch.lauzhack.twin.common.truthy
-import ch.lauzhack.twin.query.Severity
-import ch.lauzhack.twin.query.lineIn
-import ch.lauzhack.twin.common.coordsOf
+import kotlin.math.hypot
+import kotlin.math.max
+import kotlin.math.roundToInt
 
 /** contract.ts `BriefDisruption`. */
 internal data class BriefDisruption(

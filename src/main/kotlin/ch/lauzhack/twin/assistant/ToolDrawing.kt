@@ -1,13 +1,22 @@
 package ch.lauzhack.twin.assistant
 
+import ch.lauzhack.twin.assistant.AssistantTools.Companion.COLOURS
+import ch.lauzhack.twin.assistant.AssistantTools.Companion.GEOMETRY_FRESH_MS
+import ch.lauzhack.twin.assistant.AssistantTools.Companion.ROLES
+import ch.lauzhack.twin.common.BBoxBuilder
 import ch.lauzhack.twin.common.arr
 import ch.lauzhack.twin.common.bool
+import ch.lauzhack.twin.common.delayMin
 import ch.lauzhack.twin.common.double
 import ch.lauzhack.twin.common.hhmm
 import ch.lauzhack.twin.common.int
+import ch.lauzhack.twin.common.lineKey
 import ch.lauzhack.twin.common.long
+import ch.lauzhack.twin.common.minutes
 import ch.lauzhack.twin.common.obj
 import ch.lauzhack.twin.common.objects
+import ch.lauzhack.twin.common.opt
+import ch.lauzhack.twin.common.simplifyGeometry
 import ch.lauzhack.twin.common.str
 import ch.lauzhack.twin.common.strings
 import ch.lauzhack.twin.query.TrainFilter
@@ -19,17 +28,8 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.put
 import kotlinx.serialization.json.buildJsonObject
-import ch.lauzhack.twin.common.opt
-import ch.lauzhack.twin.common.delayMin
-import ch.lauzhack.twin.common.minutes
-import ch.lauzhack.twin.common.simplifyGeometry
-import ch.lauzhack.twin.common.BBoxBuilder
-import ch.lauzhack.twin.common.lineKey
-import ch.lauzhack.twin.assistant.AssistantTools.Companion.COLOURS
-import ch.lauzhack.twin.assistant.AssistantTools.Companion.GEOMETRY_FRESH_MS
-import ch.lauzhack.twin.assistant.AssistantTools.Companion.ROLES
+import kotlinx.serialization.json.put
 
 /* Drawing tools: they become map VisualCommands with real geometry. Part of [AssistantTools]. */
 

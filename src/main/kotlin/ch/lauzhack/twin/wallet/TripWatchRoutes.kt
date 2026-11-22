@@ -1,5 +1,6 @@
 package ch.lauzhack.twin.wallet
 
+import ch.lauzhack.twin.common.urlEncode
 import io.ktor.http.ContentType
 import io.ktor.http.Cookie
 import io.ktor.http.HttpHeaders
@@ -23,7 +24,6 @@ import java.time.Instant
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
-import ch.lauzhack.twin.common.urlEncode
 
 class TripWatchConfig(
     val enabled: Boolean,

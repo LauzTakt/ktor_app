@@ -8,12 +8,14 @@ import ch.lauzhack.twin.common.str
 import ch.lauzhack.twin.query.StationSearch
 import ch.lauzhack.twin.state.LiveState
 import ch.lauzhack.twin.twinapi.SbbTwinClient
-import kotlin.math.roundToInt
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlin.math.roundToInt
 
 /** A station of the twin's `stations.geojson` (`trains` = how many trains call there today). */
 data class CatalogStation(val id: String, val name: String, val trains: Int, val lon: Double, val lat: Double) {
@@ -96,7 +98,7 @@ class StationCatalog(
             cache?.takeIf { now() - it.first < 600_000 }?.let { return@withLock it.second }
             val fromTwin = try {
                 twin.json("/api/stations.geojson")
-            } catch (e: kotlinx.coroutines.CancellationException) {
+            } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 val fallback = local()
@@ -108,8 +110,8 @@ class StationCatalog(
                 val p = f.obj("properties")
                 val c = f.obj("geometry").array("coordinates")
                 val id = p.str("id") ?: return@mapNotNull null
-                val lon = (c.getOrNull(0) as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull() ?: return@mapNotNull null
-                val lat = (c.getOrNull(1) as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull() ?: return@mapNotNull null
+                val lon = (c.getOrNull(0) as? JsonPrimitive)?.content?.toDoubleOrNull() ?: return@mapNotNull null
+                val lat = (c.getOrNull(1) as? JsonPrimitive)?.content?.toDoubleOrNull() ?: return@mapNotNull null
                 CatalogStation(id, p.str("name") ?: id, p.double("trains")?.toInt() ?: 0, lon, lat)
             }
             cache = now() to list

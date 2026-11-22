@@ -2,11 +2,13 @@
 
 import { $, esc, LATE_SEC, publicApi as api, reducedMotion, time as hhmm } from "../common.js";
 import { tiktLoading } from "../tikt.js";
-import { ILLUSTRATION, NEAR_M, alertHtml, backBtn, buzz, clamp, distText, ic, labelView, lineLabel, onLeave, placeholders, restartBtn, setUrl, setView, show, stateHtml, timeHtml, toast, tripWatchAvailable, untilText } from "./ui.js";
+import { ILLUSTRATION, NEAR_M, alertHtml, askAssistant, backBtn, buzz, clamp, distText, drawIncidents, ic, labelView, lineLabel, onLeave, placeholders, restartBtn, setUrl, setView, show, stateHtml, timeHtml, toast, tripWatchAvailable, untilText } from "./ui.js";
 import { geo, geoText, live, locate, nearbyStationsFor, nearbyTrainsFor } from "./location.js";
 import { stationPicker } from "./stations.js";
 import { alerts, followCard } from "./alerts.js";
 import { trainGone, trainScene } from "./train-scene.js";
+import { pathHtml, pushLegs, saveTrip, takeText, tripFromRoute } from "./trip.js";
+import * as push from "../push.js";
 
 // ------------------------------------------------------------------ 1. detect (location)
 
@@ -451,10 +453,12 @@ export function connectionsScreen(from, to) {
       routesEl.innerHTML = plan.routes.map((r, i) => routeHtml(r, i)).join("");
       routesEl.querySelectorAll(".route-opt").forEach((el) => (el.onclick = () => {
         const r = shownRoutes[+el.dataset.i];
-        const leg = r?.legs.find((l) => !l.departed) || r?.legs[0];
-        if (!leg?.trainId) return;
+        if (!r?.legs.length || r.legs.some((l) => !l.trainId)) return;
         buzz(15);
-        onTracksScreen(leg.trainId, { fromStopId: leg.from.stopId, toStopId: leg.to.stopId }, () => connectionsScreen(from, to));
+        // the whole trip: its trains in order, the first one still to come on screen
+        const trip = tripFromRoute(r, from, to);
+        saveTrip(trip);
+        onTracksScreen(trip.legs[trip.leg].trainId, trip, () => connectionsScreen(from, to));
       }));
     };
     const refreshRoutes = () => api(`/routes?from=${encodeURIComponent(from.stopId)}&to=${encodeURIComponent(to.stopId)}&limit=4`)
@@ -497,12 +501,19 @@ function routeHtml(r, i) {
 // ------------------------------------------------------------------ 5. on tracks (on a train)
 
 export function onTracksScreen(trainId, trip = null, onBack = null) {
-  setUrl(trip ? { train: trainId, from: trip.fromStopId, to: trip.toStopId } : { train: trainId });
+  // A trip with changes (trip.legs, trip.leg = the train on screen) or a single train ride (fromStopId/toStopId).
+  const legs = trip?.legs?.length ? trip.legs : null;
+  const leg = legs ? legs[trip.leg] : null;
+  const nextLeg = legs ? legs[trip.leg + 1] : null;
+  setUrl(leg ? { train: trainId, from: leg.from.stopId, to: leg.to.stopId, trip: trip.id, leg: String(trip.leg) }
+    : trip ? { train: trainId, from: trip.fromStopId, to: trip.toStopId } : { train: trainId });
   const self = () => onTracksScreen(trainId, trip, onBack);
   show((s) => {
     s.innerHTML = `
       ${onBack ? backBtn() : ""}
+      ${legs && legs.length > 1 ? `<nav class="trip-path card" id="path" aria-label="Your trip">${pathHtml(trip)}</nav>` : ""}
       <div id="alerts" class="list"></div>
+      <button class="btn btn-primary btn-block ask-alt" type="button" id="ask-alt" hidden>${ic("chat")} Ask Tikt about alternative routes</button>
       <div class="scene card"><canvas id="scene" aria-hidden="true"></canvas>
         <div class="scene-cap"><span id="line"></span><div class="main"><div class="t" id="to"></div><div class="m" id="where"></div></div><span id="state"></span></div>
       </div>
@@ -513,6 +524,14 @@ export function onTracksScreen(trainId, trip = null, onBack = null) {
       <div class="route" id="route">${placeholders(4, "Loading the route…")}</div>
       <p class="note">Tap a stop to see its departures and incidents.</p>`;
     if (onBack) $("[data-back]", s).onclick = () => onBack();
+    // another train of the trip: look at it (the trip moves on by itself at each change)
+    $("#path", s)?.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-leg]");
+      if (!b || +b.dataset.leg === trip.leg) return;
+      buzz(15);
+      const k = +b.dataset.leg;
+      onTracksScreen(legs[k].trainId, { ...trip, leg: k }, onBack);
+    });
     $("#route", s).addEventListener("click", (e) => {
       const b = e.target.closest("[data-stop]");
       if (b) { buzz(15); stationScreen({ stopId: b.dataset.stop, name: b.dataset.name }, self); }
@@ -528,11 +547,63 @@ export function onTracksScreen(trainId, trip = null, onBack = null) {
     const scene = trainScene($("#scene", s));
     onLeave(() => scene.then((x) => x?.dispose()));
 
-    const drawAlerts = () => { $("#alerts", s).innerHTML = [...incidents.values()].map(alertHtml).join(""); };
+    const drawAlerts = () => {
+      drawIncidents($("#alerts", s), [...incidents.values()]);
+      $("#ask-alt", s).hidden = !incidents.size || typeof window.askAssistant !== "function";
+    };
+    // With incidents: straight to the assistant, asking whether to change (it also gets this screen as context).
+    $("#ask-alt", s).onclick = () => {
+      buzz(15);
+      const t = last?.train;
+      const name = t ? `the ${t.line || t.category || "train"} to ${t.headsign || t.destination?.name || "?"}` : "this train";
+      const dest = trip?.toStopId && last?.stops.find((x) => x.stopId === trip.toStopId)?.name;
+      const from = trip?.fromStopId && last?.stops.find((x) => x.stopId === trip.fromStopId)?.name;
+      const titles = [...incidents.values()].slice(0, 3).map((i) => i.title).join("; ");
+      askAssistant(`I'm on ${name} (train id ${trainId})${dest ? `, going ${from ? `from ${from} ` : ""}to ${dest}` : ""}. It has incidents: ${titles}. Are there alternative routes? Should I change trains, and where?`);
+    };
     const follow = followCard($("#follow", s), () => last && { trainId, train: last.train, stops: last.stops });
+
+    // Trip with changes: a heads-up once the train has left the stop before the change, then on to the next train.
+    let warned = false, moved = false;
+    const changeStep = (stops) => {
+      if (!leg || !nextLeg || moved) return;
+      const from = stops.findIndex((x) => x.stopId === leg.from.stopId);
+      const k = stops.findIndex((x, i) => i > from && x.stopId === leg.to.stopId);
+      if (k < 0) return;
+      const at = stops[k];
+      if (at.state === "current" || at.state === "passed") {
+        moved = true;
+        buzz([30, 60, 30]);
+        toast(`Change here: take ${takeText(nextLeg)}.`, 6000);
+        const next = { ...trip, leg: trip.leg + 1, savedAt: Date.now() };
+        saveTrip(next);
+        setTimeout(() => onTracksScreen(nextLeg.trainId, next, onBack), 1200);
+      } else if (!warned && at.state === "next" && k > 0 && stops[k - 1].state === "passed") {
+        warned = true;
+        buzz([20, 40, 20]);
+        toast(`Next stop: ${at.name}. Change to ${takeText(nextLeg)}.`, 7000);
+      }
+    };
+    // Push (when this device has notifications on): the server sends "change at X" and follows the next trains itself.
+    const followTrip = () => {
+      if (!leg || !push.enabled() || trip.pushedLeg === trip.leg) return;
+      push.follow({ trainId, stopId: leg.to.stopId, then: pushLegs(trip, trip.leg + 1) })
+        .then(() => { trip.pushedLeg = trip.leg; saveTrip(trip); follow.refresh(); }).catch(() => {});
+    };
+    // A later train of the trip that has not started its run yet: not "gone", just not running yet.
+    const waiting = () => {
+      $("#line", s).innerHTML = lineLabel(leg, true);
+      $("#to", s).textContent = `to ${leg.headsign || leg.to.name}`;
+      $("#where", s).textContent = "Not running yet";
+      $("#next", s).innerHTML = `<div class="k">${trip.leg > 0 ? "Your next train" : "Your train"}</div>
+        <div class="nrow"><b>Departs ${esc(leg.from.name)}</b><span class="eta-big">${untilText(leg.from.time) || hhmm(leg.from.time)}</span></div>
+        <div class="m">${timeHtml(leg.from.planned ?? leg.from.time, leg.from.time)} · live times as soon as it starts its run</div>`;
+      $("#route", s).innerHTML = `<p class="empty">Get off at ${esc(leg.to.name)} (${hhmm(leg.to.time)}).</p>`;
+    };
 
     const draw = (train, stops) => {
       last = { train, stops };
+      changeStep(stops);
       const cancelled = train.status === "cancelled";
       $("#line", s).innerHTML = lineLabel(train, true);
       $("#to", s).textContent = `to ${train.headsign || train.destination?.name || "?"}`;
@@ -586,12 +657,21 @@ export function onTracksScreen(trainId, trip = null, onBack = null) {
       }
     };
 
-    api(`/trains/${encodeURIComponent(trainId)}`).then((d) => {
+    let retry = null;
+    const load = () => api(`/trains/${encodeURIComponent(trainId)}`).then((d) => {
       d.incidents.forEach((i) => incidents.set(i.id, i));
       drawAlerts();
       draw(d.train, d.stops);
       follow.refresh();
-    }).catch((e) => { if (e.status === 404) trainGone(s); });
+      followTrip();
+    }).catch((e) => {
+      if (e.status !== 404) return;
+      // trip train still to come (its run has not started): wait for it instead of saying it is gone
+      if (leg && (leg.from.time ?? 0) > Date.now() - 30 * 60_000) { waiting(); retry = setTimeout(load, 15_000); }
+      else trainGone(s);
+    });
+    load();
+    onLeave(() => clearTimeout(retry));
 
     onLeave(live.subscribe("train", trainId, { frequencySec: 3 }, (m) => {
       if (m.type === "train_update") draw(m.data.train, m.data.stops);
@@ -602,7 +682,10 @@ export function onTracksScreen(trainId, trip = null, onBack = null) {
           incidents.set(m.incident.id, m.incident);
         }
         drawAlerts();
-      } else if (m.type === "train_ended") trainGone(s);
+      } else if (m.type === "train_ended") {
+        if (nextLeg && !moved) { moved = true; const next = { ...trip, leg: trip.leg + 1 }; saveTrip(next); onTracksScreen(nextLeg.trainId, next, onBack); }
+        else trainGone(s);
+      }
     }));
     const tick = setInterval(() => last && draw(last.train, last.stops), 15_000);
     onLeave(() => clearInterval(tick));

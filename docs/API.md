@@ -415,6 +415,12 @@ Implementation: `push/` (Web Push encryption + VAPID with the JDK, FCM HTTP v1);
   Always: every incident concerning the train (same matching as `/trains/{id}/incidents`) when it starts, and
   `"Resolved: …"` when it is removed. The subscription ends by itself once the train has left that station or has
   left service.
+- **A trip with changes** `{ "trainId", "stopId", "then": TripLeg[] }`: `stopId` = the first change station, `then` =
+  the next trains in order (`{ trainId, line?, headsign?, fromStopId, fromName?, toStopId, toName?, departure? }`,
+  at most 5). Once the train has left the stop before the change: `"Next stop: X, change trains"` ("Get off at X
+  (12:28) and take the IR 16 to Zürich HB at 12:40."); standing at X: `"Change here: X"`. Then the subscription
+  follows the next train by itself (arrival alerts for its `toStopId`, its incidents), waiting up to 20 min after
+  its departure for it to start its run. The last train gets the normal arrival alerts.
 - **A line** `{ "line": "IC 1" }` (case and spaces ignored; must have a train in service): incidents only. An incident concerns
   the line if its scope is the line or the network, or if it concerns any train in service on the line.
 
@@ -530,9 +536,22 @@ All pages follow [`docs/STYLE.md`](STYLE.md) (SBB look: SBB Web font, SBB palett
     keyboard does not open on its own.
   - On tracks: a Three.js scene (always the same train on the same track; it moves with the real speed), the whole
     route with the ETA of every stop and where the train is, incidents on top. Live over the WebSocket `train` topic.
+    Every incident list (`ui.js` `alertHtml`) shows severity, title and place at a glance; tap one for its reason
+    (the incident `description`, "Since HH:MM"). With incidents, "Ask Tikt about alternative routes" opens the
+    assistant with that question (`window.askAssistant` in `assistant-launcher.js` -> iframe `{type: "twin-ask"}`).
+  - Assistant map (`/assistant/`): tapping a train shows its active incidents (tap for the reason), "Open train view"
+    (embedded: `{type: "twin-open-train"}` to the parent, which closes the panel and opens the train on tracks;
+    standalone: `/?train=`) and, with incidents, "Ask about alternative routes".
   - At a station: destination by text or map (reachable stations from `/stations/{id}/destinations` highlighted),
     then "Best routes" (`/routes`, with changes, recommended first, every 60 s and on incident events) and the direct
     trains in service (`/stations/{id}/connections?to=`); tap a route or a train to follow it on tracks.
+  - Trip with changes (a route tapped on "Best routes", `passenger/trip.js`, saved in `localStorage` `twin-trip`,
+    URL `/?train=…&trip=<journeyId>&leg=<i>`): the path of trains stays on top of the train screen (tap a train to look
+    at it), starting with the first one. A train whose run has not started yet shows "Not running yet" with its
+    planned departure and is polled every 15 s (no "ended its run"). After the stop before a change: a toast "Next
+    stop: X. Change to …"; at the change station the screen moves on to the next train. With notifications on, the
+    trip is followed by push (`then`, see "Push notifications"), so the change alert and the next train also work
+    with the page closed.
   - Station view (`/?stop=<stopId>`; also from "Station info" on the destination screen, from "Departures and
     incidents at a station" on "Plan a trip", and by tapping any stop in a train's route): a collapsible list of
     incidents (those of the station from `/stations/{id}` plus those of its departing trains, worst first; hidden

@@ -48,8 +48,8 @@ same object graph over a seeded state and a temporary SQLite file.
 | `query` | Read side: `TwinQueries` (trains, stations, boards, screens, incident matching), `JourneyQueries` (nearby, destinations, connections), `IncidentQueries`; `Severity` (rank, colour, wording of incident severities) and `Lines.kt` (`sameLine`, `lineIn`, `mentionsLine`, `TrainState.line`): the one place for these rules, and `StationSearch` (name normalisation, aliases, to/from words, ranking) behind every station search: REST, `assistant.StationResolver`, `passenger.Places`; `FleetFeed` (the fleet encoded once per tick); `ReadModels.kt` = the response types, which are also the public API v1 contract | `common`, `model`, `state`, `db` |
 | `routing` | `RoutePlanner`: best route A -> B (`GET /api/v1/routes`): sbb-twin planner candidates checked against live train state and our incidents, re-ranked by risk-adjusted arrival; `RouteModels.kt` = its response types | `common`, `model`, `state`, `db`, `query`, `twinapi` |
 | `report` | `ReportService`: staff incident reports (validation, location from the live state, atomic open -> resolved). Used by the `/api/v1/reports` routes and the assistant | `common`, `model`, `state`, `db`, `query` |
-| `api/v1` | REST `/api/v1/*` routes, `ScreenText`, staff report routes (over `ReportService`), best routes (over `RoutePlanner`), WebSocket hub `LiveUpdates`, HTTP mapping of domain errors (`Errors.kt`) | `query`, `report`, `routing`, `common`, `auth`, `db` |
-| `auth` | Staff accounts, bearer tokens + session cookie, `staffOnly { }`, staff pages (`AuthService` over `UserRepository` + `TokenRepository`) | `db`, `common` |
+| `api/v1` | REST `/api/v1/*` routes, `ScreenText`, staff report routes (over `ReportService`), best routes (over `RoutePlanner`), WebSocket hub `LiveUpdates` (messages in `LiveUpdatesProtocol.kt`), HTTP mapping of domain errors (`Errors.kt`) | `query`, `report`, `routing`, `common`, `auth`, `db` |
+| `auth` | Staff accounts, bearer tokens + session cookie, `staffOnly { }`, staff pages. `AuthModels` (config + DTOs), `Passwords` (PBKDF2 + tokens), `AuthService` (over `UserRepository` + `TokenRepository`), `AuthRoutes` (Ktor wiring) | `db`, `common` |
 | `assistant` | Passenger assistant: Claude agent loop (`AssistantAgent`, `assistantFactory`), tools (`AssistantTools` = state + dispatch; the tools themselves in `ToolDefinitions`, `ToolPrefetch`, `ToolStationsTrains`, `ToolJourneys`, `ToolSituation`, `ToolDrawing`), `StationResolver`, `POST /api/v1/assistant/ask`. Staff reports through `ReportService`, raw incident payloads through `IncidentQueries` | `query`, `report`, `state`, `twinapi`, `common`, `model` |
 | `passenger` | Server side of the voice app: ElevenLabs session, place brief (`PlaceBrief` + `PlaceBriefDisruptions`, `PlaceBriefWording`), nearest station, fleet snapshot, read-only `/twin/*` proxy | `twinapi`, `query`, `state`, `common` |
 | `wallet` | Trip Watch: Apple / Google Wallet passes kept up to date for a planned journey (own SQLite file, opened with `Sqlite.open`); `startTripWatch` builds it and runs its worker | `query`, `twinapi`, `db`, `common` |
@@ -76,6 +76,22 @@ Rules 1 and 2 and the "May depend on" column of the lower layers are checked by 
    methods that queue writes.
 5. **Shared helpers live in `common`**, not in a feature. Before adding a JSON accessor, a time format, a distance or
    a name normalisation to a feature, check `common`.
+
+### File and code conventions
+
+Style: [Kotlin coding conventions](https://kotlinlang.org/docs/coding-conventions.html) (`kotlin.code.style=official`,
+`.editorconfig` at the repo root).
+
+- **One concern per file.** A file holding one class is named after it; a file of related declarations gets a
+  descriptive name (`ReadModels.kt`, `Lines.kt`). Split a feature as `XxxModels.kt` (DTOs, config) /
+  `XxxService.kt` (rules, no routing) / `XxxRoutes.kt` (Ktor wiring), e.g. `auth/`, `push/`. No `// -----`
+  section separators: a new section is a new file.
+- **Imports**: no wildcards and no fully qualified names in code; order = IntelliJ / ktlint default (lexicographic,
+  then `java`, `javax`, `kotlin`, then aliases).
+- **Tests mirror the main packages**: the test of `push/PushService` is `src/test/.../push/PushTest.kt`
+  (`package ch.lauzhack.twin.push`). HTTP tests of the `/api/v1` routes live in `api/v1/`. Shared fixtures
+  (`info`, `pos`, `testDb`, `eventually`, `T0`) are in the root package (`Fixtures.kt`), with `ApplicationTest`,
+  `ArchitectureTest` and `SharedRulesTest` (rules shared by several packages).
 
 ## Runtime interactions
 

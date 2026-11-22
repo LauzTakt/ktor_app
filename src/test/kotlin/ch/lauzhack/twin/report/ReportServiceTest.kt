@@ -1,11 +1,12 @@
-package ch.lauzhack.twin
+package ch.lauzhack.twin.report
 
+import ch.lauzhack.twin.T0
 import ch.lauzhack.twin.common.ConflictException
 import ch.lauzhack.twin.common.InvalidInputException
 import ch.lauzhack.twin.common.NotFoundException
-import ch.lauzhack.twin.report.NewReport
-import ch.lauzhack.twin.report.ReportService
+import ch.lauzhack.twin.info
 import ch.lauzhack.twin.state.LiveState
+import ch.lauzhack.twin.testDb
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith

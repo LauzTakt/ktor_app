@@ -1,8 +1,8 @@
 package ch.lauzhack.twin.api.v1
 
 import ch.lauzhack.twin.auth.staff
-import ch.lauzhack.twin.common.invalid
 import ch.lauzhack.twin.auth.staffOnly
+import ch.lauzhack.twin.common.invalid
 import ch.lauzhack.twin.db.StaffReportRow
 import ch.lauzhack.twin.report.NewReport
 import ch.lauzhack.twin.report.ReportService

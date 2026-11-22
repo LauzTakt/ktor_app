@@ -1,9 +1,12 @@
 package ch.lauzhack.twin.assistant
 
+import ch.lauzhack.twin.common.dayTime
 import ch.lauzhack.twin.common.int
 import ch.lauzhack.twin.common.long
-import ch.lauzhack.twin.twinapi.SbbTwinClient
+import ch.lauzhack.twin.common.toJsonElement
+import ch.lauzhack.twin.query.Severity
 import ch.lauzhack.twin.twinapi.JourneyCache
+import ch.lauzhack.twin.twinapi.SbbTwinClient
 import com.anthropic.client.AnthropicClient
 import com.anthropic.client.okhttp.AnthropicOkHttpClient
 import com.anthropic.errors.RateLimitException
@@ -17,9 +20,8 @@ import com.anthropic.models.messages.TextBlockParam
 import com.anthropic.models.messages.ToolResultBlockParam
 import com.anthropic.models.messages.ToolUseBlock
 import io.ktor.server.config.ApplicationConfig
-import java.time.Duration
-import java.util.Optional
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -27,9 +29,8 @@ import kotlinx.coroutines.future.await
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonObject
 import org.slf4j.LoggerFactory
-import ch.lauzhack.twin.common.dayTime
-import ch.lauzhack.twin.common.toJsonElement
-import ch.lauzhack.twin.query.Severity
+import java.time.Duration
+import java.util.Optional
 
 data class AssistantConfig(
     /** sbb-twin base URL (`twin.url` / `SBB_TWIN_URL`, shared with the passenger app). */
@@ -190,7 +191,7 @@ class AssistantAgent(
         try {
             withTimeout(cfg.deadlineMs) { loop(turn, visuals, stats) { fallback = it } }
         } catch (e: CancellationException) {
-            if (e !is kotlinx.coroutines.TimeoutCancellationException) throw e
+            if (e !is TimeoutCancellationException) throw e
             log.warn("assistant: deadline of {} ms reached after {} model calls", cfg.deadlineMs, stats.calls)
         } catch (e: Exception) {
             log.error("assistant failed after {} model calls", stats.calls, e)

@@ -1,16 +1,16 @@
 package ch.lauzhack.twin.query
 
-import ch.lauzhack.twin.db.IncidentRow
-import ch.lauzhack.twin.model.Call
-import ch.lauzhack.twin.model.StopRef
-import ch.lauzhack.twin.state.LiveState
-import ch.lauzhack.twin.model.Station
-import ch.lauzhack.twin.state.TrainState
 import ch.lauzhack.twin.common.NotFoundException
 import ch.lauzhack.twin.common.invalid
+import ch.lauzhack.twin.common.lineKey
 import ch.lauzhack.twin.common.notFound
 import ch.lauzhack.twin.common.searchKey
-import ch.lauzhack.twin.common.lineKey
+import ch.lauzhack.twin.db.IncidentRow
+import ch.lauzhack.twin.model.Call
+import ch.lauzhack.twin.model.Station
+import ch.lauzhack.twin.model.StopRef
+import ch.lauzhack.twin.state.LiveState
+import ch.lauzhack.twin.state.TrainState
 
 /** Bounding box `minLon,minLat,maxLon,maxLat` (WGS84). */
 data class BBox(val minLon: Double, val minLat: Double, val maxLon: Double, val maxLat: Double) {

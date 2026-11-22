@@ -177,6 +177,10 @@ data class IncidentDto(
     val match: String? = null,
     /** GeoJSON, only on `GET /incidents/{id}`. */
     val geometry: JsonElement? = null,
+    /** Expected end (epoch ms), from the message text; null when not announced (always for detected `auto.*` ones). */
+    val expectedEnd: Long? = null,
+    /** How firm [expectedEnd] is: `at_least` | `approx` | `until`. */
+    val endKind: String? = null,
 )
 
 @Serializable
@@ -210,10 +214,13 @@ data class StatusDto(
     val twin: TwinStatusDto?,
 )
 
-fun IncidentRow.toDto(match: String? = null) = IncidentDto(
-    id, title, description, severity, type, reasonCode, scope, where, disruptionId, status, active,
-    createdAt, updatedAt, firstSeenAt, removedAt, match, geometry,
-)
+fun IncidentRow.toDto(match: String? = null): IncidentDto {
+    val end = IncidentEnds.parse(description, updatedAt.takeIf { it > 0 } ?: firstSeenAt)
+    return IncidentDto(
+        id, title, description, severity, type, reasonCode, scope, where, disruptionId, status, active,
+        createdAt, updatedAt, firstSeenAt, removedAt, match, geometry, end?.at, end?.kind,
+    )
+}
 
 fun IncidentEventRow.toDto() = IncidentEventDto(seq, kind, receivedAt, updatedAt, status, severity)
 

@@ -1,33 +1,35 @@
 package ch.lauzhack.twin.assistant
 
-import ch.lauzhack.twin.query.StationSearch
+import ch.lauzhack.twin.assistant.AssistantTools.Companion.DESTINATION_PATTERNS
+import ch.lauzhack.twin.assistant.AssistantTools.Companion.HUBS
+import ch.lauzhack.twin.assistant.AssistantTools.Companion.TRIP_PATTERNS
+import ch.lauzhack.twin.assistant.AssistantTools.Companion.twinItem
 import ch.lauzhack.twin.common.ZURICH
 import ch.lauzhack.twin.common.arr
 import ch.lauzhack.twin.common.distanceKm
 import ch.lauzhack.twin.common.hhmm
 import ch.lauzhack.twin.common.int
+import ch.lauzhack.twin.common.lineKey
 import ch.lauzhack.twin.common.long
 import ch.lauzhack.twin.common.obj
 import ch.lauzhack.twin.common.objects
 import ch.lauzhack.twin.common.str
 import ch.lauzhack.twin.common.strings
 import ch.lauzhack.twin.model.Station
-import ch.lauzhack.twin.twinapi.PlanQuery
+import ch.lauzhack.twin.query.StationSearch
+import ch.lauzhack.twin.query.lineIn
 import ch.lauzhack.twin.twinapi.CachedJourney
-import kotlin.math.roundToInt
+import ch.lauzhack.twin.twinapi.PlanQuery
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
-import kotlinx.serialization.json.put
 import kotlinx.serialization.json.buildJsonObject
-import ch.lauzhack.twin.common.lineKey
-import ch.lauzhack.twin.query.lineIn
-import ch.lauzhack.twin.assistant.AssistantTools.Companion.DESTINATION_PATTERNS
-import ch.lauzhack.twin.assistant.AssistantTools.Companion.HUBS
-import ch.lauzhack.twin.assistant.AssistantTools.Companion.TRIP_PATTERNS
-import ch.lauzhack.twin.assistant.AssistantTools.Companion.twinItem
+import kotlinx.serialization.json.put
+import java.time.Instant
+import java.util.Locale
+import kotlin.math.roundToInt
 
 /* Pre-model work: tools the question makes predictable, alternative corridors, guesses from the question and the screen. Part of [AssistantTools]. */
 
@@ -120,7 +122,7 @@ suspend fun AssistantTools.explore(fromId: String, toId: String, turn: TurnState
         val ends = listOfNotNull(sec?.obj("a")?.str("id"), sec?.obj("b")?.str("id")).mapNotNull { stations.byId(it) }
         ends.size == 2 && ends.all { ratio(it) <= 1.25 }
     }
-    val night = java.time.Instant.ofEpochMilli(turn.now).atZone(ZURICH).hour in 0..4
+    val night = Instant.ofEpochMilli(turn.now).atZone(ZURICH).hour in 0..4
     if (related.isEmpty() && direct.isNotEmpty() && !night) return@coroutineScope null
 
     // Waiting for the reopening of the first related disruption with an expected end.
@@ -148,7 +150,7 @@ suspend fun AssistantTools.explore(fromId: String, toId: String, turn: TurnState
         }
     }
     val morningCall = if (night) {
-        val five = java.time.Instant.ofEpochMilli(turn.now).atZone(ZURICH).withHour(5).withMinute(0).withSecond(0).withNano(0).toInstant().toEpochMilli()
+        val five = Instant.ofEpochMilli(turn.now).atZone(ZURICH).withHour(5).withMinute(0).withSecond(0).withNano(0).toInstant().toEpochMilli()
         async { runCatching { planValidated(PlanQuery(a.stopId, b.stopId, five, 2, null)).second }.getOrDefault(emptyList()) }
     } else null
     val skip = offCorridor(a.stopId, b.stopId)
@@ -271,7 +273,7 @@ fun AssistantTools.describeContext(c: AskContext?): List<String> {
         c.trainId?.trim()?.takeIf { it.isNotEmpty() }?.let { id -> add("The passenger's train: ${trainText(id)}") }
         if (c.lat != null && c.lon != null) {
             val near = stations.nearest(c.lat, c.lon, 3.0)
-            add("Passenger location: %.5f, %.5f".format(java.util.Locale.ROOT, c.lat, c.lon) +
+            add("Passenger location: %.5f, %.5f".format(Locale.ROOT, c.lat, c.lon) +
                 (near?.let { (s, km) -> ", about ${(km * 1000).roundToInt()} m from ${s.name} (${s.stopId})" } ?: ""))
         }
         describeScreen(c.onScreen)?.let {

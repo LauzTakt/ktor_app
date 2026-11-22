@@ -1,15 +1,16 @@
 package ch.lauzhack.twin.passenger
 
-import ch.lauzhack.twin.twinapi.JourneyCache
 import ch.lauzhack.twin.common.array
 import ch.lauzhack.twin.common.double
 import ch.lauzhack.twin.common.long
 import ch.lauzhack.twin.common.obj
 import ch.lauzhack.twin.common.objects
 import ch.lauzhack.twin.common.str
+import ch.lauzhack.twin.common.urlEncode
+import ch.lauzhack.twin.query.FleetFeed
+import ch.lauzhack.twin.twinapi.JourneyCache
 import ch.lauzhack.twin.twinapi.SbbTwinClient
 import ch.lauzhack.twin.twinapi.TwinException
-import ch.lauzhack.twin.query.FleetFeed
 import io.ktor.http.ContentType
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
@@ -23,13 +24,6 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.route
-import java.net.URI
-import java.net.http.HttpClient
-import java.net.http.HttpRequest
-import java.net.http.HttpResponse
-import java.time.Duration
-import java.util.concurrent.ConcurrentHashMap
-import kotlin.math.roundToLong
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -39,13 +33,21 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import org.slf4j.LoggerFactory
-import ch.lauzhack.twin.common.urlEncode
+import java.io.IOException
+import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
+import java.time.Duration
+import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.roundToLong
 
 /**
  * Server side of the passenger voice app (port of sbb-client `server/plugin.ts` + `twin.ts`): ElevenLabs session
@@ -103,7 +105,7 @@ class PassengerService(
                     for (t in list) addJsonArray {
                         add(t.str("trainId")); add(r5(t.double("lat"))); add(r5(t.double("lon")))
                         add((t.double("bearing") ?: 0.0).roundToLong()); add((t.double("speedKmh") ?: 0.0).roundToLong())
-                        add(t.str("motion")); add(t["delaySec"]?.takeIf { it !is JsonNull }?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()?.roundToLong() } ?: 0L)
+                        add(t.str("motion")); add(t["delaySec"]?.takeIf { it !is JsonNull }?.let { (it as? JsonPrimitive)?.content?.toDoubleOrNull()?.roundToLong() } ?: 0L)
                         add(t.str("line")); add(t.str("category")); add(t.obj("atStop").str("id")); add(t.long("continuity") ?: 0)
                     }
                 }
@@ -158,8 +160,8 @@ private suspend fun ApplicationCall.guard(block: suspend ApplicationCall.() -> U
     } catch (e: Exception) {
         LoggerFactory.getLogger("passenger").warn("{} failed: {}", request.path(), e.toString())
         // the twin unreachable or answering an error: 502, like the proxy; anything else is ours: 500
-        val status = if (e is java.io.IOException) HttpStatusCode.BadGateway else HttpStatusCode.InternalServerError
-        json(status, errorBody(if (e is TwinException) e.message ?: "sbb-twin unreachable" else if (e is java.io.IOException) "sbb-twin unreachable: ${e.message ?: e.javaClass.simpleName}" else (e.message ?: e.javaClass.simpleName)))
+        val status = if (e is IOException) HttpStatusCode.BadGateway else HttpStatusCode.InternalServerError
+        json(status, errorBody(if (e is TwinException) e.message ?: "sbb-twin unreachable" else if (e is IOException) "sbb-twin unreachable: ${e.message ?: e.javaClass.simpleName}" else (e.message ?: e.javaClass.simpleName)))
     }
 }
 

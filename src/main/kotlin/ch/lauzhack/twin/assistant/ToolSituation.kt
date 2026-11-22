@@ -1,19 +1,25 @@
 package ch.lauzhack.twin.assistant
 
+import ch.lauzhack.twin.assistant.AssistantTools.Companion.alertItem
 import ch.lauzhack.twin.assistant.AssistantTools.Companion.toItem
+import ch.lauzhack.twin.assistant.AssistantTools.Companion.twinItem
 import ch.lauzhack.twin.common.arr
 import ch.lauzhack.twin.common.bool
 import ch.lauzhack.twin.common.distanceKm
 import ch.lauzhack.twin.common.hhmm
 import ch.lauzhack.twin.common.int
+import ch.lauzhack.twin.common.lineKey
 import ch.lauzhack.twin.common.long
 import ch.lauzhack.twin.common.obj
 import ch.lauzhack.twin.common.objects
+import ch.lauzhack.twin.common.opt
 import ch.lauzhack.twin.common.str
 import ch.lauzhack.twin.common.strings
 import ch.lauzhack.twin.db.StaffReportRow
-import ch.lauzhack.twin.query.IncidentDto
 import ch.lauzhack.twin.model.Station
+import ch.lauzhack.twin.query.IncidentDto
+import ch.lauzhack.twin.query.Severity
+import ch.lauzhack.twin.query.sameLine
 import ch.lauzhack.twin.twinapi.TwinException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -23,14 +29,8 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
-import kotlinx.serialization.json.put
 import kotlinx.serialization.json.buildJsonObject
-import ch.lauzhack.twin.common.opt
-import ch.lauzhack.twin.common.lineKey
-import ch.lauzhack.twin.query.Severity
-import ch.lauzhack.twin.query.sameLine
-import ch.lauzhack.twin.assistant.AssistantTools.Companion.alertItem
-import ch.lauzhack.twin.assistant.AssistantTools.Companion.twinItem
+import kotlinx.serialization.json.put
 
 /* Data tools: the situation (our incidents, staff reports, SBB alerts) and bulletins. Part of [AssistantTools]. */
 

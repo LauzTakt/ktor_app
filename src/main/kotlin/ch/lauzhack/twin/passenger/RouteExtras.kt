@@ -1,15 +1,22 @@
 package ch.lauzhack.twin.passenger
 
+import ch.lauzhack.twin.common.BBoxBuilder
 import ch.lauzhack.twin.common.EMPTY_ARRAY
 import ch.lauzhack.twin.common.array
+import ch.lauzhack.twin.common.capitalised
+import ch.lauzhack.twin.common.cleanDashes
+import ch.lauzhack.twin.common.coordsOf
 import ch.lauzhack.twin.common.double
+import ch.lauzhack.twin.common.geometry
 import ch.lauzhack.twin.common.hhmm
 import ch.lauzhack.twin.common.long
 import ch.lauzhack.twin.common.obj
 import ch.lauzhack.twin.common.objects
+import ch.lauzhack.twin.common.spacedLine
 import ch.lauzhack.twin.common.str
+import ch.lauzhack.twin.common.urlEncode
+import ch.lauzhack.twin.query.Severity
 import ch.lauzhack.twin.twinapi.SbbTwinClient
-import kotlin.math.roundToLong
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -22,14 +29,7 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
-import ch.lauzhack.twin.common.spacedLine
-import ch.lauzhack.twin.common.cleanDashes
-import ch.lauzhack.twin.common.urlEncode
-import ch.lauzhack.twin.common.geometry
-import ch.lauzhack.twin.common.capitalised
-import ch.lauzhack.twin.query.Severity
-import ch.lauzhack.twin.common.coordsOf
-import ch.lauzhack.twin.common.BBoxBuilder
+import kotlin.math.roundToLong
 
 /** What a route brief draws and lists: map visuals, the situation on the way, the options (contract.ts shapes). */
 internal class RouteExtras(val visuals: JsonArray, val situation: JsonArray, val options: JsonArray)

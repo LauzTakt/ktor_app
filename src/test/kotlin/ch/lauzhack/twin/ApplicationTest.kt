@@ -53,7 +53,7 @@ class ApplicationTest {
     @Test
     fun healthReturnsOk() = testApplication {
         environment {
-            config = io.ktor.server.config.MapApplicationConfig(
+            config = MapApplicationConfig(
                 "mqtt.enabled" to "false",
                 "db.path" to kotlin.io.path.createTempFile("twin", ".sqlite").toString(),
             )
@@ -67,7 +67,7 @@ class ApplicationTest {
     @Test
     fun swaggerUiAndSpecAreServed() = testApplication {
         environment {
-            config = io.ktor.server.config.MapApplicationConfig(
+            config = MapApplicationConfig(
                 "mqtt.enabled" to "false",
                 "db.path" to kotlin.io.path.createTempFile("twin", ".sqlite").toString(),
             )

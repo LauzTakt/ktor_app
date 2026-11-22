@@ -892,6 +892,24 @@ components:
         trainId: { type: string }
         stopId: { type: string, description: "Where you get off: arrival alerts (must still be ahead)" }
         line: { type: string, example: "IC 1" }
+        then:
+          type: array
+          maxItems: 5
+          description: >-
+            Trip with changes: the next trains in order (stopId = the first change station). "Change at X" alert after
+            the stop before it, then the subscription follows the next train by itself.
+          items:
+            type: object
+            required: [trainId, fromStopId, toStopId]
+            properties:
+              trainId: { type: string }
+              line: { type: string }
+              headsign: { type: string }
+              fromStopId: { type: string }
+              fromName: { type: string }
+              toStopId: { type: string }
+              toName: { type: string }
+              departure: { type: integer, format: int64 }
     PushSubscription:
       type: object
       required: [id, kind, trainId, line, stopId, stopName, label, alerts, createdAt]

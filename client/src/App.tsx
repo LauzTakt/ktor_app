@@ -8,7 +8,7 @@ import { MapController, type DrawnItem, type Pick as MapPick, type Timer } from 
 import { MapLegend, PickCard, TrackChip, type PickInfo, type Tracking } from "./mapui";
 import { Tikt } from "./Tikt";
 import { CheckingPill, Dock, OptionsCard, SituationCard, TimerChip, Transcript, Welcome, type Item } from "./ui";
-import { describeScreen, onScreenView, screenView } from "./screenView";
+import { describeScreen, onAsk, onScreenView, openTrainView, screenView } from "./screenView";
 import { prefetchVoice, Voice, type AskBackendParams, type GetBriefParams, type VoiceStatus } from "./voice";
 import { findJourneyOption, refreshWalkingPlan, type WalkingPlan } from "./walking";
 
@@ -464,7 +464,14 @@ export function App() {
       voice.current?.context(`[App] The passenger tapped the route "${p.label}" on the map.`);
     } else if (p.kind === "train") {
       // ktor_app's TrainDetail ({train: TrainSummary, stops, incidents}), fed by the MQTT trains/+/info + fleet
-      const detail = (await fetch(`/api/v1/trains/${encodeURIComponent(p.id)}`).then((r) => (r.ok ? r.json() : null)).catch(() => null)) as { train?: { headsign?: string | null; destination?: { name?: string } | null; nextStop?: { stopId?: string; name?: string } | null; status?: string } } | null;
+      const detail = (await fetch(`/api/v1/trains/${encodeURIComponent(p.id)}`).then((r) => (r.ok ? r.json() : null)).catch(() => null)) as { train?: { headsign?: string | null; destination?: { name?: string } | null; nextStop?: { stopId?: string; name?: string } | null; status?: string }; incidents?: { id: string; title: string; description?: string; severity?: string | null; firstSeenAt?: number; expectedEnd?: number | null; endKind?: string | null }[] } | null;
+      const incidents = (detail?.incidents ?? []).map((i) => {
+        const title = i.title.trim().toLowerCase();
+        const reason = (i.description ?? "").split("\n").map((l) => l.trim()).filter((l) => l && l.toLowerCase() !== title && !title.endsWith(l.toLowerCase()));
+        const e = i.expectedEnd;
+        const end = !e ? undefined : e < Date.now() ? `was due to end ${hhmm(e)}` : i.endKind === "at_least" ? `at least until ${hhmm(e)}` : i.endKind === "approx" ? `until about ${hhmm(e)}` : `until ${hhmm(e)}`;
+        return { id: i.id, title: i.title, severity: i.severity ?? "info", reason, since: i.firstSeenAt ? hhmm(i.firstSeenAt) : undefined, end };
+      });
       const info = detail?.train;
       const next = info?.nextStop ? { id: info.nextStop.stopId, name: info.nextStop.name } : undefined;
       const line = p.label.replace(/^([A-Z]+)(\d)/, "$1 $2");
@@ -474,7 +481,13 @@ export function App() {
         title: `${line}${to ? ` → ${to}` : ""}`,
         lines: [p.delay && p.delay >= 120 ? `About ${Math.round(p.delay / 60)} min late` : "On time", next?.name ? `Next stop: ${next.name}` : ""].filter(Boolean),
         rows: next?.id ? [{ label: `Track it to ${next.name}`, detail: "live", late: false, onTap: () => startTrack(p.id, next.id!, next.name) }] : [],
-        ask: `Tell me about the ${line}${to ? ` to ${to}` : ""}`,
+        incidents,
+        onOpen: () => { setPick(null); openTrainView(p.id); },
+        // with incidents, the question that matters: is there another way?
+        ask: incidents.length
+          ? `The ${line}${to ? ` to ${to}` : ""} (train id ${p.id}) has incidents: ${incidents.slice(0, 3).map((i) => i.title).join("; ")}. Are there alternative routes? Should I change trains, and where?`
+          : `Tell me about the ${line}${to ? ` to ${to}` : ""}`,
+        askLabel: incidents.length ? "Ask about alternative routes" : undefined,
       });
       picked.current = { ...picked.current };
       voice.current?.context(`[App] The passenger tapped the train ${line}${to ? ` to ${to}` : ""} (train id ${p.id}) on the map.`);
@@ -624,6 +637,20 @@ export function App() {
       say("assistant", "I'm sorry, I couldn't reach the live timetable just now. Please try again in a moment.");
     }
   };
+  // questions asked from the passenger view behind the panel (e.g. "alternative routes?" on a train with incidents)
+  const submitRef = useRef(submitText);
+  submitRef.current = submitText;
+  const checkingRef = useRef(checking);
+  checkingRef.current = checking;
+  useEffect(() => onAsk((text) => {
+    setSheet("half");
+    // once the voice client exists and no answer is pending (submitText ignores a question while checking)
+    const run = (tries: number) => {
+      if ((!voice.current || checkingRef.current) && tries > 0) return void window.setTimeout(() => run(tries - 1), 300);
+      void submitRef.current(text);
+    };
+    run(40);
+  }), []);
 
   // ---------- options ----------
   const choose = async (o: Option) => {
