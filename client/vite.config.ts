@@ -13,6 +13,7 @@ const proxy = {
   "/trip-watch": { target: ktor, changeOrigin: true },
   "/passenger.css": { target: ktor, changeOrigin: true },
   "/theme.css": { target: ktor, changeOrigin: true },
+  "/vendor/daisyui.css": { target: ktor, changeOrigin: true },
   "/loki.css": { target: ktor, changeOrigin: true },
   "/ws": { target: ktor.replace(/^http/, "ws"), ws: true, changeOrigin: true },
 };

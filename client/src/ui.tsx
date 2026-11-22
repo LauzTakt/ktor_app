@@ -2,7 +2,7 @@ import { ArrowRight, ArrowUp, ChevronDown, Clock3, Footprints, Keyboard, LocateF
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import type { Option, SituationItem } from "./contract";
 import { Loki } from "./Loki";
-import { countdown, duration, greeting, hhmm, sbbText } from "./format";
+import { countdown, duration, hhmm, sbbText } from "./format";
 import type { Timer } from "./map/MapController";
 import type { VoiceStatus } from "./voice";
 import { BOARDING_MINUTES, leaveBy, walkingPhase, waitRemaining, type WalkingPlan } from "./walking";
@@ -12,29 +12,18 @@ export type Item = { kind: "msg"; key: string; role: "passenger" | "assistant"; 
 export function Welcome({ suggestions, onPick, place, onLocate, locating }: { suggestions: string[]; onPick: (s: string) => void; place: string | null; onLocate: () => void; locating: boolean }) {
   return (
     <div className="welcome">
-      <div className="welcome-hi">
-        <Loki className="welcome-loki" mood="hello" />
-        <h2>
-          {greeting()}, I'm Loki.
-          <span>Your travel assistant</span>
-        </h2>
-      </div>
+      <h2>Where are you headed?</h2>
       {place ? (
-        <p>
-          Near <b>{place}</b>. Ask me anything about your trip.
-        </p>
+        <p>Near <b>{place}</b></p>
       ) : (
-        <p className="welcome-loc">
-          <span>Share your location and I'll show what's happening at your station.</span>
-          <button type="button" onClick={onLocate} disabled={locating}>
-            <LocateFixed size={15} /> {locating ? "Locating…" : "Use my location"}
-          </button>
-        </p>
+        <button className="btn btn-ghost btn-sm welcome-locate" type="button" onClick={onLocate} disabled={locating}>
+          <LocateFixed size={16} aria-hidden="true" /> {locating ? "Locating…" : "Use my location"}
+        </button>
       )}
       <ul className="suggestions" aria-label="Examples">
         {suggestions.map((s) => (
           <li key={s}>
-            <button type="button" onClick={() => onPick(s)}>
+            <button className="btn btn-ghost" type="button" onClick={() => onPick(s)}>
               <span className="sugg-text">{s}</span>
               <ArrowRight size={16} aria-hidden="true" />
             </button>
@@ -146,7 +135,7 @@ export function OptionsCard({ options, selected, walking, onChoose, onWalk }: Op
                   <span className="opt-times">
                     {hhmm(o.departure)} <span className="arrow">→</span> {hhmm(o.arrival)}
                   </span>
-                  {o.recommended && <span className="pill pill--rec">Recommended</span>}
+                  {o.recommended && <span className="recommendation">Recommended</span>}
                 </span>
                 <span className="opt-label">{sbbText(o.label)}</span>
                 <span className="opt-meta">
@@ -161,7 +150,7 @@ export function OptionsCard({ options, selected, walking, onChoose, onWalk }: Op
         })}
       </ul>
       {canWatch && selectedJourney && (
-        <a className="option-watch" href={`/trip-watch.html?${new URLSearchParams({ journeyId: selectedJourney })}`} target="_top">
+        <a className="btn btn-outline option-watch" href={`/trip-watch.html?${new URLSearchParams({ journeyId: selectedJourney })}`} target="_top">
           Watch this trip
         </a>
       )}
@@ -206,8 +195,8 @@ function WalkingTimeControl({ option, plan, replacing, onWalk }: {
       }}>
         <label htmlFor={id}>Your walk to the boarding point</label>
         <div className="walk-entry">
-          <span className="walk-number"><input ref={field} id={id} type="number" inputMode="numeric" min="0" max="1440" step="1" required aria-describedby={id + "-hint"} /><span>min</span></span>
-          <button className="walk-save" type="submit">{plan ? "Save" : replacing ? "Replace timer" : "Set timer"}</button>
+          <span className="input walk-number"><input ref={field} id={id} type="number" inputMode="numeric" min="0" max="1440" step="1" required aria-describedby={id + "-hint"} /><span>min</span></span>
+          <button className="btn btn-primary" type="submit">{plan ? "Save" : replacing ? "Replace timer" : "Set timer"}</button>
         </div>
         <p id={id + "-hint"}>{BOARDING_MINUTES} extra minute to board.</p>
         {expired && <p role="alert">The departure time has passed. Choose another service.</p>}
@@ -319,12 +308,12 @@ export function Dock(p: DockProps) {
           void p.onSubmit(t);
         }}
       >
-        <button type="button" className="round" onClick={() => p.setTyping(false)} title="Talk instead" aria-label="Talk instead">
+        <button type="button" className="btn btn-ghost btn-circle round" onClick={() => p.setTyping(false)} title="Talk instead" aria-label="Talk instead">
           <Mic size={20} />
         </button>
-        <div className="field">
+        <div className="input field">
           <input ref={input} value={text} onChange={(e) => setText(e.target.value)} placeholder="Type your question" aria-label="Your question" enterKeyHint="send" autoComplete="off" />
-          <button type="submit" className="send" disabled={!text.trim() || p.busy} title="Send" aria-label="Send">
+          <button type="submit" className="btn btn-circle btn-primary send" disabled={!text.trim() || p.busy} title="Send" aria-label="Send">
             <ArrowUp size={19} strokeWidth={2.4} />
           </button>
         </div>
@@ -333,7 +322,7 @@ export function Dock(p: DockProps) {
 
   return (
     <div className="dock">
-      <button type="button" className="round" onClick={() => p.setTyping(true)} title="Type instead" aria-label="Type instead">
+      <button type="button" className="btn btn-ghost btn-circle round" onClick={() => p.setTyping(true)} title="Type instead" aria-label="Type instead">
         <Keyboard size={20} />
       </button>
       <div className="talk-wrap">
@@ -342,7 +331,7 @@ export function Dock(p: DockProps) {
           {label}
         </span>
       </div>
-      <button type="button" className="round" data-on={p.located} onClick={p.onLocate} disabled={p.locating} title="Use my location" aria-label="Use my location">
+      <button type="button" className="btn btn-ghost btn-circle round" data-on={p.located} onClick={p.onLocate} disabled={p.locating} title="Use my location" aria-label="Use my location">
         <LocateFixed size={20} className={p.locating ? "pulsing" : undefined} />
       </button>
     </div>
@@ -367,7 +356,7 @@ function TalkButton({ status, mode, onTalk, levels }: { status: VoiceStatus; mod
   }, [status, mode, levels]);
   const live = status === "live";
   return (
-    <button type="button" className="talk" data-status={status} data-mode={mode} onClick={onTalk} title={live ? "End the conversation" : "Talk to the assistant"} aria-label={live ? "End the conversation" : "Talk to the assistant"}>
+    <button type="button" className="btn btn-circle btn-primary talk" data-status={status} data-mode={mode} onClick={onTalk} title={live ? "End the conversation" : "Talk to the assistant"} aria-label={live ? "End the conversation" : "Talk to the assistant"}>
       <span ref={ring} className="talk-ring" aria-hidden="true" />
       {live ? <Square size={20} fill="currentColor" strokeWidth={0} /> : <Mic size={28} strokeWidth={2.2} />}
     </button>

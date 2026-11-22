@@ -85,12 +85,6 @@ const ILLUSTRATION = {
     <rect x="0" y="136" width="320" height="4" fill="var(--iron)"/>
     <g class="illus-person"><circle cx="232" cy="88" r="7" fill="var(--granite)"/><rect x="225" y="97" width="14" height="19" rx="6" fill="var(--granite)"/></g>
   </svg>`,
-  search: `<svg class="illus" viewBox="0 0 320 150" aria-hidden="true">
-    <path d="M30 120 C 90 120, 110 40, 170 50 S 260 110, 290 40" fill="none" stroke="var(--silver)" stroke-width="10" stroke-linecap="round"/>
-    <path class="illus-route" d="M30 120 C 90 120, 110 40, 170 50 S 260 110, 290 40" fill="none" stroke="var(--charcoal)" stroke-width="4" stroke-linecap="round" stroke-dasharray="6 10"/>
-    <circle cx="30" cy="120" r="10" fill="var(--white)" stroke="var(--charcoal)" stroke-width="4"/>
-    <circle cx="290" cy="40" r="10" fill="var(--red)"/>
-  </svg>`,
 };
 
 const lineLabel = (t, lg = false) => `<span class="line${lg ? " lg" : ""}">${esc(t?.line || t?.category || "Train")}</span>`;
@@ -167,7 +161,9 @@ function show(build, { back = false, restart = true } = {}) {
   cleanups.forEach((fn) => { try { fn(); } catch { /* ignore */ } });
   cleanups = [];
   const old = stage.querySelector(".screen:not(.leave)");
-  if (old) {
+  if (old && reducedMotion) old.remove();
+  else if (old) {
+    old.inert = true;
     old.classList.remove("enter", "back");
     old.classList.add("leave");
     setTimeout(() => old.remove(), 220);
@@ -176,6 +172,7 @@ function show(build, { back = false, restart = true } = {}) {
   s.className = `screen enter${back ? " back" : ""}`;
   stage.append(s);
   restartBtn.hidden = !restart;
+  restartBtn.textContent = "Change trip";
   build(s);
   window.scrollTo({ top: 0, behavior: reducedMotion ? "auto" : "smooth" });
   return s;
@@ -287,7 +284,7 @@ function bearing(lat1, lon1, lat2, lon2) {
   return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
 }
 const geoText = () => ({
-  denied: "Location is blocked.",
+  denied: "Location access is off. Choose a starting station.",
   insecure: "Location needs a secure connection (HTTPS).",
   off: "Location is not available.",
 }[geo.status] || "We could not find you.");
@@ -329,7 +326,7 @@ function detectScreen(opts = {}) {
   show((s) => {
     s.innerHTML = `
       <div class="loki-hero">${lokiLoading({ caption: "Finding where you are…", sub: `I look for a train or a station within ${NEAR_M} m of you.`, mood: "think" })}</div>
-      <div class="actions"><button class="btn block" id="skip">Just browsing</button></div>`;
+      <div class="actions"><button class="btn btn-block" id="skip">Just browsing</button></div>`;
     let alive = true;
     onLeave(() => (alive = false));
     $("#skip", s).onclick = () => { alive = false; browseScreen(); };
@@ -344,7 +341,7 @@ function detectScreen(opts = {}) {
       }
       await minShow;
       if (!alive) return;
-      if (!fix) return browseScreen({ note: `${geoText()} Ask the travel assistant, or choose where you start and where you go.`, noLocation: true });
+      if (!fix) return browseScreen({ note: geoText(), noLocation: true });
       if (trains.length) return askTrainScreen(trains);
       return askStationOrBrowse(fix);
     })();
@@ -354,7 +351,7 @@ function detectScreen(opts = {}) {
 async function askStationOrBrowse(fix) {
   const stations = fix ? await nearbyStationsFor(fix).catch(() => []) : [];
   if (stations.length) return askStationScreen(stations[0]);
-  browseScreen({ note: "No train or station close to you. Choose where you start and where you go." });
+  browseScreen({ note: "No train or station nearby." });
 }
 
 // ------------------------------------------------------------------ 2a. are you on this train?
@@ -372,7 +369,7 @@ function askTrainScreen(candidates) {
           <div class="m">${esc(t.currentStop ? `At ${t.currentStop.name}` : t.nextStop ? `Next stop: ${t.nextStop.name}` : "")} · ${distText(best.distanceM)} from you</div></div></div>
         <div>${stateHtml(t)}</div>
       </div>
-      <div class="pair"><button class="btn" id="no">No</button><button class="btn primary" id="yes">Yes</button></div>
+      <div class="pair"><button class="btn" id="no">No</button><button class="btn btn-primary" id="yes">Yes</button></div>
       ${others.length ? `<h2>Other trains near you</h2><div class="list stagger">${others.map((o, i) => `
         <button class="row" type="button" data-id="${esc(o.train.trainId)}" style="--i:${i}">${lineLabel(o.train)}
           <span class="main"><span class="t">to ${esc(o.train.headsign || "?")}</span><span class="m">${distText(o.distanceM)} from you</span></span>
@@ -392,7 +389,7 @@ function askStationScreen(near) {
       <div class="illus-box">${ILLUSTRATION.station}</div>
       <h1>Are you at ${esc(near.station.name)}?</h1>
       <p class="lead">${distText(near.distanceM)} from you · ${near.trainsUpcoming} train${near.trainsUpcoming === 1 ? "" : "s"} coming</p>
-      <div class="pair"><button class="btn" id="no">No</button><button class="btn primary" id="yes">Yes</button></div>`;
+      <div class="pair"><button class="btn" id="no">No</button><button class="btn btn-primary" id="yes">Yes</button></div>`;
     $("#yes", s).onclick = () => { buzz(15); destinationScreen(near.station); };
     $("#no", s).onclick = () => { buzz(); browseScreen(); };
   });
@@ -402,26 +399,30 @@ function askStationScreen(near) {
 
 let stationsCache = null;
 const allStations = () => (stationsCache ??= api("/stations?limit=5000"));
+let pickerSequence = 0;
 
 /**
  * Text search + map, in tabs. `reachable` (optional) = Map stopId -> {trains, nextArrival} to rank and highlight
  * destinations reachable from an origin. Calls onPick({stopId, name}).
  */
 function stationPicker(container, { placeholder, reachable = null, onPick, input: external = null }) {
+  const id = `station-picker-${++pickerSequence}`;
   container.innerHTML = `
-    <div class="tabs" role="tablist">
-      <button class="tab active" role="tab" data-tab="text">${ic("list")}Text</button>
-      <button class="tab" role="tab" data-tab="map">${ic("map")}Map</button>
+    <div class="tabs tabs-border" role="tablist" aria-label="Choose a station">
+      <button class="tab tab-active" type="button" role="tab" id="${id}-list" aria-controls="${id}-results" aria-selected="true" data-tab="text">${ic("list")}List</button>
+      <button class="tab" type="button" role="tab" id="${id}-map" aria-controls="${id}-map-panel" aria-selected="false" tabindex="-1" data-tab="map">${ic("map")}Map</button>
     </div>
-    <div class="pane" data-pane="text">
-      ${external ? "" : `<label class="search">${ic("search")}<input type="text" placeholder="${esc(placeholder)}" aria-label="${esc(placeholder)}" autocomplete="off" enterkeyhint="search" />
+    <div class="pane" id="${id}-results" role="tabpanel" aria-labelledby="${id}-list" data-pane="text">
+      ${external ? "" : `<label class="input search">${ic("search")}<input type="text" placeholder="${esc(placeholder)}" aria-label="${esc(placeholder)}" autocomplete="off" enterkeyhint="search" />
         <button class="clear" type="button" title="Clear" aria-label="Clear">${ic("x")}</button></label>`}
       <div class="list stagger results"></div>
     </div>
-    <div class="pane" data-pane="map" hidden><div class="map"></div><p class="note">Tap a station on the map.</p></div>`;
+    <div class="pane" id="${id}-map-panel" role="tabpanel" aria-labelledby="${id}-map" data-pane="map" hidden><div class="map"></div><p class="note">Tap a station on the map.</p></div>`;
   // `input` (optional): a text field owned by the caller (e.g. the From / To fields) instead of our own search box.
   const input = external ?? $("input", container), results = $(".results", container);
-  let map = null;
+  const controller = new AbortController();
+  const { signal } = controller;
+  let mapReady;
 
   const rows = async () => {
     const q = input.value.trim().toLowerCase();
@@ -431,6 +432,7 @@ function stationPicker(container, { placeholder, reachable = null, onPick, input
       list = st.filter((x) => reachable.has(x.stopId)).sort((a, b) => reachable.get(b.stopId).trains - reachable.get(a.stopId).trains).slice(0, 12);
     } else if (q) list = await api(`/stations?q=${encodeURIComponent(q)}&limit=12`).catch(() => []);
     else list = [];
+    if (signal.aborted || q !== input.value.trim().toLowerCase()) return;
     results.innerHTML = list.length ? list.map((x, i) => {
       const r = reachable?.get(x.stopId);
       return `<button class="row" type="button" data-id="${esc(x.stopId)}" data-name="${esc(x.name)}" style="--i:${i}">
@@ -447,27 +449,58 @@ function stationPicker(container, { placeholder, reachable = null, onPick, input
   if (clear) clear.onclick = () => { input.value = ""; rows(); input.focus(); };
   rows();
 
-  container.querySelectorAll(".tab").forEach((tab) => (tab.onclick = async () => {
+  const tabs = Array.from(container.querySelectorAll('[role="tab"]'));
+  const [listTab, mapTab] = tabs;
+  $(".tabs", container).onkeydown = (event) => {
+    const otherTab = event.target === listTab ? mapTab : listTab;
+    const target = { ArrowLeft: otherTab, ArrowRight: otherTab, Home: listTab, End: mapTab }[event.key];
+    if (!target) return;
+    event.preventDefault();
+    target.focus();
+    target.click();
+  };
+  tabs.forEach((tab) => (tab.onclick = async () => {
     buzz();
-    container.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t === tab));
+    tabs.forEach((t) => {
+      t.classList.toggle("tab-active", t === tab);
+      t.setAttribute("aria-selected", String(t === tab));
+      t.tabIndex = t === tab ? 0 : -1;
+    });
     container.querySelectorAll(".pane").forEach((p) => (p.hidden = p.dataset.pane !== tab.dataset.tab));
-    if (tab.dataset.tab === "map") {
-      if (!map) map = await stationMap($(".map", container), { reachable, onPick });
-      else map.resize();
+    if (tab === mapTab) {
+      const pane = $('[data-pane="map"]', container);
+      const canvas = $(".map", pane);
+      const note = $(".note", pane);
+      canvas.hidden = false;
+      note.textContent = "Tap a station on the map.";
+      mapReady ??= stationMap(canvas, { reachable, onPick, signal }).catch(() => {
+        mapReady = undefined;
+        canvas.hidden = true;
+        note.textContent = "Map unavailable. Use the list to find a station.";
+      });
+      const map = await mapReady;
+      if (!signal.aborted && !pane.hidden) map?.resize();
     }
   }));
-  return () => { input.removeEventListener("input", onInput); input.removeEventListener("keydown", onKey); map?.remove(); };
+  return () => {
+    controller.abort();
+    input.removeEventListener("input", onInput);
+    input.removeEventListener("keydown", onKey);
+  };
 }
 
-async function stationMap(el, { reachable, onPick }) {
-  while (!window.maplibregl) await new Promise((r) => setTimeout(r, 50));
-  const map = new maplibregl.Map({ container: el, style: await baseStyle(), bounds: [[5.9, 45.8], [10.5, 47.85]], maxBounds: [[5.4, 45.55], [11.0, 48.05]], attributionControl: { compact: true } });
+async function stationMap(el, { reachable, onPick, signal }) {
+  const style = await baseStyle();
+  if (signal.aborted) return;
+  const map = new maplibregl.Map({ container: el, style, bounds: [[5.9, 45.8], [10.5, 47.85]], maxBounds: [[5.4, 45.55], [11.0, 48.05]], attributionControl: { compact: true } });
   const recolour = (theme) => applyMapTheme(map, theme);
   themeListeners.add(recolour);
+  signal.addEventListener("abort", () => { themeListeners.delete(recolour); map.remove(); }, { once: true });
   map.on("load", async () => {
     addRail(map);
     recolour(document.documentElement.dataset.theme);
     const st = await allStations();
+    if (signal.aborted) return;
     map.addSource("st", { type: "geojson", data: { type: "FeatureCollection", features: st.filter((x) => x.lat != null).map((x) => ({
       type: "Feature", geometry: { type: "Point", coordinates: [x.lon, x.lat] },
       properties: { id: x.stopId, name: x.name, reach: reachable ? (reachable.get(x.stopId)?.trains ?? 0) : 1 },
@@ -493,12 +526,10 @@ async function stationMap(el, { reachable, onPick }) {
       const p = e.features[0].properties;
       buzz();
       new maplibregl.Popup({ closeButton: false, offset: 10 }).setLngLat(e.lngLat)
-        .setHTML(`<div class="pop"><b>${esc(p.name)}</b><button class="btn primary" type="button">Choose</button></div>`)
+        .setHTML(`<div class="pop"><b>${esc(p.name)}</b><button class="btn btn-primary" type="button">Choose</button></div>`)
         .addTo(map).getElement().querySelector("button").onclick = () => onPick({ stopId: p.id, name: p.name });
     });
   });
-  const remove = map.remove.bind(map);
-  map.remove = () => { themeListeners.delete(recolour); remove(); };
   return map;
 }
 
@@ -509,13 +540,11 @@ function destinationScreen(from) {
   labelView(from.name);
   show((s) => {
     s.innerHTML = `
-      ${backBtn("Start again")}
       <div class="step-row"><span class="step">At ${esc(from.name)}</span><button class="link" type="button" id="info">Station info${ic("chevron")}</button></div>
       <div class="deps-head"><h2>Next departures</h2><span class="note" id="deps-note"></span></div>
       <div class="deps card" id="deps">${placeholders(3, "Looking for departures…")}</div>
       <h1>Where are you going?</h1>
       <div id="picker"></div>`;
-    $("[data-back]", s).onclick = () => restartBtn.click();
     $("#info", s).onclick = () => { buzz(15); stationScreen(from, () => destinationScreen(from)); };
     departuresBoard($("#deps", s), $("#deps-note", s), from, { onTrain: (id) => onTracksScreen(id, null, () => destinationScreen(from)) });
     api(`/stations/${encodeURIComponent(from.stopId)}/destinations?limit=500`).catch(() => []).then((dests) => {
@@ -638,7 +667,7 @@ function stationScreen(st, onBack = null) {
   const self = () => stationScreen(st, onBack);
   show((s) => {
     s.innerHTML = `
-      ${backBtn(onBack ? "Back" : "Start again")}
+      ${onBack ? backBtn() : ""}
       <div class="step">Station</div>
       <h1>${esc(st.name)}</h1>
       <p class="lead" id="ssum">&nbsp;</p>
@@ -648,8 +677,8 @@ function stationScreen(st, onBack = null) {
       </details>
       <div class="deps-head"><h2>Next departures</h2><span class="note" id="deps-note"></span></div>
       <div class="deps card" id="deps">${placeholders(4, "Looking for departures…")}</div>
-      <div class="actions"><button class="btn primary block" id="plan">Plan a trip from here</button></div>`;
-    $("[data-back]", s).onclick = () => (onBack ? onBack() : restartBtn.click());
+      <div class="actions"><button class="btn btn-primary btn-block" id="plan">Plan a trip from here</button></div>`;
+    if (onBack) $("[data-back]", s).onclick = onBack;
     $("#plan", s).onclick = () => { buzz(15); destinationScreen(st); };
 
     // Incidents = those at the station + those of the trains leaving from it (one row each, worst first).
@@ -709,10 +738,7 @@ function stationSearchScreen(onBack) {
 
 // ------------------------------------------------------------------ 3b. just browsing: origin + destination
 
-/**
- * The travel assistant card is always on top. [noLocation]: we could not locate the user, so it is the main action
- * (red button, no picker opened at once).
- */
+/** Without a location, offer voice or chat before asking for station names. */
 function browseScreen({ note = null, back = false, noLocation = false } = {}) {
   setView(null);
   const pick = { from: null, to: null };
@@ -720,28 +746,29 @@ function browseScreen({ note = null, back = false, noLocation = false } = {}) {
   show((s) => {
     const field$ = (f) => `<label class="od-field" data-f="${f}"><span class="k">${f === "from" ? "From" : "To"}</span>
       <input class="v" type="text" placeholder="${hint[f]}" aria-label="${hint[f]}" autocomplete="off" enterkeyhint="search" /></label>`;
+    s.classList.add("planner");
     s.innerHTML = `
-      <div class="illus-box small">${ILLUSTRATION.search}</div>
-      <h1>Plan a trip</h1>
-      <p class="lead">${esc(note || "Choose where you start and where you go.")}</p>
-      <div class="assistant-card card">
-        <span class="fic">${ic("chat")}</span>
-        <div class="main"><div class="t">Ask the travel assistant</div>
-          <div class="m">Tell it where you are and where you go, by voice or chat. It finds your train.</div></div>
-        <button class="btn${noLocation ? " primary" : ""} block" type="button" id="ask">Ask the assistant</button>
-      </div>
-      <h2>Or plan it yourself</h2>
-      <div class="od card">
-        ${field$("from")}
-        <button class="icon-btn swap" type="button" title="Swap" aria-label="Swap">${ic("swap")}</button>
-        ${field$("to")}
-      </div>
-      <button class="link" type="button" id="board">Departures and incidents at a station${ic("chevron")}</button>
-      <div id="picker"></div>
-      <div class="actions"><button class="btn${noLocation ? "" : " primary"} block" id="go" disabled>Show trains</button></div>`;
+      <header class="planner-intro">
+        <h1>Plan a trip</h1>
+        <p class="lead" hidden></p>
+        <button class="btn" type="button" id="ask" aria-haspopup="dialog" aria-controls="assistant-panel">${ic("chat")}Ask the travel assistant</button>
+      </header>
+      <div class="planner-route">
+        <div class="od">
+          ${field$("from")}
+          <button class="btn btn-ghost btn-circle swap" type="button" title="Swap stations" aria-label="Swap stations">${ic("swap")}</button>
+          ${field$("to")}
+        </div>
+        <div id="picker"></div>
+        <button class="btn btn-block" id="go" disabled>Show trains</button>
+        <button class="station-link" type="button" id="board">${ic("list")} Station departures and incidents ${ic("chevron")}</button>
+      </div>`;
     const inputOf = (f) => $(`.od-field[data-f="${f}"] input`, s);
+    const ask = $("#ask", s), go = $("#go", s);
+    const guidance = $(".planner-intro .lead", s);
     let field = "from";
     let close = null;
+    let pickerRequest = 0;
     // syncText: write the picked station names into the fields (not while the user is typing).
     const render = (syncText = false) => {
       s.querySelectorAll(".od-field").forEach((el) => {
@@ -750,17 +777,25 @@ function browseScreen({ note = null, back = false, noLocation = false } = {}) {
         if (syncText) inp.value = pick[f]?.name ?? "";
         inp.classList.toggle("set", !!pick[f] && inp.value === pick[f].name);
       });
-      $("#go", s).disabled = !(pick.from && pick.to && pick.from.stopId !== pick.to.stopId);
+      go.disabled = !(pick.from && pick.to && pick.from.stopId !== pick.to.stopId);
+      const message = go.disabled ? note : "Results show direct trains already in service.";
+      guidance.textContent = message ?? "";
+      guidance.hidden = !message;
+      const highlightAssistant = noLocation && go.disabled;
+      ask.classList.toggle("btn-primary", highlightAssistant);
+      ask.classList.toggle("btn-outline", !highlightAssistant);
+      go.classList.toggle("btn-primary", !highlightAssistant);
     };
-    const closePicker = () => { close?.(); close = null; $("#picker", s).innerHTML = ""; render(); };
+    const closePicker = () => { pickerRequest++; close?.(); close = null; $("#picker", s).innerHTML = ""; render(); };
     const openPicker = async () => {
+      const request = ++pickerRequest;
       close?.();
       close = () => {}; // marks the picker as open while `reachable` loads
       const f = field;
       const reachable = f === "to" && pick.from
         ? new Map((await api(`/stations/${encodeURIComponent(pick.from.stopId)}/destinations?limit=500`).catch(() => [])).map((d) => [d.station.stopId, d]))
         : null;
-      if (f !== field) return; // the user moved to the other field meanwhile
+      if (request !== pickerRequest) return;
       close = stationPicker($("#picker", s), {
         input: inputOf(f), reachable,
         onPick: (st) => {
@@ -774,7 +809,7 @@ function browseScreen({ note = null, back = false, noLocation = false } = {}) {
       });
       render();
     };
-    onLeave(() => close?.());
+    onLeave(closePicker);
     s.querySelectorAll(".od-field").forEach((el) => {
       const f = el.dataset.f, inp = $("input", el);
       inp.addEventListener("focus", () => {
@@ -790,15 +825,19 @@ function browseScreen({ note = null, back = false, noLocation = false } = {}) {
       render(true);
       if (close) openPicker(); // the destination list depends on the origin
     };
-    $("#go", s).onclick = () => { buzz(15); connectionsScreen(pick.from, pick.to); };
+    go.onclick = () => { buzz(15); connectionsScreen(pick.from, pick.to); };
     $("#board", s).onclick = () => { buzz(15); stationSearchScreen(() => browseScreen({ note, back: true, noLocation })); };
-    $("#ask", s).onclick = () => {
+    restartBtn.textContent = "Find nearby";
+    const fab = $("#assistant-fab");
+    const observer = new IntersectionObserver(([entry]) => fab.classList.toggle("has-inline-trigger", entry.isIntersecting));
+    observer.observe(ask);
+    onLeave(() => { observer.disconnect(); fab.classList.remove("has-inline-trigger"); });
+    ask.onclick = () => {
       buzz(15);
-      const fab = $("#assistant-fab");
-      if (fab?.getAttribute("aria-expanded") !== "true") fab?.click();
+      if (fab.getAttribute("aria-expanded") !== "true") fab.click();
     };
     render();
-    // Without location the assistant comes first; on a phone the keyboard would cover the assistant card.
+    // Without location the assistant comes first; on a phone the keyboard would cover the assistant action.
     if (!noLocation && !matchMedia("(pointer: coarse)").matches) {
       openPicker();
       setTimeout(() => inputOf("from")?.focus({ preventScroll: true }), 250);
@@ -874,7 +913,7 @@ function onTracksScreen(trainId, trip = null, onBack = null) {
       </div>
       <div class="nextstop card" id="next"></div>
       <div class="follow card" id="follow"></div>
-      ${trip ? '<a id="watch-train" class="btn block watch-entry" hidden>Watch this trip</a>' : ''}
+      ${trip ? '<a id="watch-train" class="btn btn-block watch-entry" hidden>Watch this trip</a>' : ''}
       <h2>Route</h2>
       <div class="route" id="route">${placeholders(4, "Loading the route…")}</div>
       <p class="note">Tap a stop to see its departures and incidents.</p>`;
@@ -996,7 +1035,7 @@ function followCard(el, ctx) {
       ? `<span class="fic on">${ic("bell")}</span><div class="main"><div class="t">Alerts on</div><div class="m">${esc(subText(sub))}</div></div>
          <button class="btn" type="button" data-edit>Change</button>`
       : `<span class="fic">${ic("bell")}</span><div class="main"><div class="t">Get alerts</div><div class="m">Before your stop, and when an incident starts or ends.</div></div>
-         <button class="btn primary" type="button" data-edit>Notify me</button>`;
+         <button class="btn btn-primary" type="button" data-edit>Notify me</button>`;
     $("[data-edit]", el).onclick = () => { buzz(); followSheet(c, refresh); };
   };
   const refresh = () => alerts.load(true).then(draw);
@@ -1013,7 +1052,7 @@ function followSheet({ trainId, train, stops }, done) {
   const ahead = stops.filter((x) => (x.state === "next" || x.state === "upcoming") && !x.skipped);
   const chosen = current ? (current.stopId || "") : (ahead.at(-1)?.stopId || "");
   const opt = (value, title, meta) => `<label class="row tap${value === chosen ? " selected" : ""}">
-      <input class="vh" type="radio" name="stop" value="${esc(value)}"${value === chosen ? " checked" : ""}><span class="radio"></span>
+      <input class="radio radio-sm" type="radio" name="stop" value="${esc(value)}"${value === chosen ? " checked" : ""}>
       <span class="main"><span class="t">${esc(title)}</span><span class="m">${meta}</span></span></label>`;
 
   const back = document.createElement("div");
@@ -1026,10 +1065,10 @@ function followSheet({ trainId, train, stops }, done) {
         ${ahead.map((x) => opt(x.stopId, x.name, `Arrival ${timeHtml(x.plannedArr ?? x.plannedDep, x.expectedArr ?? x.expectedDep)}`)).join("")}
         ${opt("", "Incidents only", "No arrival alert")}
       </div>
-      ${line && !lineSub ? `<label class="check"><input type="checkbox" id="sheet-line"> Also follow line ${esc(line)} (incidents only)</label>` : ""}
-      <div class="pair"><button class="btn" type="button" data-close>Cancel</button><button class="btn primary" type="button" id="sheet-ok">${current ? "Save" : "Turn on"}</button></div>
-      ${current ? '<button class="btn block" type="button" id="sheet-off">Turn off alerts for this train</button>' : ""}`
-    : `<p class="lead">${esc(sup.reason)}</p><div class="actions"><button class="btn block" type="button" data-close>Close</button></div>`}
+      ${line && !lineSub ? `<label class="check"><input class="checkbox checkbox-sm" type="checkbox" id="sheet-line"> Also follow line ${esc(line)} (incidents only)</label>` : ""}
+      <div class="pair"><button class="btn" type="button" data-close>Cancel</button><button class="btn btn-primary" type="button" id="sheet-ok">${current ? "Save" : "Turn on"}</button></div>
+      ${current ? '<button class="btn btn-block" type="button" id="sheet-off">Turn off alerts for this train</button>' : ""}`
+    : `<p class="lead">${esc(sup.reason)}</p><div class="actions"><button class="btn btn-block" type="button" data-close>Close</button></div>`}
   </div>`;
   document.body.append(back);
   const close = () => { back.classList.add("leave"); setTimeout(() => back.remove(), 200); document.removeEventListener("keydown", onKey); };
@@ -1081,9 +1120,9 @@ function alertsScreen(onBack) {
       <div class="list" id="subs">${placeholders(2, null)}</div>
       <h2>Follow a line</h2>
       <p class="note">Get an alert when an incident starts or ends anywhere on a line.</p>
-      <label class="search">${ic("search")}<input id="lq" type="search" placeholder="Line, e.g. IC 1 or S3" autocomplete="off" enterkeyhint="search" aria-label="Search a line"></label>
+      <label class="input search">${ic("search")}<input id="lq" type="search" placeholder="Line, e.g. IC 1 or S3" autocomplete="off" enterkeyhint="search" aria-label="Search a line"></label>
       <div class="list" id="lines">${placeholders(3, "Loading the lines…")}</div>
-      <div class="actions" id="test-box" hidden><button class="btn block" type="button" id="test">Send a test alert</button></div>`;
+      <div class="actions" id="test-box" hidden><button class="btn btn-block" type="button" id="test">Send a test alert</button></div>`;
     $("[data-back]", s).onclick = () => onBack();
     const self = () => alertsScreen(onBack);
 
@@ -1092,7 +1131,7 @@ function alertsScreen(onBack) {
       $("#subs", s).innerHTML = subs.length ? subs.map((x) => `
         <div class="row">
           <button class="main linkish" type="button" data-open="${esc(x.id)}"><span class="t">${esc(x.label)}</span><span class="m">${esc(subText(x))}</span></button>
-          <button class="icon-btn" type="button" data-off="${esc(x.id)}" title="Stop following" aria-label="Stop following ${esc(x.label)}">${ic("x")}</button>
+          <button class="btn btn-ghost btn-circle icon-btn" type="button" data-off="${esc(x.id)}" title="Stop following" aria-label="Stop following ${esc(x.label)}">${ic("x")}</button>
         </div>`).join("")
         : `<p class="empty">You follow nothing yet. Open your train and tap Notify me, or follow a line below.</p>`;
       $("#subs", s).querySelectorAll("[data-off]").forEach((b) => (b.onclick = async () => {
@@ -1157,7 +1196,7 @@ function lineScreen(line, onBack) {
         ? `<span class="fic on">${ic("bell")}</span><div class="main"><div class="t">Following this line</div><div class="m">Alerts when an incident starts or ends.</div></div>
            <button class="btn" type="button" id="lf">Stop</button>`
         : `<span class="fic">${ic("bell")}</span><div class="main"><div class="t">Follow this line</div><div class="m">Alerts when an incident starts or ends.</div></div>
-           <button class="btn primary" type="button" id="lf">Follow</button>`;
+           <button class="btn btn-primary" type="button" id="lf">Follow</button>`;
       $("#lf", el).onclick = async (e) => {
         e.target.disabled = true;
         try {
@@ -1200,7 +1239,7 @@ function lineScreen(line, onBack) {
 function trainGone(s) {
   setUrl({});
   s.innerHTML = `<div class="finish"><h1>This train has ended its run</h1><p class="lead">It is no longer in service.</p></div>
-    <div class="actions"><button class="btn primary block" id="again">Start again</button></div>`;
+    <div class="actions"><button class="btn btn-primary btn-block" id="again">Start again</button></div>`;
   $("#again", s).onclick = () => restartBtn.click();
 }
 
@@ -1391,7 +1430,7 @@ push.init({ onForeground: (n) => { buzz([20, 40, 20]); toast(n.body ? `${n.title
 $("#alerts-btn").innerHTML = ic("bell");
 $("#alerts-btn").addEventListener("click", () => { buzz(); const back = location.search; alertsScreen(() => routeFromUrl(back, { back: true })); });
 tripWatchAvailable.then((available) => {
-  $(".watched-trips-nav").hidden = !available;
+  $(".watched-trips-link").hidden = !available;
 });
 $("#tour-btn").innerHTML = ic("help");
 $("#tour-btn").addEventListener("click", () => { buzz(); startTour(); });
@@ -1426,7 +1465,7 @@ if (qrTrain) {
 else if (qrStop) {
   api(`/stations/${encodeURIComponent(qrStop)}`)
     .then((d) => stationScreen({ stopId: d.station.stopId, name: d.station.name }))
-    .catch(() => browseScreen({ note: "This station code is not known. Choose where you start and where you go." }));
+    .catch(() => browseScreen({ note: "Station code not recognised. Search by station name." }));
 }
 else if (qrLine) lineScreen(qrLine, () => alertsScreen(() => detectScreen({ back: true })));
 else if (qrStation) {
@@ -1435,6 +1474,6 @@ else if (qrStation) {
     const to = params.get("to");
     if (to) api(`/stations/${encodeURIComponent(to)}`).then((x) => connectionsScreen(from, { stopId: x.station.stopId, name: x.station.name })).catch(() => destinationScreen(from));
     else destinationScreen(from);
-  }).catch(() => browseScreen({ note: "This station code is not known. Choose where you start and where you go." }));
+  }).catch(() => browseScreen({ note: "Station code not recognised. Search by station name." }));
 } else detectScreen(opts);
 }

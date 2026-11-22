@@ -66,7 +66,7 @@ function connect() {
 }
 function setConn(cls, text) {
   const el = $("conn");
-  el.className = `pill ${cls}`;
+  el.className = `connection-state ${cls}`;
   el.textContent = text;
 }
 connect();
@@ -184,7 +184,7 @@ map.on("contextmenu", (e) => {
   closePopup();
   popup = new maplibregl.Popup({ closeButton: true })
     .setLngLat(e.lngLat)
-    .setHTML(`<a class="btn primary" href="/admin/report.html?scope=point&lat=${e.lngLat.lat.toFixed(5)}&lon=${e.lngLat.lng.toFixed(5)}">Report an incident here</a>`)
+    .setHTML(`<a class="btn btn-primary" href="/admin/report.html?scope=point&lat=${e.lngLat.lat.toFixed(5)}&lon=${e.lngLat.lng.toFixed(5)}">Report an incident here</a>`)
     .addTo(map);
 });
 
@@ -223,8 +223,8 @@ async function showStationPopup(stopId, name, coords) {
       `<div class="pop"><b>${esc(name)}</b>
        <table class="board"><tbody><tr><td class="muted">Loading departures…</td></tr></tbody></table>
        <div class="row">
-         <a class="btn primary small" href="/admin/report.html?scope=station&stopId=${encodeURIComponent(stopId)}">Report an incident here</a>
-         <button class="btn small" type="button" aria-haspopup="dialog" data-station-qr="${esc(stopId)}" data-station-name="${esc(name)}">Station QR</button>
+         <a class="btn btn-primary btn-sm" href="/admin/report.html?scope=station&stopId=${encodeURIComponent(stopId)}">Report an incident here</a>
+         <button class="btn btn-sm" type="button" aria-haspopup="dialog" data-station-qr="${esc(stopId)}" data-station-name="${esc(name)}">Station QR</button>
        </div></div>`,
     )
     .addTo(map);
@@ -280,7 +280,7 @@ async function selectTrain(id) {
       <div class="actions">
         <button class="btn" id="follow">${trains.following ? "Stop following" : "Follow"}</button>
         <button class="btn" type="button" aria-haspopup="dialog" data-train-qr="${esc(id)}" data-train-name="${esc([t.line, t.number].filter(Boolean).join(" "))}" data-train-to="${esc(t.headsign ?? t.destination?.name ?? "")}">Train QR</button>
-        <a class="btn primary" href="/admin/report.html?scope=train&trainId=${encodeURIComponent(id)}">Report an incident</a>
+        <a class="btn btn-primary" href="/admin/report.html?scope=train&trainId=${encodeURIComponent(id)}">Report an incident</a>
       </div>`;
     $("closeTrain").onclick = () => selectTrain(undefined);
     $("follow").onclick = (ev) => {

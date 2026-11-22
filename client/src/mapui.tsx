@@ -44,10 +44,10 @@ export function TrackChip({ t, onClose, onFollow }: { t: Tracking; onClose: () =
           </span>
         )}
       </div>
-      <button type="button" className="track-btn" data-on={t.follow} onClick={onFollow} aria-label="Follow the train">
+      <button type="button" className="btn btn-ghost btn-circle btn-sm track-btn" data-on={t.follow} aria-pressed={t.follow} onClick={onFollow} aria-label="Follow the train">
         <Navigation size={16} />
       </button>
-      <button type="button" className="track-btn" onClick={onClose} aria-label="Stop tracking">
+      <button type="button" className="btn btn-ghost btn-circle btn-sm track-btn" onClick={onClose} aria-label="Stop tracking">
         <X size={16} />
       </button>
     </div>
@@ -58,7 +58,7 @@ export function MapLegend({ items, onRemove, onToggle, onClear, onUndo }: { item
   const [open, setOpen] = useState(false);
   return (
     <div className="legend" data-open={open}>
-      <button type="button" className="legend-btn" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label="What is on the map">
+      <button type="button" className="btn legend-btn" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label="What is on the map">
         <Layers size={17} />
         {items.length > 0 && <b>{items.length}</b>}
       </button>
@@ -66,10 +66,10 @@ export function MapLegend({ items, onRemove, onToggle, onClear, onUndo }: { item
         <div className="legend-panel">
           <div className="legend-head">
             <span>On the map</span>
-            <button type="button" className="legend-act" onClick={onUndo} title="Undo the last change">
+            <button type="button" className="btn btn-ghost btn-sm" onClick={onUndo} title="Undo the last change">
               <RotateCcw size={15} /> Undo
             </button>
-            <button type="button" className="legend-act" onClick={onClear} disabled={!items.length} title="Clear the map">
+            <button type="button" className="btn btn-ghost btn-sm" onClick={onClear} disabled={!items.length} title="Clear the map">
               <Trash2 size={15} /> Clear
             </button>
           </div>
@@ -128,16 +128,16 @@ export function PickCard({ info, onClose, onAction }: { info: PickInfo; onClose:
       <div className="pick-actions">
         {place && info.stationId && (
           <>
-            <button type="button" onClick={() => onAction("from")}>
+            <button type="button" className="btn btn-sm" onClick={() => onAction("from")}>
               <MapPin size={15} /> Start here
             </button>
-            <button type="button" onClick={() => onAction("to")}>
+            <button type="button" className="btn btn-sm" onClick={() => onAction("to")}>
               <Navigation size={15} /> Go here
             </button>
           </>
         )}
         {info.ask && (
-          <button type="button" className="primary" onClick={() => onAction("ask")}>
+          <button type="button" className="btn btn-primary btn-sm" onClick={() => onAction("ask")}>
             Ask about this
           </button>
         )}

@@ -17,10 +17,10 @@
   transform: translateY(-160%);
 }
 .boarding-skip:focus { transform: none; }
-.boarding-card { padding: 16px; }
+.boarding-card { padding: 8px 4px; }
 .boarding-exit { width: 44px; height: 44px; text-decoration: none; }
 .boarding-exit:hover { background: var(--milk); }
-.boarding-card h2 { font-size: 20px; line-height: 1.15; margin: 0; }
+.boarding-card h2 { font-size: 23px; line-height: 1.15; letter-spacing: -.025em; margin: 0; }
 .boarding-departure {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -67,46 +67,12 @@
   font-variant-numeric: tabular-nums;
 }
 
-.boarding-action {
-  display: inline-flex;
-  justify-content: center;
-  align-items: center;
-  gap: 9px;
-  min-height: 46px;
-  padding: 8px 14px;
-  width: 100%;
-  background: var(--red);
-  border: 1px solid transparent;
-  border-radius: 8px;
-  color: #fff;
-  font-size: 1rem;
-  font-weight: 700;
-  touch-action: manipulation;
-  transition: transform 160ms ease;
-}
-
-.boarding-action:hover { background: var(--red125); }
-.boarding-action:active { background: var(--red125); transform: scale(0.985); transition-duration: 80ms; }
-.boarding-action[data-secondary="true"] { background: var(--white); border-color: var(--silver); color: var(--charcoal); }
-.boarding-action[data-secondary="true"]:hover,
-.boarding-action[data-secondary="true"]:active { background: var(--milk); }
+.boarding-action { width: 100%; min-height: 46px; }
 .boarding-choices { display: grid; gap: 8px; }
 .replay-bulletin { margin: 12px 0 4px; color: var(--granite); font-variant-numeric: tabular-nums; }
 .replay-notice-copy { margin: 0 0 16px; font-size: 1rem; line-height: 1.4; }
 .boarding-replay-controls { display: flex; flex-wrap: wrap; gap: 0 12px; margin-inline: 2px; }
-.boarding-replay-controls button {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 44px;
-  padding: 0 4px;
-  background: none;
-  border: 0;
-  color: var(--iron);
-  font-size: 0.8125rem;
-  text-underline-offset: 3px;
-}
-.boarding-replay-controls button:hover { text-decoration: underline; }
+.boarding-replay-controls .btn { min-height: 44px; padding-inline: 4px; color: var(--iron); }
 .boarding-replay-controls p { align-self: center; margin: 0; font-size: 0.8125rem; color: var(--iron); }
 
 .app--boarding .maplibregl-ctrl-attrib.maplibregl-compact { min-height: 40px; padding-right: 44px; border-radius: 22px; }
@@ -130,8 +96,4 @@
 @media (min-width: 900px) {
   .boarding-sheet { min-height: 0; max-height: none; bottom: auto; padding-top: 0; }
   .boarding-departure time { font-size: 2.5rem; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .boarding-action:active { transform: none; }
 }

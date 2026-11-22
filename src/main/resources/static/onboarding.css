@@ -45,9 +45,6 @@ html.tour-open { overflow: hidden; }
 .tour-foot .btn { height: 40px; }
 .tour-back { margin-left: auto; }
 .tour-back[hidden] + .tour-next { margin-left: auto; }
-.tour-dots { display: flex; gap: 6px; }
-.tour-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--cement); transition: background-color 200ms var(--ease), width 200ms var(--ease); }
-.tour-dots i.on { width: 18px; border-radius: 3px; background: var(--red); }
 
 @media (prefers-reduced-motion: reduce) {
   .tour, .tour-guide, .tour-spot, .tour .loki { transition: none !important; }

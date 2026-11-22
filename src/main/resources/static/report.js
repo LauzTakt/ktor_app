@@ -1,5 +1,5 @@
 // Staff incident report: a form (POST /api/v1/reports) and the list of reports (resolve them when fixed).
-import { addRail, api, initStaffSession, ago, applyTheme, baseStyle, initTheme, onTheme, CATEGORIES, dateTime, esc, SEVERITY_COLOURS, severityBadge } from "./common.js";
+import { addRail, api, initStaffSession, ago, applyTheme, baseStyle, initTheme, onTheme, CATEGORIES, dateTime, esc, severityBadge } from "./common.js";
 
 const $ = (id) => document.getElementById(id);
 const form = $("form");
@@ -180,14 +180,14 @@ async function loadReports() {
   $("reports").innerHTML = list.length
     ? list
         .map(
-          (r) => `<li id="${esc(r.id)}" class="${r.status}" style="--c:${SEVERITY_COLOURS[r.severity] ?? "#767676"}">
+          (r) => `<li id="${esc(r.id)}" class="${r.status}">
         <div class="row">${severityBadge(r.severity)} <b>${esc(r.title)}</b> <span class="muted right">${esc(r.id)}</span></div>
         <div class="muted">${esc(CATEGORIES[r.category] ?? r.category)} · ${esc(r.where)}</div>
         ${r.description ? `<p>${esc(r.description)}</p>` : ""}
         <div class="muted">Reported ${dateTime(r.createdAt)} (${ago(r.createdAt)})${r.reporter ? ` by ${esc(r.reporter)}` : ""}</div>
         ${r.status === "resolved"
           ? `<div class="resolved-note">✓ Resolved ${dateTime(r.resolvedAt)}${r.resolution ? `: ${esc(r.resolution)}` : ""}</div>`
-          : `<div class="actions"><input placeholder="resolution note (optional)" data-note="${esc(r.id)}" /><button class="btn small" data-resolve="${esc(r.id)}">Mark resolved</button></div>`}
+          : `<div class="actions"><input class="input" aria-label="Resolution note (optional)" placeholder="Resolution note (optional)" data-note="${esc(r.id)}" /><button class="btn btn-sm" data-resolve="${esc(r.id)}">Mark resolved</button></div>`}
       </li>`,
         )
         .join("")

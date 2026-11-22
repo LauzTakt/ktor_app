@@ -49,8 +49,7 @@ export function BoardingCard({ service, focused, status, action = "Board this on
       <p className="boarding-status" role="status">{status}</p>
       <button
         type="button"
-        className="boarding-action"
-        data-secondary={focused}
+        className={`btn boarding-action ${focused ? "btn-outline" : "btn-primary"}`}
         aria-expanded={focused}
         aria-controls={directions}
         onClick={onToggle}

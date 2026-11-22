@@ -39,7 +39,7 @@ export async function api(path, init = {}) {
 }
 
 export function severityBadge(sev) {
-  return `<span class="badge" style="background:${SEVERITY_COLOURS[sev] ?? "#767676"}">${esc(sev ?? "?")}</span>`;
+  return `<span class="severity-label" style="--signal:${SEVERITY_COLOURS[sev] ?? "#767676"}">${esc(sev ?? "?")}</span>`;
 }
 
 // ---------------------------------------------------------------- staff session (pages are staff-only, see auth/Auth.kt)
@@ -57,7 +57,7 @@ export async function initStaffSession() {
     who.className = "who";
     who.textContent = me.username;
     const out = document.createElement("button");
-    out.className = "btn";
+    out.className = "btn btn-ghost";
     out.type = "button";
     out.textContent = "Log out";
     out.addEventListener("click", async () => {
