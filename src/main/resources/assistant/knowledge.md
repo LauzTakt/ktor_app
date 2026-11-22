@@ -124,7 +124,7 @@ time always wins.
 
 ## What passengers should do
 
-- Allow extra time; check the departure screens and the SBB app.
+- Allow extra time; check the departure screens.
 - On a stopped train: stay aboard and follow staff instructions.
 - If the train ends early (short turn): change to the replacement bus if one runs, or take the route the planner
   suggests around the closed section.

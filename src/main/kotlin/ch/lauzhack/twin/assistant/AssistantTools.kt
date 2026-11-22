@@ -345,7 +345,138 @@ class AssistantTools(
                 add("station_board" to jsonOf { put("stopId", from); put("windowMin", 30) })
             }
         }
-        calls.map { (n, args) -> async { Triple(n, args, execute(n, args, turn, logAs = "pre:$n")) } }.awaitAll().filter { !it.third.isError }
+        val explored = if (from != null && to != null) {
+            val f = from!!; val t = to!!
+            async { runCatching { explore(f, t, turn) }.onFailure { log.warn("explore failed: {}", it.toString()) }.getOrNull() }
+        } else null
+        val done = calls.map { (n, args) -> async { Triple(n, args, execute(n, args, turn, logAs = "pre:$n")) } }.awaitAll().filter { !it.third.isError }
+        val ex = explored?.await()
+        if (ex != null) {
+            turn.toolsCalled += "pre:explore"
+            done + Triple("explored_alternatives", jsonOf { put("fromStopId", from); put("toStopId", to) }, ToolOutcome(ex))
+        } else done
+    }
+
+    /**
+     * Deterministic exploration before the model answers (when origin and destination are known): the direct journeys,
+     * waiting for the reopening of a related disruption, routes via 2-3 hubs between origin and destination (and the
+     * nearest hub), and at night the first morning services. All in parallel; a compact text with a verdict.
+     */
+    suspend fun explore(fromId: String, toId: String, turn: TurnState): String? = coroutineScope {
+        val a = stations.resolve(fromId) ?: return@coroutineScope null
+        val b = stations.resolve(toId) ?: return@coroutineScope null
+        if (a.stopId == b.stopId || a.lat == null || a.lon == null || b.lat == null || b.lon == null) return@coroutineScope null
+        val dAB = StationResolver.distanceKm(a.lat, a.lon, b.lat, b.lon).coerceAtLeast(1.0)
+        fun ratio(s: Station) = if (s.lat == null || s.lon == null) 99.0 else
+            (StationResolver.distanceKm(a.lat, a.lon, s.lat, s.lon) + StationResolver.distanceKm(s.lat, s.lon, b.lat, b.lon)) / dAB
+
+        val disruptionsCall = async { runCatching { twin.disruptions() }.getOrNull()?.arr()?.mapNotNull { it.obj() }.orEmpty() }
+        val directCall = async { runCatching { planValidated(PlanQuery(a.stopId, b.stopId, null, 3, null)).second }.getOrDefault(emptyList()) }
+        val direct = directCall.await()
+        val active = disruptionsCall.await().filter { it.str("status") == "active" && it.str("effect") in setOf("interrupted", "limited") }
+        fun sectionIds(d: JsonObject, insideOnly: Boolean): Set<String> {
+            val sec = d.obj("section") ?: return emptySet()
+            val ids = sec.objects("inside").mapNotNull { it.str("id") }.toMutableSet()
+            if (!insideOnly) { sec.obj("a")?.str("id")?.let(ids::add); sec.obj("b")?.str("id")?.let(ids::add) }
+            return ids
+        }
+        val related = active.filter { d ->
+            // The section lies between origin and destination (both ends near the corridor). The legs' incidents are not
+            // enough: the twin tags every leg touching a section's end station.
+            val sec = d.obj("section")
+            val ends = listOfNotNull(sec?.obj("a")?.str("id"), sec?.obj("b")?.str("id")).mapNotNull { stations.byId(it) }
+            ends.size == 2 && ends.all { ratio(it) <= 1.5 }
+        }
+        val night = java.time.Instant.ofEpochMilli(turn.now).atZone(ZURICH).hour in 0..4
+        if (related.isEmpty() && direct.isNotEmpty() && !night) return@coroutineScope null
+
+        // Waiting for the reopening of the first related disruption with an expected end.
+        val wait = related.firstOrNull { (it.long("until") ?: 0L) > turn.now }
+        val waitCall = wait?.let { d ->
+            async { runCatching { planValidated(PlanQuery(a.stopId, b.stopId, d.long("until"), 2, null)).second }.getOrDefault(emptyList()) }
+        }
+        // Hubs roughly between origin and destination, not inside an interrupted section; plus the nearest hub.
+        val closedInside = related.filter { it.str("effect") == "interrupted" }.flatMap { sectionIds(it, true) }.toSet()
+        val hubPool = HUBS.mapNotNull { stations.byId(it) }.filter { it.stopId != a.stopId && it.stopId != b.stopId && it.stopId !in closedInside }
+        val between = hubPool.map { it to ratio(it) }.filter { it.second <= 1.45 }.sortedBy { it.second }.take(3).map { it.first }
+        val nearest = hubPool.filter { it.lat != null && it.lon != null }
+            .minByOrNull { StationResolver.distanceKm(a.lat, a.lon, it.lat!!, it.lon!!) }
+            ?.takeIf { StationResolver.distanceKm(a.lat, a.lon, it.lat!!, it.lon!!) <= 30.0 }
+        val hubs = (between + listOfNotNull(nearest)).distinctBy { it.stopId }.take(4)
+        val hubCalls = hubs.map { h ->
+            async {
+                runCatching {
+                    val first = planValidated(PlanQuery(a.stopId, h.stopId, null, 1, null)).second.firstOrNull() ?: return@runCatching null
+                    val arrH = first.journey.long("arrival") ?: return@runCatching null
+                    val second = planValidated(PlanQuery(h.stopId, b.stopId, arrH + 4 * 60_000L, 1, null)).second.firstOrNull()
+                        ?: return@runCatching null
+                    Triple(h, first, second)
+                }.getOrNull()
+            }
+        }
+        val morningCall = if (night) {
+            val five = java.time.Instant.ofEpochMilli(turn.now).atZone(ZURICH).withHour(5).withMinute(0).withSecond(0).withNano(0).toInstant().toEpochMilli()
+            async { runCatching { planValidated(PlanQuery(a.stopId, b.stopId, five, 2, null)).second }.getOrDefault(emptyList()) }
+        } else null
+        val waited = waitCall?.await().orEmpty()
+        val viaHubs = hubCalls.awaitAll().filterNotNull()
+        val morning = morningCall?.await().orEmpty()
+
+        (direct + waited + morning + viaHubs.flatMap { listOf(it.second, it.third) }).forEach { cj ->
+            cj.journey.long("departure")?.let { turn.publishedDepartures += it }
+            cj.journey.objects("legs").forEach { leg -> leg.objects("incidents").forEach { inc -> turn.note(twinItem(inc)) } }
+        }
+
+        data class Cand(val label: String, val arrival: Long, val text: String)
+        val cands = ArrayList<Cand>()
+        val text = buildString {
+            appendLine("Explored for ${a.name} → ${b.name} (straight-line ${dAB.roundToInt()} km), all live:")
+            appendLine("Direct (planner):")
+            if (direct.isEmpty()) appendLine("  none found")
+            direct.forEach { cj -> appendLine("  " + journeyLine(cj.journey)); cj.journey.long("arrival")?.let { cands += Cand("direct", it, "") } }
+            if (wait != null) {
+                val dt = wait.str("durationType") ?: "UNKNOWN"
+                val uncertain = dt != "UNTIL"
+                appendLine("Wait for the reopening of ${wait.str("where") ?: wait.str("summary") ?: "the disruption"} " +
+                    "(${if (dt == "UNTIL_AT_LEAST") "at least until" else if (dt == "UNTIL") "expected until" else "end unknown, estimate"} " +
+                    "${untilText(wait.long("until"), turn.now)}${if (uncertain) "; UNCERTAIN, the end may be later" else ""}):")
+                if (waited.isEmpty()) appendLine("  none found")
+                waited.take(1).forEach { cj -> appendLine("  " + journeyLine(cj.journey)); cj.journey.long("arrival")?.let { cands += Cand("waiting for the reopening" + if (uncertain) " (uncertain)" else "", it, "") } }
+            }
+            if (viaHubs.isNotEmpty()) {
+                appendLine("Via a hub (two journeys, at least 4 min to change):")
+                viaHubs.forEach { (h, j1, j2) ->
+                    appendLine("  via ${h.name}: arrives ${hhmm(j2.journey.long("arrival"))}")
+                    appendLine("    1) " + journeyLine(j1.journey))
+                    appendLine("    2) " + journeyLine(j2.journey))
+                    j2.journey.long("arrival")?.let { cands += Cand("via ${h.name}", it, "") }
+                }
+            }
+            if (night) {
+                appendLine("First services of the morning (after 05:00):")
+                if (morning.isEmpty()) appendLine("  none found")
+                morning.forEach { cj -> appendLine("  " + journeyLine(cj.journey)); cj.journey.long("arrival")?.let { cands += Cand("morning", it, "") } }
+            }
+            if (related.isNotEmpty()) appendLine("Related disruptions: " + related.joinToString("; ") { "${it.str("summary") ?: it.str("where")} (${it.str("id")})" })
+            val best = cands.minByOrNull { it.arrival }
+            if (best != null) {
+                val ties = cands.filter { hhmm(it.arrival) == hhmm(best.arrival) }.map { it.label }.distinct()
+                appendLine("Verdict: earliest arrival found is ${hhmm(best.arrival)} (${ties.joinToString(" = ")}).")
+            } else appendLine("Verdict: no journey found in the hours the planner covers.")
+        }
+        text.trim()
+    }
+
+    /** One journey in one line: id, times, changes, legs, warnings. */
+    private fun journeyLine(j: JsonObject): String {
+        val legs = j.objects("legs").joinToString("; ") { l ->
+            val f = l.obj("from"); val t = l.obj("to")
+            "${l.str("line") ?: l.str("category") ?: "?"} ${f?.str("name")} ${hhmm(f?.long("expectedDep") ?: f?.long("plannedDep"))} → " +
+                "${t?.str("name")} ${hhmm(t?.long("expectedArr") ?: t?.long("plannedArr"))}"
+        }
+        val dur = j.int("durationMin")?.let { " ${it / 60}h${"%02d".format(it % 60)}" } ?: ""
+        val warn = j.strings("warnings").take(3).takeIf { it.isNotEmpty() }?.joinToString("; ", " [", "]") ?: ""
+        return "${j.str("id")}: dep ${hhmm(j.long("departure"))} arr ${hhmm(j.long("arrival"))}$dur, ${j.int("transfers") ?: 0} changes: $legs$warn"
     }
 
     /** Origin and destination named in the question, when both resolve with confidence to different stations. */
@@ -1157,6 +1288,9 @@ class AssistantTools(
         private val LINE_PATTERN = Regex("\\b(?:(IC|ICN|IR|RE|EC|ICE|TGV|RJX|PE)\\s?(\\d{1,3})|(S|R)(\\d{1,2}))\\b")
         val COLOURS = setOf("red", "orange", "green", "blue")
         val ROLES = listOf("origin", "destination", "transfer", "incident")
+        /** Major hubs used to explore alternative corridors. */
+        private val HUBS = listOf("8507000", "8500218", "8503000", "8501120", "8504300", "8505000", "8500010", "8504100")
+
         private val SEVERITIES = listOf("info", "minor", "major", "critical")
 
         fun severityOf(s: String?) = s?.lowercase()?.takeIf { it in SEVERITIES } ?: "info"

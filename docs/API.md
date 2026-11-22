@@ -209,7 +209,13 @@ model needs another lookup); a question only about an out-of-scope topic is answ
   mentions a limitation the passenger did not ask about.
 - How it works: the backend first runs the lookups the context or the question makes predictable (a trip named in the
   question or the context → `plan_journey` + `situation`; the passenger's train → `train_status`), so most questions
-  need one model call. Tools: `find_station`, `station_board`, `train_status`, `plan_journey`, `situation`, `bulletins` (data: the twin's
+  need one model call. When origin and destination are known and a disruption lies between them (both section ends
+  near the corridor), or no direct journey exists, or it is night (00:00-05:00), the backend also explores in one
+  parallel pass (`explored_alternatives` in the first message): the direct journeys, waiting for the reopening
+  (`after` = the disruption's `until`, flagged uncertain unless `durationType` is `UNTIL`), two journeys via 2-3 hubs
+  between origin and destination (Bern, Olten, Zürich HB, Lausanne, Biel/Bienne, Luzern, Basel SBB, Fribourg; not
+  inside an interrupted section) plus the nearest hub, and at night the first services after 05:00, with a verdict
+  (earliest arrival). The model then decides one plan. Tools: `find_station`, `station_board`, `train_status`, `plan_journey`, `situation`, `bulletins` (data: the twin's
   SBB/VIA bulletins, latest version each, joined with `/disruptions` for effect, cause, until, durationType, measures and
   bus stops; filters `stopId`, `line`; active first, ENDED ones older than 30 min skipped);
   `show_route`, `show_section`, `highlight_train`, `mark_station`, `start_timer`, `focus_on` (drawing); `respond`
