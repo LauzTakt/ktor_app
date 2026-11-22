@@ -213,12 +213,22 @@ class AssistantTools(
             prop("label", "string", "Short map label in the passenger's language, e.g. \"Closed: Olten – Aarau\".")
         },
         tool(
-            "highlight_train",
-            "Outline a live train on the map: the passenger's train, or the one to take.",
-            required = listOf("trainId", "label"),
+            "highlight_trains",
+            "Outline live trains on the map: the passenger's train, the one to take, the trains of a line or between two stations.",
+            required = listOf("trains"),
         ) {
-            prop("trainId", "string", "Train id (only trains in service can be shown).")
-            prop("label", "string", "Short label in the passenger's language, e.g. \"Your train\".")
+            put("trains", jsonOf {
+                put("type", "array")
+                put("description", "Trains in service (trainId from a tool), with a short label in the passenger's language.")
+                putJsonObject("items") {
+                    put("type", "object")
+                    putJsonObject("properties") {
+                        putJsonObject("trainId") { put("type", "string") }
+                        putJsonObject("label") { put("type", "string"); put("description", "e.g. \"Your train\", \"IC 8 to Bern\".") }
+                    }
+                    putJsonArray("required") { add("trainId") }
+                }
+            })
         },
         tool(
             "track_train",
@@ -231,21 +241,59 @@ class AssistantTools(
         },
         tool(
             "highlight_line",
-            "Highlight a whole line on the map, e.g. when the passenger asks about a line.",
+            "Highlight a whole line on the map (its trains). With route=true its path is drawn too (from one of its trains).",
             required = listOf("line"),
         ) {
             prop("line", "string", "Line name, e.g. IC8, S3.")
+            prop("route", "boolean", "Also draw the line's path (default false).")
             prop("label", "string", "Short label in the passenger's language (optional).")
         },
         tool(
-            "mark_station",
-            "Mark a station on the map.",
-            required = listOf("stopId", "role"),
+            "mark_stations",
+            "Mark stations on the map (origin, destination, transfer, incident, or info such as a train's next stops).",
+            required = listOf("stations"),
+        ) {
+            put("stations", jsonOf {
+                put("type", "array")
+                putJsonObject("items") {
+                    put("type", "object")
+                    putJsonObject("properties") {
+                        putJsonObject("stopId") { put("type", "string"); put("description", STOP) }
+                        putJsonObject("role") { put("type", "string"); putJsonArray("enum") { ROLES.forEach { add(it) } } }
+                        putJsonObject("label") { put("type", "string"); put("description", "Short label in the passenger's language, e.g. \"02:10\" (optional).") }
+                    }
+                    putJsonArray("required") { add("stopId"); add("role") }
+                }
+            })
+        },
+        tool(
+            "show_path",
+            "Draw a path along consecutive stations (real track from the twin), e.g. a line's route or a train's remaining run.",
+            required = listOf("stopIds"),
+        ) {
+            put("stopIds", jsonOf {
+                put("type", "array")
+                put("description", "At least 2 stations in travel order (stopIds or names); only the main stops are needed.")
+                putJsonObject("items") { put("type", "string") }
+            })
+            prop("colour", "string", "Default blue.", enum = COLOURS.toList())
+            prop("label", "string", "Short map label in the passenger's language (optional).")
+        },
+        tool(
+            "label",
+            "Put a short callout on the map at a station (or at lon/lat).",
+            required = listOf("text"),
         ) {
             prop("stopId", "string", STOP)
-            prop("role", "string", "Why it matters.", enum = listOf("origin", "destination", "transfer", "incident"))
-            prop("label", "string", "Short label in the passenger's language (optional).")
+            prop("lon", "number", "Longitude, if not at a station.")
+            prop("lat", "number", "Latitude, if not at a station.")
+            prop("text", "string", "A few words in the passenger's language.")
         },
+        tool(
+            "remove",
+            "Remove one item drawn earlier (only useful with append=true): its id (route id, section id like sec-A-B or path:A-B, trainId, stopId, label id).",
+            required = listOf("id"),
+        ) { prop("id", "string", "The item's id.") },
         tool(
             "start_timer",
             "Show a countdown chip on the passenger's screen, e.g. until the recommended train leaves.",
@@ -256,15 +304,13 @@ class AssistantTools(
             prop("until", "string", "Otherwise the time to count down to, HH:MM Swiss time, taken from a tool result.")
         },
         tool(
-            "focus_on",
-            "Zoom the map to fit these stations. Optional: by default the map fits everything you drew.",
-            required = listOf("stopIds"),
+            "fit",
+            "Fit the map to these trains (live positions), stations and drawn sections. Optional: by default the map fits " +
+                "everything drawn. Prefer it when trains are involved.",
+            required = emptyList(),
         ) {
-            put("stopIds", jsonOf {
-                put("type", "array")
-                put("description", "Stations to fit (stopIds or names).")
-                putJsonObject("items") { put("type", "string") }
-            })
+            listOf("trainIds" to "Trains in service.", "stopIds" to "Stations (stopIds or names).", "sectionIds" to "Ids of drawn sections (sec-A-B, path:A-B).")
+                .forEach { (k, d) -> put(k, jsonOf { put("type", "array"); put("description", d); putJsonObject("items") { put("type", "string") } }) }
         },
         tool(
             "respond",
@@ -272,8 +318,8 @@ class AssistantTools(
             required = listOf("answer", "summary"),
         ) {
             prop("answer", "string",
-                "Spoken by the voice agent: 1-3 short, calm sentences in the passenger's language, the key facts and the " +
-                    "recommendation first. Plain text: no markdown, no lists, no ids.")
+                "Spoken by the voice agent: 10-25 words, 1-2 calm sentences in the passenger's language, the answer first, no preamble; the " +
+                    "key fact or recommendation first. Plain text: no markdown, no lists, no ids.")
             prop("summary", "string", "One short line for the screen (at most about 60 characters), same language.")
             put("options", jsonOf {
                 put("type", "array")
@@ -318,13 +364,16 @@ class AssistantTools(
                 "bulletins" -> bulletins(input, turn)
                 "show_route" -> showRoute(input, turn)
                 "show_section" -> showSection(input)
-                "highlight_train" -> highlightTrain(input)
+                "highlight_trains" -> highlightTrains(input)
+                "show_path" -> showPath(input)
+                "label" -> label(input)
+                "remove" -> ToolOutcome("ok: removed", visuals = listOf(RemoveVisual(input.str("id") ?: throw ToolError("id is required"))))
+                "fit" -> fit(input)
                 "track_train" -> trackTrain(input)
                 "highlight_line" -> highlightLine(input)
                 "arrivals" -> arrivals(input)
-                "mark_station" -> markStation(input)
+                "mark_stations" -> markStations(input)
                 "start_timer" -> startTimer(input, turn)
-                "focus_on" -> focusOn(input)
                 "respond" -> respond(input, turn)
                 else -> ToolOutcome("unknown tool '$name'", isError = true)
             }
@@ -400,7 +449,7 @@ class AssistantTools(
 
         val disruptionsCall = async { runCatching { twin.disruptions() }.getOrNull()?.arr()?.mapNotNull { it.obj() }.orEmpty() }
         val directCall = async { runCatching { planValidated(PlanQuery(a.stopId, b.stopId, null, 3, null)).second }.getOrDefault(emptyList()) }
-        val direct = directCall.await()
+        val direct = directCall.await().let { l -> val sk = offCorridor(a.stopId, b.stopId); l.map { it.copy(journey = stripOffRoute(it.journey, sk)) } }
         val active = disruptionsCall.await().filter { it.str("status") == "active" && it.str("effect") in setOf("interrupted", "limited") }
         fun sectionIds(d: JsonObject, insideOnly: Boolean): Set<String> {
             val sec = d.obj("section") ?: return emptySet()
@@ -413,7 +462,7 @@ class AssistantTools(
             // enough: the twin tags every leg touching a section's end station.
             val sec = d.obj("section")
             val ends = listOfNotNull(sec?.obj("a")?.str("id"), sec?.obj("b")?.str("id")).mapNotNull { stations.byId(it) }
-            ends.size == 2 && ends.all { ratio(it) <= 1.5 }
+            ends.size == 2 && ends.all { ratio(it) <= 1.25 }
         }
         val night = java.time.Instant.ofEpochMilli(turn.now).atZone(ZURICH).hour in 0..4
         if (related.isEmpty() && direct.isNotEmpty() && !night) return@coroutineScope null
@@ -446,9 +495,11 @@ class AssistantTools(
             val five = java.time.Instant.ofEpochMilli(turn.now).atZone(ZURICH).withHour(5).withMinute(0).withSecond(0).withNano(0).toInstant().toEpochMilli()
             async { runCatching { planValidated(PlanQuery(a.stopId, b.stopId, five, 2, null)).second }.getOrDefault(emptyList()) }
         } else null
-        val waited = waitCall?.await().orEmpty()
-        val viaHubs = hubCalls.awaitAll().filterNotNull()
-        val morning = morningCall?.await().orEmpty()
+        val skip = offCorridor(a.stopId, b.stopId)
+        fun CachedJourney.clean() = copy(journey = stripOffRoute(journey, skip))
+        val waited = waitCall?.await().orEmpty().map { it.clean() }
+        val viaHubs = hubCalls.awaitAll().filterNotNull().map { (h, j1, j2) -> Triple(h, j1.clean(), j2.clean()) }
+        val morning = morningCall?.await().orEmpty().map { it.clean() }
 
         (direct + waited + morning + viaHubs.flatMap { listOf(it.second, it.third) }).forEach { cj ->
             cj.journey.long("departure")?.let { turn.publishedDepartures += it }
@@ -777,7 +828,9 @@ class AssistantTools(
             limit = (input.int("limit") ?: 4).coerceIn(1, 6),
             onboardTrainId = input.str("onboardTrainId") ?: turn.request.context?.trainId?.takeIf { it.isNotBlank() },
         )
-        val (r, list) = planValidated(q)
+        val skip = offCorridor(a.stopId, b.stopId)
+        val (r, list0) = planValidated(q)
+        val list = list0.map { it.copy(journey = stripOffRoute(it.journey, skip)) }
         list.forEach { cj ->
             cj.journey.objects("legs").forEach { leg -> leg.objects("incidents").forEach { inc -> turn.note(twinItem(inc)) } }
             cj.journey.long("departure")?.let { turn.publishedDepartures += it }
@@ -859,9 +912,12 @@ class AssistantTools(
             if (e.status != 404) twinFailed = true
             null
         }
+        // For a trip: the twin's disruptions whose section is off the corridor (e.g. Zürich HB - Winterthur for
+        // Zürich HB -> Bern) are left out, so the model never mentions closures that are not on the way.
+        val offRoute: Set<String> = if (from != null && to != null) offCorridor(from, to) else emptySet()
         val out = jsonOf {
             fun addTwinStation(part: JsonObject?) {
-                part?.objects("incidents")?.forEach { addIncident(twinItem(it), it.long("since"), it.strings("trainIds").size, it.str("description"), it, incidents, turn) }
+                part?.objects("incidents")?.filter { it.str("id") !in offRoute }?.forEach { addIncident(twinItem(it), it.long("since"), it.strings("trainIds").size, it.str("description"), it, incidents, turn) }
                 part?.objects("alerts")?.forEach { addAlert(it, alerts, turn) }
             }
             when {
@@ -872,8 +928,8 @@ class AssistantTools(
                     val r = twinOrNull { twin.situationOfTrip(a.stopId, b.stopId) }
                     addTwinStation(r?.obj("from"))
                     addTwinStation(r?.obj("to"))
-                    localStation(a.stopId, incidents, turn)
-                    localStation(b.stopId, incidents, turn)
+                    localStation(a.stopId, incidents, turn, offRoute)
+                    localStation(b.stopId, incidents, turn, offRoute)
                     reports { it.stopId in setOf(a.stopId, b.stopId) || it.toStopId in setOf(a.stopId, b.stopId) }.forEach { addReport(it, incidents, turn) }
                     opt("onTheWay", r?.strings("onTheWay"))
                 }
@@ -994,8 +1050,41 @@ class AssistantTools(
     }
 
 
-    private fun localStation(stopId: String, into: MutableMap<String, JsonObject>, turn: TurnState) {
-        runCatching { queries.stationIncidents(stopId) }.getOrNull()?.let { addLocal(it, into, turn) }
+    /** A journey without the leg incidents (and their warnings) of off-route disruptions. */
+    private fun stripOffRoute(j: JsonObject, skip: Set<String>): JsonObject {
+        if (skip.isEmpty()) return j
+        val dropped = HashSet<String>()
+        val legs = JsonArray(j.objects("legs").map { l ->
+            val inc = l.objects("incidents")
+            val keep = inc.filter { (it.str("id") ?: "") !in skip }
+            inc.filter { (it.str("id") ?: "") in skip }.mapNotNullTo(dropped) { it.str("title") }
+            if (keep.size == inc.size) l else JsonObject(l + ("incidents" to JsonArray(keep)))
+        })
+        val warnings = JsonArray(j.strings("warnings").filter { it !in dropped }.map { JsonPrimitive(it) })
+        return JsonObject(j + mapOf("legs" to legs, "warnings" to warnings))
+    }
+
+    /** Ids of active disruptions whose section does not lie between origin and destination. */
+    private suspend fun offCorridor(fromRaw: String, toRaw: String): Set<String> {
+        val a = runCatching { station(fromRaw, "fromStopId") }.getOrNull() ?: return emptySet()
+        val b = runCatching { station(toRaw, "toStopId") }.getOrNull() ?: return emptySet()
+        val all = runCatching { twin.disruptions() }.getOrNull()?.arr()?.mapNotNull { it.obj() }.orEmpty()
+        return all.filter { d ->
+            val sec = d.obj("section")
+            val ends = listOfNotNull(sec?.obj("a")?.str("id"), sec?.obj("b")?.str("id")).mapNotNull { stations.byId(it) }
+            ends.size == 2 && !ends.all { corridorRatio(a, b, it) <= 1.25 }
+        }.mapNotNull { it.str("id") }.toSet()
+    }
+
+    /** (|a s| + |s b|) / |a b|: 1 = on the straight line, larger = a detour. */
+    private fun corridorRatio(a: Station, b: Station, s: Station): Double {
+        if (a.lat == null || a.lon == null || b.lat == null || b.lon == null || s.lat == null || s.lon == null) return 99.0
+        val ab = StationResolver.distanceKm(a.lat, a.lon, b.lat, b.lon).coerceAtLeast(1.0)
+        return (StationResolver.distanceKm(a.lat, a.lon, s.lat, s.lon) + StationResolver.distanceKm(s.lat, s.lon, b.lat, b.lon)) / ab
+    }
+
+    private fun localStation(stopId: String, into: MutableMap<String, JsonObject>, turn: TurnState, skip: Set<String> = emptySet()) {
+        runCatching { queries.stationIncidents(stopId) }.getOrNull()?.filter { it.id !in skip && it.disruptionId !in skip }?.let { addLocal(it, into, turn) }
     }
 
     private fun reports(filter: (StaffReportRow) -> Boolean): List<StaffReportRow> =
@@ -1097,9 +1186,23 @@ class AssistantTools(
         return ToolOutcome("ok: tracking $id to ${st.name}", visuals = listOf(TrackTrainVisual(id, st.stopId, input.str("label"))))
     }
 
-    private fun highlightLine(input: JsonObject): ToolOutcome {
+    private suspend fun highlightLine(input: JsonObject): ToolOutcome {
         val line = input.str("line")?.replace(" ", "")?.uppercase() ?: throw ToolError("line is required")
-        return ToolOutcome("ok: line $line highlighted", visuals = listOf(LineVisual(line, input.str("label"))))
+        val visuals = mutableListOf<VisualCommand>(LineVisual(line, input.str("label")))
+        var note = ""
+        if (input.bool("route") == true) {
+            // The path of the line's longest run in service.
+            val trains = queries.trains(TrainFilter(line = line), 200, 0).items
+            val best = trains.maxByOrNull { runCatching { queries.trainStops(it.trainId, null).size }.getOrDefault(0) }
+            val geo = best?.let { t -> runCatching { twin.trainGeometry(t.trainId, null, null).obj()?.get("geometry") }.getOrNull() }
+            if (best != null && geo is JsonObject) {
+                val stops = runCatching { queries.trainStops(best.trainId, null) }.getOrDefault(emptyList())
+                val a = stops.firstOrNull(); val b = stops.lastOrNull()
+                visuals += SectionVisual("path:${a?.stopId}-${b?.stopId}", "blue", "$line ${a?.name ?: ""} – ${b?.name ?: ""}".trim(), simplifyGeometry(geo))
+                note = "; route drawn ${a?.name} – ${b?.name} (" + stops.joinToString(", ") { it.name }.take(400) + ")"
+            } else note = "; no train of $line in service, route not drawn"
+        }
+        return ToolOutcome("ok: line $line highlighted$note", visuals = visuals)
     }
 
     private suspend fun arrivals(input: JsonObject): ToolOutcome {
@@ -1123,6 +1226,75 @@ class AssistantTools(
             })
             if (list.isEmpty()) put("note", "No trains arriving soon.")
         })
+    }
+
+    private suspend fun highlightTrains(input: JsonObject): ToolOutcome = coroutineScope {
+        val items = input.objects("trains").ifEmpty { throw ToolError("trains is required") }.take(20)
+        val checked = items.map { o ->
+            async {
+                val id = o.str("trainId") ?: return@async null
+                if (queries.trainState(id) == null && runCatching { twin.train(id) }.isFailure) null else TrainVisual(id, o.str("label"))
+            }
+        }.awaitAll()
+        val ok = checked.filterNotNull()
+        val missing = items.mapNotNull { it.str("trainId") }.filter { id -> ok.none { it.trainId == id } }
+        if (ok.isEmpty()) throw ToolError("none of these trains is in service")
+        ToolOutcome("ok: ${ok.size} train(s) highlighted" + if (missing.isEmpty()) "" else "; not in service: ${missing.joinToString()}", visuals = ok)
+    }
+
+    private suspend fun markStations(input: JsonObject): ToolOutcome {
+        val out = ArrayList<VisualCommand>()
+        val errors = ArrayList<String>()
+        input.objects("stations").ifEmpty { throw ToolError("stations is required") }.take(30).forEach { o ->
+            runCatching { markStation(o).visuals }.onSuccess { out += it }.onFailure { errors += (it.message ?: "error") }
+        }
+        if (out.isEmpty()) throw ToolError(errors.joinToString("; "))
+        return ToolOutcome("ok: ${out.size} station(s) marked" + if (errors.isEmpty()) "" else "; ${errors.joinToString("; ")}", visuals = out)
+    }
+
+    private suspend fun showPath(input: JsonObject): ToolOutcome = coroutineScope {
+        val stops = input.strings("stopIds").map { station(it, "stopIds") }.distinctBy { it.stopId }
+        if (stops.size < 2) throw ToolError("give at least 2 stations")
+        val parts = stops.zipWithNext().map { (a, b) ->
+            async { runCatching { twin.sectionGeometry(a.stopId, b.stopId).obj()?.get("geometry") }.getOrNull() }
+        }.awaitAll()
+        val geometry = mergeLines(parts) ?: throw ToolError("no track known along these stations")
+        val colour = input.str("colour")?.lowercase()?.takeIf { it in COLOURS } ?: "blue"
+        val label = input.str("label") ?: "${stops.first().name} – ${stops.last().name}"
+        ToolOutcome("ok: path drawn (id path:${stops.first().stopId}-${stops.last().stopId})",
+            visuals = listOf(SectionVisual("path:${stops.first().stopId}-${stops.last().stopId}", colour, label, simplifyGeometry(geometry))))
+    }
+
+    /** LineStrings / MultiLineStrings -> one MultiLineString. */
+    private fun mergeLines(parts: List<JsonElement?>): JsonObject? {
+        val lines = ArrayList<JsonElement>()
+        parts.forEach { g ->
+            val o = g as? JsonObject ?: return@forEach
+            val coords = o["coordinates"] as? JsonArray ?: return@forEach
+            when (o.str("type")) {
+                "LineString" -> lines.add(coords)
+                "MultiLineString" -> lines.addAll(coords)
+            }
+        }
+        if (lines.isEmpty()) return null
+        return jsonOf { put("type", "MultiLineString"); put("coordinates", JsonArray(lines)) }
+    }
+
+    private suspend fun label(input: JsonObject): ToolOutcome {
+        val text = input.str("text") ?: throw ToolError("text is required")
+        val (lon, lat) = input.str("stopId")?.let { s ->
+            val st = station(s, "stopId").let { x -> if (x.lat != null) x else twinSearch(x.stopId).firstOrNull { it.stopId == x.stopId } ?: x }
+            (st.lon ?: throw ToolError("no coordinates for ${st.name}")) to st.lat!!
+        } ?: ((input.double("lon") ?: throw ToolError("give stopId or lon/lat")) to (input.double("lat") ?: throw ToolError("lat is required")))
+        val id = "label:" + (input.str("stopId") ?: "%.4f,%.4f".format(lon, lat))
+        return ToolOutcome("ok: label placed (id $id)", visuals = listOf(LabelVisual(id, lon, lat, text.take(80))))
+    }
+
+    private suspend fun fit(input: JsonObject): ToolOutcome {
+        val stops = input.strings("stopIds").mapNotNull { runCatching { station(it, "stopIds").stopId }.getOrNull() }
+        val v = FitVisual(input.strings("trainIds"), stops, input.strings("sectionIds"))
+        if (v.trainIds.isEmpty() && v.stopIds.isEmpty() && v.sectionIds.isEmpty()) throw ToolError("give trainIds, stopIds or sectionIds")
+        return ToolOutcome("ok: map will fit", visuals = listOf(v))
     }
 
     private suspend fun highlightTrain(input: JsonObject): ToolOutcome {
@@ -1195,6 +1367,7 @@ class AssistantTools(
                 is RouteVisual -> v.legs.forEach { box.addGeometry(it.geometry) }
                 is SectionVisual -> box.addGeometry(v.geometry)
                 is StationVisual -> box.add(v.lon, v.lat)
+                is LabelVisual -> box.add(v.lon, v.lat)
                 is TrainVisual -> queries.trainState(v.trainId)?.position?.let { box.add(it.lon, it.lat) }
                 else -> Unit
             }
@@ -1348,8 +1521,8 @@ class AssistantTools(
         ).map { Regex(it, RegexOption.IGNORE_CASE) }
         // case-sensitive: "S3" yes, "it's 3" no
         private val LINE_PATTERN = Regex("\\b(?:(IC|ICN|IR|RE|EC|ICE|TGV|RJX|PE)\\s?(\\d{1,3})|(S|R)(\\d{1,2}))\\b")
-        val COLOURS = setOf("red", "orange", "green", "blue")
-        val ROLES = listOf("origin", "destination", "transfer", "incident")
+        val COLOURS = setOf("red", "orange", "green", "blue", "grey")
+        val ROLES = listOf("origin", "destination", "transfer", "incident", "info")
         /** Major hubs used to explore alternative corridors. */
         private val HUBS = listOf("8507000", "8500218", "8503000", "8501120", "8504300", "8505000", "8500010", "8504100")
 

@@ -146,7 +146,7 @@ class AssistantTest {
                 assertEquals("1h", first["system"]!!.jsonArray[0].jsonObject["cache_control"]!!.jsonObject["ttl"]!!.jsonPrimitive.content)
                 assertEquals(
                     setOf("find_station", "station_board", "train_status", "plan_journey", "situation", "bulletins", "arrivals", "show_route", "show_section",
-                        "highlight_train", "track_train", "highlight_line", "mark_station", "start_timer", "focus_on", "respond"),
+                        "highlight_trains", "track_train", "highlight_line", "mark_stations", "show_path", "label", "remove", "start_timer", "fit", "respond"),
                     first["tools"]!!.jsonArray.map { it.jsonObject["name"]!!.jsonPrimitive.content }.toSet(),
                 )
                 val firstText = first["messages"]!!.jsonArray[0].jsonObject["content"].toString()

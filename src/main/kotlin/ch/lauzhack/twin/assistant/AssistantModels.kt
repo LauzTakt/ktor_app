@@ -96,6 +96,21 @@ data class TrackTrainVisual(val trainId: String, val stopId: String, val label: 
 @SerialName("line")
 data class LineVisual(val line: String, val label: String?) : VisualCommand
 
+/** A short callout on the map. */
+@Serializable
+@SerialName("label")
+data class LabelVisual(val id: String, val lon: Double, val lat: Double, val text: String) : VisualCommand
+
+/** The client fits the map to these trains (live positions), stations and drawn sections, above its bottom sheet. */
+@Serializable
+@SerialName("fit")
+data class FitVisual(val trainIds: List<String>, val stopIds: List<String>, val sectionIds: List<String>) : VisualCommand
+
+/** Remove one drawn item by id. */
+@Serializable
+@SerialName("remove")
+data class RemoveVisual(val id: String) : VisualCommand
+
 /** Fit the map to `[west, south, east, north]`. */
 @Serializable
 @SerialName("focus")

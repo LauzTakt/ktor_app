@@ -313,10 +313,10 @@ class AssistantAgent(
             recommendedRoute?.let { add(it) }
             addAll(unique.filter { it is RouteVisual && it !== recommendedRoute })
             addAll(unique.filterIsInstance<SectionVisual>())
-            addAll(unique.filter { it !is RouteVisual && it !is SectionVisual && it !is FocusVisual })
+            addAll(unique.filter { it !is RouteVisual && it !is SectionVisual && it !is FocusVisual && it !is FitVisual })
             addAll(markers)
             // the explicit focus wins; otherwise fit everything drawn
-            (unique.lastOrNull { it is FocusVisual } ?: tools.autoFocus(unique + markers))?.let { add(it) }
+            (unique.lastOrNull { it is FocusVisual || it is FitVisual } ?: tools.autoFocus(unique + markers))?.let { add(it) }
         }
         val unavailable = (r?.unavailable.orEmpty() + Scope.topicsOf(turn.request.question)).toSet().let { u -> Scope.TOPICS.filter { it in u } }
         return AskResponse(answer, r?.summary, situation, options, visuals, r?.followUp, System.currentTimeMillis() - started, unavailable, r?.append?.takeIf { it })
