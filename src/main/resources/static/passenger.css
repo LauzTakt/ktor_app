@@ -166,9 +166,9 @@ button.stop:hover { background: var(--milk); }
 .illus-train { animation: arrive 700ms var(--ease) both; }
 @keyframes arrive { from { transform: translateX(-40px); opacity: 0; } }
 .illus-person { animation: rowIn 500ms 300ms var(--ease) both; }
-.loki-hero { flex: 1; display: grid; place-items: center; padding-bottom: 10vh; }
-.loki-hero .loki { width: 128px; }
-.loki-hero .loki-track { width: min(320px, 80%); }
+.tikt-hero { flex: 1; display: grid; place-items: center; padding-bottom: 10vh; }
+.tikt-hero .tikt { width: 128px; }
+.tikt-hero .tikt-track { width: min(320px, 80%); }
 
 /* Ask (train / station) */
 .ask { padding: 16px; display: flex; flex-direction: column; gap: 10px; }

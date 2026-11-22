@@ -1,7 +1,7 @@
 // The screens of the passenger flow: detect, are-you-here questions, station, destination, browse, connections, on tracks.
 
 import { $, esc, LATE_SEC, publicApi as api, reducedMotion, time as hhmm } from "../common.js";
-import { lokiLoading } from "../loki.js";
+import { tiktLoading } from "../tikt.js";
 import { ILLUSTRATION, NEAR_M, alertHtml, backBtn, buzz, clamp, distText, ic, labelView, lineLabel, onLeave, placeholders, restartBtn, setUrl, setView, show, stateHtml, timeHtml, toast, tripWatchAvailable, untilText } from "./ui.js";
 import { geo, geoText, live, locate, nearbyStationsFor, nearbyTrainsFor } from "./location.js";
 import { stationPicker } from "./stations.js";
@@ -14,7 +14,7 @@ export function detectScreen(opts = {}) {
   setView(null);
   show((s) => {
     s.innerHTML = `
-      <div class="loki-hero">${lokiLoading({ caption: "Finding where you are…", sub: `I look for a train or a station within ${NEAR_M} m of you.`, mood: "think" })}</div>
+      <div class="tikt-hero">${tiktLoading({ caption: "Finding where you are…", sub: `I look for a train or a station within ${NEAR_M} m of you.`, mood: "think" })}</div>
       <div class="actions"><button class="btn btn-block" id="skip">Just browsing</button></div>`;
     let alive = true;
     onLeave(() => (alive = false));

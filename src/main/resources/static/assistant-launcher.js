@@ -8,12 +8,12 @@
   const setOpen = (open) => {
     if (open) opener = document.activeElement;
     if (open && !panel.firstChild) {
-      // Loki waits behind the frame while the assistant loads (map + voice), then the frame covers him.
+      // Tikt waits behind the frame while the assistant loads (map + voice), then the frame covers him.
       const wait = document.createElement("div");
       wait.className = "assistant-wait";
       panel.appendChild(wait);
-      import("/loki.js").then(({ lokiLoading }) => {
-        wait.innerHTML = lokiLoading({ caption: "Loki is on his way…", sub: "Your travel assistant, by voice or chat.", mood: "hello" });
+      import("/tikt.js").then(({ tiktLoading }) => {
+        wait.innerHTML = tiktLoading({ caption: "Tikt is on his way…", sub: "Your travel assistant, by voice or chat.", mood: "hello" });
       }).catch(() => {});
       const frame = document.createElement("iframe");
       frame.src = "/assistant/";

@@ -1,9 +1,9 @@
-// First-run tour of the passenger view, guided by "Loki", a small flat vector train (docs/STYLE.md "Mascot").
+// First-run tour of the passenger view, guided by "Tikt", a small flat vector train (docs/STYLE.md "Mascot").
 // Shown once per browser (localStorage), before the location prompt; the "?" button in the header replays it.
 // Self-contained: `startTour({ onDone })` builds its own overlay and removes it when finished or skipped.
 
 import { reducedMotion } from "./common.js";
-import { LOKI_SVG } from "./loki.js";
+import { TIKT_SVG } from "./tikt.js";
 
 const SEEN_KEY = "twin-tour-v1";
 
@@ -14,7 +14,7 @@ const markSeen = () => { try { localStorage.setItem(SEEN_KEY, "done"); } catch {
 
 // Mood per step: "hello" (waves the pantograph), "point" (looks at the target), "cheer" (brows up, big smile).
 const STEPS = [
-  { mood: "hello", title: "Hi, I'm Loki", text: "I'll show you around this app. Skip the tour any time." },
+  { mood: "hello", title: "Hi, I'm Tikt", text: "I'll show you around this app. Skip the tour any time." },
   { mood: "point", title: "I find your train for you", text: "When we start, your phone asks for your location. I use it only to spot a train or a station close to you. Say no and you can still pick your stations by hand." },
   { target: "#assistant-fab", mood: "point", title: "Talk to me", text: "Not sure which train to take? Tap here and ask me, by voice or by chat." },
   { target: "#alerts-btn", mood: "point", title: "Your alerts", text: "Follow a train or a line and I let you know about delays, incidents and when you reach your stop." },
@@ -24,7 +24,7 @@ const STEPS = [
   { mood: "cheer", title: "All aboard!", text: "Let's find your train.", last: true },
 ];
 
-const MASCOT_W = 84; // rendered width of the mascot in px (CSS .loki)
+const MASCOT_W = 84; // rendered width of the mascot in px (CSS .tikt)
 
 export function startTour({ onDone = () => {} } = {}) {
   if (document.querySelector(".tour")) return;
@@ -40,7 +40,7 @@ export function startTour({ onDone = () => {} } = {}) {
     <div class="tour-dim"></div>
     <div class="tour-spot off"></div>
     <div class="tour-guide" role="dialog" aria-modal="true" aria-labelledby="tour-title" aria-describedby="tour-text">
-      <div class="tour-track"><div class="loki">${LOKI_SVG}</div><div class="tour-rail"></div></div>
+      <div class="tour-track"><div class="tikt">${TIKT_SVG}</div><div class="tour-rail"></div></div>
       <div class="tour-bubble">
         <div class="tour-head"><span class="tour-count"></span><button class="tour-skip" type="button">Skip tour</button></div>
         <h2 id="tour-title"></h2>
@@ -53,12 +53,12 @@ export function startTour({ onDone = () => {} } = {}) {
     </div>`;
   document.body.append(root);
   const q = (sel) => root.querySelector(sel);
-  const guide = q(".tour-guide"), spot = q(".tour-spot"), loki = q(".loki");
+  const guide = q(".tour-guide"), spot = q(".tour-spot"), tikt = q(".tikt");
   const lastFocus = document.activeElement;
   document.documentElement.classList.add("tour-open");
 
-  // Loki starts off-screen on the left and drives in on the first step.
-  loki.style.setProperty("--mx", `${-MASCOT_W - 40}px`);
+  // Tikt starts off-screen on the left and drives in on the first step.
+  tikt.style.setProperty("--mx", `${-MASCOT_W - 40}px`);
   requestAnimationFrame(() => root.classList.add("in"));
 
   function render(dir = 1) {
@@ -68,22 +68,22 @@ export function startTour({ onDone = () => {} } = {}) {
     q(".tour-back").hidden = i === 0;
     q(".tour-next").textContent = s.last ? "Find my train" : i === 0 ? "Show me" : "Next";
     q(".tour-skip").hidden = !!s.last;
-    loki.dataset.mood = s.mood;
-    loki.classList.remove("hop");
-    void loki.offsetWidth; // restart the small "arrived" nod
-    loki.classList.add("hop");
+    tikt.dataset.mood = s.mood;
+    tikt.classList.remove("hop");
+    void tikt.offsetWidth; // restart the small "arrived" nod
+    tikt.classList.add("hop");
     type(s.text);
     place(s, dir);
     q(".tour-next").focus({ preventScroll: true });
   }
 
-  // Text appears like Loki is saying it; Next while typing shows the rest at once.
+  // Text appears like Tikt is saying it; Next while typing shows the rest at once.
   function type(text) {
     const p = q("#tour-text");
     clearInterval(typing?.id);
     if (reducedMotion()) { p.textContent = text; return; }
     let n = 0;
-    loki.classList.add("talking");
+    tikt.classList.add("talking");
     const id = setInterval(() => {
       n += 2;
       p.textContent = text.slice(0, n);
@@ -96,7 +96,7 @@ export function startTour({ onDone = () => {} } = {}) {
     clearInterval(typing.id);
     q("#tour-text").textContent = typing.text;
     typing = null;
-    loki.classList.remove("talking");
+    tikt.classList.remove("talking");
     return true;
   }
 
@@ -133,22 +133,22 @@ export function startTour({ onDone = () => {} } = {}) {
     }
     guide.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
     // Drive along the rail: face the direction of travel while moving, then stop and look at the target.
-    const from = parseFloat(loki.style.getPropertyValue("--mx")) || 0;
+    const from = parseFloat(tikt.style.getPropertyValue("--mx")) || 0;
     if (Math.abs(from - mx) > 4 && !reducedMotion()) {
-      loki.classList.add("moving");
-      loki.style.setProperty("--lx", `${Math.sign(mx - from) * 2.5 || dir * 2.5}px`);
-      loki.style.setProperty("--ly", "0px");
-      clearTimeout(loki._stop);
-      loki._stop = setTimeout(() => {
-        loki.classList.remove("moving");
-        loki.style.setProperty("--lx", `${look.x}px`);
-        loki.style.setProperty("--ly", `${look.y}px`);
+      tikt.classList.add("moving");
+      tikt.style.setProperty("--lx", `${Math.sign(mx - from) * 2.5 || dir * 2.5}px`);
+      tikt.style.setProperty("--ly", "0px");
+      clearTimeout(tikt._stop);
+      tikt._stop = setTimeout(() => {
+        tikt.classList.remove("moving");
+        tikt.style.setProperty("--lx", `${look.x}px`);
+        tikt.style.setProperty("--ly", `${look.y}px`);
       }, 520);
     } else {
-      loki.style.setProperty("--lx", `${look.x}px`);
-      loki.style.setProperty("--ly", `${look.y}px`);
+      tikt.style.setProperty("--lx", `${look.x}px`);
+      tikt.style.setProperty("--ly", `${look.y}px`);
     }
-    loki.style.setProperty("--mx", `${Math.round(mx)}px`);
+    tikt.style.setProperty("--mx", `${Math.round(mx)}px`);
     guide.style.setProperty("--tail", `${Math.round(mx + MASCOT_W / 2)}px`);
   }
 
@@ -171,7 +171,7 @@ export function startTour({ onDone = () => {} } = {}) {
     document.documentElement.classList.remove("tour-open");
     root.classList.remove("in");
     root.classList.add("out");
-    if (finished && !reducedMotion()) loki.style.setProperty("--mx", `${innerWidth}px`); // drives off to the right
+    if (finished && !reducedMotion()) tikt.style.setProperty("--mx", `${innerWidth}px`); // drives off to the right
     setTimeout(() => root.remove(), reducedMotion() ? 0 : 420);
     if (lastFocus instanceof HTMLElement && document.contains(lastFocus)) lastFocus.focus({ preventScroll: true });
     onDone({ finished });
@@ -195,7 +195,7 @@ export function startTour({ onDone = () => {} } = {}) {
   q(".tour-back").onclick = () => go(-1);
   q(".tour-skip").onclick = () => close(false);
   q(".tour-dim").onclick = () => go(1);
-  q(".loki").onclick = () => { loki.classList.remove("hop"); void loki.offsetWidth; loki.classList.add("hop"); navigator.vibrate?.(8); };
+  q(".tikt").onclick = () => { tikt.classList.remove("hop"); void tikt.offsetWidth; tikt.classList.add("hop"); navigator.vibrate?.(8); };
 
   render();
 }

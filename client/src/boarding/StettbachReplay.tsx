@@ -1,5 +1,5 @@
 import { ArrowRight, RotateCcw, X } from "lucide-react";
-import { Loki } from "../Loki";
+import { Tikt } from "../Tikt";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { MapController } from "../map/MapController";
 import { BoardingCard } from "./BoardingCard";
@@ -128,9 +128,9 @@ export function StettbachReplay() {
       <div ref={mapNode} className="map" role="region" aria-label="Rail map from Zürich HB to Stettbach" />
       <header ref={top} className="topbar">
         <div className="brand">
-          <Loki className="mark mark--loki" />
+          <Tikt className="mark mark--tikt" />
           <div>
-            <h1>Loki · Travel assistant</h1>
+            <h1>Tikt · Travel assistant</h1>
             <p className="status">Disruption replay · 25 Sep 2026</p>
           </div>
         </div>

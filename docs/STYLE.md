@@ -186,13 +186,13 @@ colour inside buttons). Do not mix icon families.
 
 ## 9. Mascot
 
-"Loki" is the app's mascot: a small flat vector train. Drawing in `static/loki.js` (passenger view) and
-`client/src/Loki.tsx` (travel assistant), kept identical; shared styles in `static/loki.css` (served at `/loki.css`,
+"Tikt" is the app's mascot: a small flat vector train. Drawing in `static/tikt.js` (passenger view) and
+`client/src/Tikt.tsx` (travel assistant), kept identical; shared styles in `static/tikt.css` (served at `/tikt.css`,
 linked by both apps). Where it appears:
 
-- **Loading**: the location step ("Finding where you are…") and the assistant panel while it opens show Loki rolling on
-  a moving track (`lokiLoading()`); lists that are loading show a small Loki above the skeleton rows.
-- **Travel assistant**: the assistant speaks as Loki. His face is the header mark and the avatar next to each run of
+- **Loading**: the location step ("Finding where you are…") and the assistant panel while it opens show Tikt rolling on
+  a moving track (`tiktLoading()`); lists that are loading show a small Tikt above the skeleton rows.
+- **Travel assistant**: the assistant speaks as Tikt. His face is the header mark and the avatar next to each run of
   assistant messages; he "thinks" while the timetable is checked, talks briefly when a reply appears, and his mouth
   follows the audio level while the voice agent speaks.
 - **First-run tour** of the passenger view (`static/onboarding.js`).

@@ -210,5 +210,5 @@ or keeping the static pages and extracting the shared pieces (map style, formatt
 
 - `wallet` keeps its own SQLite file (`TripWatchStore`, opened with `Sqlite.open`), while every other table lives in
   the main file: wallet passes already issued must survive independently of the main database.
-- `client/` (React) and `static/` repeat a few small pieces (the Loki drawing, the map dark theme, train colours):
+- `client/` (React) and `static/` repeat a few small pieces (the Tikt drawing, the map dark theme, train colours):
   Docker builds `client/` on its own, so it cannot import from `static/`. Change both together.

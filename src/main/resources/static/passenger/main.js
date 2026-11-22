@@ -1,7 +1,7 @@
 // Passenger view (`/`). Look and feel: docs/STYLE.md. All train / station / incident data comes from /api/v1.
 //
 // Flow:
-//   First visit (no QR / link): Loki's tour (onboarding.js) over a welcome screen, then the location step. "?" replays it.
+//   First visit (no QR / link): Tikt's tour (onboarding.js) over a welcome screen, then the location step. "?" replays it.
 //   QR: `/?train=<trainId>` -> on tracks · `/?station=<stopId>` -> pick destination · `/?stop=<stopId>` -> station view
 //   Location: train within 200 m -> "Are you on this train?" (Yes / No / other trains nearby)
 //             else station within 200 m -> "Are you at this station?" (Yes / No)
@@ -32,7 +32,7 @@ tripWatchAvailable.then((available) => {
 $("#tour-btn").innerHTML = ic("help");
 $("#tour-btn").addEventListener("click", () => { buzz(); startTour(); });
 
-// First visit without a QR / shared link: Loki's tour first, so the location prompt comes after it is explained.
+// First visit without a QR / shared link: Tikt's tour first, so the location prompt comes after it is explained.
 if (!location.search && !tourSeen()) {
   welcomeScreen();
   startTour({ onDone: () => routeFromUrl(location.search) });

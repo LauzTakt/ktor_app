@@ -1,7 +1,7 @@
 import { ArrowRight, ArrowUp, ChevronDown, Clock3, Footprints, Keyboard, LocateFixed, Mic, Square } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import type { Option, SituationItem } from "./contract";
-import { Loki } from "./Loki";
+import { Tikt } from "./Tikt";
 import { countdown, duration, hhmm, sbbText } from "./format";
 import type { Timer } from "./map/MapController";
 import type { VoiceStatus } from "./voice";
@@ -37,11 +37,11 @@ export function Welcome({ suggestions, onPick, place, onLocate, locating }: { su
   );
 }
 
-/** The conversation. Loki speaks for the assistant: his face sits next to each run of assistant messages (on the
+/** The conversation. Tikt speaks for the assistant: his face sits next to each run of assistant messages (on the
  *  last one, like a messenger avatar); the newest one talks while the voice agent speaks. */
 export function Transcript({ items, checking, renderCards, speechLevel }: { items: Item[]; checking: boolean; renderCards: () => ReactNode; speechLevel?: () => number }) {
-  const isLoki = (i: Item | undefined) => i?.kind === "msg" && i.role === "assistant";
-  const lastLoki = checking ? -1 : items.findLastIndex(isLoki);
+  const isTikt = (i: Item | undefined) => i?.kind === "msg" && i.role === "assistant";
+  const lastTikt = checking ? -1 : items.findLastIndex(isTikt);
   return (
     <div className="transcript">
       {items.map((i, k) =>
@@ -51,7 +51,7 @@ export function Transcript({ items, checking, renderCards, speechLevel }: { item
           </div>
         ) : i.role === "assistant" ? (
           <div key={i.key} className="say">
-            {isLoki(items[k + 1]) || (checking && k === items.length - 1) ? <span className="avatar-gap" /> : <Loki className={k === lastLoki ? "avatar said" : "avatar"} voiceLevel={k === lastLoki ? speechLevel : undefined} />}
+            {isTikt(items[k + 1]) || (checking && k === items.length - 1) ? <span className="avatar-gap" /> : <Tikt className={k === lastTikt ? "avatar said" : "avatar"} voiceLevel={k === lastTikt ? speechLevel : undefined} />}
             <div className="bubble bubble--assistant">
               <p>{i.text}</p>
               {i.extra && <p className="bubble-extra">{i.extra}</p>}
@@ -66,8 +66,8 @@ export function Transcript({ items, checking, renderCards, speechLevel }: { item
       )}
       {checking && (
         <div className="say">
-          <Loki className="avatar" mood="think" />
-          <div className="bubble bubble--assistant bubble--checking" role="status" aria-label="Loki is checking the live timetable">
+          <Tikt className="avatar" mood="think" />
+          <div className="bubble bubble--assistant bubble--checking" role="status" aria-label="Tikt is checking the live timetable">
             <span className="dots" aria-hidden="true">
               <i />
               <i />

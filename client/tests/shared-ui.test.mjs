@@ -33,7 +33,7 @@ test("the Vite preview uses the same root stylesheets as the packaged assistant"
   try {
     const entry = await readFile(new URL("index.html", client), "utf8");
     const html = await server.transformIndexHtml("/assistant/", entry);
-    for (const href of ["/theme.css", "/loki.css"]) {
+    for (const href of ["/theme.css", "/tikt.css"]) {
       assert.ok(html.includes(`href="${href}"`), `Expected Ktor stylesheet ${href}`);
     }
     assert.ok(server.config.server.proxy["/vendor/daisyui.css"]);

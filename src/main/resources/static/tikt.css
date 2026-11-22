@@ -1,0 +1,82 @@
+/* Tikt, the mascot of the app (docs/STYLE.md "9. Mascot"): a flat vector train, markup in tikt.js (passenger view)
+   and client/src/Tikt.tsx (travel assistant), shared styles here. Served at /tikt.css for both. */
+
+.tikt { --tikt-panto: var(--iron); --talk: 1; display: inline-block; line-height: 0; }
+.tikt-svg { display: block; width: 100%; height: auto; overflow: visible; animation: tiktIdle 2.6s ease-in-out infinite alternate; }
+.tikt.moving .tikt-svg { animation: tiktRoll 160ms linear infinite alternate; }
+.tikt.hop .tikt-body { animation: tiktNod 420ms var(--ease); }
+.tikt-body { transform-box: fill-box; transform-origin: 50% 100%; }
+
+.tikt-red { fill: var(--red); }
+.tikt-glass { fill: #fff; }
+.tikt-ink { fill: #212121; }
+.tikt-glint { fill: #fff; }
+.tikt-hub { fill: #8d8d8d; }
+.tikt-lamp { fill: #fff; }
+.tikt-skirt { fill: #444; }
+:root[data-theme="dark"] .tikt-skirt { fill: #686868; }
+.tikt-panto { fill: none; stroke: var(--tikt-panto); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round;
+  transform-box: fill-box; transform-origin: 50% 100%; transition: transform 260ms var(--ease); }
+.tikt-brow { fill: none; stroke: #212121; stroke-width: 2.4; stroke-linecap: round; transition: transform 260ms var(--ease); }
+.tikt-smile { fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; }
+.tikt-mouth { fill: #fff; opacity: 0; transform-box: fill-box; transform-origin: center; }
+
+/* Eyes look where --lx / --ly say; they blink every few seconds. */
+.tikt-eyes { transform: translate(var(--lx, 0px), var(--ly, 0px)); transition: transform 300ms var(--ease); }
+.tikt-eye { transform-box: fill-box; transform-origin: center; animation: tiktBlink 4.2s infinite; }
+
+/* Talking: the smile becomes a mouth. `talking` animates it on its own (text appearing); `voice` follows --talk
+   (0–1), set from the audio level by the assistant while it speaks. */
+.tikt.talking .tikt-smile, .tikt.voice .tikt-smile { opacity: 0; }
+.tikt.talking .tikt-mouth { opacity: 1; animation: tiktTalk 180ms ease-in-out infinite alternate; }
+.tikt.voice .tikt-mouth { opacity: 1; transform: scaleY(calc(0.25 + var(--talk) * 0.75)); transition: transform 60ms linear; }
+
+/* `said`: a short burst of talking when a new message appears, then the smile comes back. */
+.tikt.said:not(.voice) .tikt-mouth { animation: tiktSay 1.6s linear both; }
+.tikt.said:not(.voice) .tikt-smile { animation: tiktSmileBack 1.6s step-end both; }
+@keyframes tiktSay {
+  0%, 20%, 40%, 60%, 80% { opacity: 1; transform: scaleY(0.35); }
+  10%, 30%, 50%, 70%, 90% { opacity: 1; transform: scaleY(1); }
+  100% { opacity: 0; transform: scaleY(0.35); }
+}
+@keyframes tiktSmileBack { 0% { opacity: 0; } 100% { opacity: 1; } }
+
+/* Moods */
+.tikt[data-mood="hello"] .tikt-panto { animation: tiktWave 900ms var(--ease) 2; }
+.tikt[data-mood="cheer"] .tikt-brow { transform: translateY(-2px); }
+.tikt[data-mood="cheer"] .tikt-panto { transform: scaleY(1.25); }
+.tikt[data-mood="point"] .tikt-brow.l { transform: translateY(-1.5px); }
+.tikt[data-mood="think"] { --lx: 2px; --ly: -2.5px; }
+.tikt[data-mood="think"] .tikt-brow.r { transform: translateY(-2px); }
+.tikt[data-mood="think"] .tikt-panto { animation: tiktWave 1.2s var(--ease) infinite; }
+
+@keyframes tiktIdle { from { transform: translateY(0); } to { transform: translateY(-3px); } }
+@keyframes tiktRoll { from { transform: translateY(0); } to { transform: translateY(-1.2px); } }
+@keyframes tiktNod { 0% { transform: rotate(0); } 35% { transform: rotate(-5deg); } 70% { transform: rotate(2deg); } 100% { transform: rotate(0); } }
+@keyframes tiktBlink { 0%, 93%, 100% { transform: scaleY(1); } 96% { transform: scaleY(0.1); } }
+@keyframes tiktTalk { from { transform: scaleY(0.35); } to { transform: scaleY(1); } }
+@keyframes tiktWave { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(0.6); } }
+
+/* ---------- loading scene: Tikt rolls in place on a moving track, caption underneath ---------- */
+.tikt-loading { display: grid; justify-items: center; gap: 10px; padding: 8px 0; text-align: center; }
+.tikt-loading .tikt { width: 96px; }
+.tikt-loading .tikt-svg { animation: tiktRoll 170ms linear infinite alternate; }
+.tikt-track { width: min(260px, 70%); height: 10px; margin-top: -8px; overflow: visible; }
+.tikt-track .rail { stroke: var(--iron); stroke-width: 2; }
+.tikt-track .sleepers { stroke: var(--cement); stroke-width: 4; stroke-dasharray: 4 10; animation: tiktTrack 600ms linear infinite; }
+.tikt-loading .cap { margin: 4px 0 0; font-size: 19px; font-weight: 700; }
+.tikt-loading .sub { margin: 0; font-size: 14px; color: var(--metal); max-width: 34ch; }
+/* small variant inside cards and lists while they load */
+.tikt-loading.mini { grid-template-columns: auto; padding: 12px 0 4px; gap: 6px; }
+.tikt-loading.mini .tikt { width: 44px; }
+.tikt-loading.mini .tikt-track { width: 120px; height: 8px; margin-top: -6px; }
+.tikt-loading.mini .cap { font-size: 13px; font-weight: 400; color: var(--metal); margin: 0; }
+@keyframes tiktTrack { to { stroke-dashoffset: 14; } }
+
+/* ---------- avatar: Tikt's face next to what the assistant says ---------- */
+.tikt.avatar { width: 32px; flex: none; }
+.tikt.avatar .tikt-svg { animation: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tikt, .tikt * { animation: none !important; transition: none !important; }
+}

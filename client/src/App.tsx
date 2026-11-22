@@ -6,7 +6,7 @@ import { onlyUnavailable, unavailableAnswer, unavailableIn } from "./scope";
 import { hhmm } from "./format";
 import { MapController, type DrawnItem, type Pick as MapPick, type Timer } from "./map/MapController";
 import { MapLegend, PickCard, TrackChip, type PickInfo, type Tracking } from "./mapui";
-import { Loki } from "./Loki";
+import { Tikt } from "./Tikt";
 import { CheckingPill, Dock, OptionsCard, SituationCard, TimerChip, Transcript, Welcome, type Item } from "./ui";
 import { describeScreen, onScreenView, screenView } from "./screenView";
 import { prefetchVoice, Voice, type AskBackendParams, type GetBriefParams, type VoiceStatus } from "./voice";
@@ -585,7 +585,7 @@ export function App() {
     if (v) voice.current?.context(`[App] Behind the assistant, the passenger now has ${describeScreen(v)} open. "This train", "this line" or "here" may refer to it.`);
   }), []);
   const levels = useCallback(() => voice.current?.levels() ?? { input: 0, output: 0 }, []);
-  // Loki speaks for the assistant: while the voice agent talks, his mouth follows the audio level.
+  // Tikt speaks for the assistant: while the voice agent talks, his mouth follows the audio level.
   const speechLevel = useCallback(() => levels().output, [levels]);
   const speaking = voiceStatus === "live" && voiceMode === "speaking";
   const talk = () => {
@@ -726,9 +726,9 @@ export function App() {
 
       <header ref={topRef} className="topbar">
         <div className="brand">
-          <Loki className="mark mark--loki" mood={checking ? "think" : undefined} voiceLevel={speaking ? speechLevel : undefined} />
+          <Tikt className="mark mark--tikt" mood={checking ? "think" : undefined} voiceLevel={speaking ? speechLevel : undefined} />
           <div>
-            <h1>Loki · Travel assistant</h1>
+            <h1>Tikt · Travel assistant</h1>
             <p className="status">
               <i className={`dot ${fleet ? "dot--live" : ""}`} />
               {fleet ? <>Live · <b>{fleet.count.toLocaleString("en")}</b> trains</> : "Connecting to the live network"}

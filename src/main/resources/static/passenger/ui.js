@@ -1,7 +1,7 @@
 // Shared UI of the passenger view: constants, formatting, icons, toast, theme button, screen transitions.
 
 import { $, esc, LATE_SEC, onTheme, publicApi as api, reducedMotion, setTheme, time as hhmm, toggleTheme } from "../common.js";
-import { lokiLoading } from "../loki.js";
+import { tiktLoading } from "../tikt.js";
 import { live } from "./location.js";
 import { alerts } from "./alerts.js";
 
@@ -169,6 +169,6 @@ export function setView(view) {
 export const labelView = (label) => { if (window.twinView && label && window.twinView.label !== label) setView({ ...window.twinView, label }); };
 
 export const backBtn = (label = "Back") => `<button class="back" type="button" data-back>${ic("back")}${esc(label)}</button>`;
-// Loading lists: Loki rolling on his track above the skeleton rows (docs/STYLE.md "9. Mascot").
+// Loading lists: Tikt rolling on his track above the skeleton rows (docs/STYLE.md "9. Mascot").
 export const placeholders = (n = 3, caption = "Checking the live data…") =>
-  (caption ? lokiLoading({ caption, mini: true }) : "") + Array.from({ length: n }, () => '<div class="placeholder"></div>').join("");
+  (caption ? tiktLoading({ caption, mini: true }) : "") + Array.from({ length: n }, () => '<div class="placeholder"></div>').join("");

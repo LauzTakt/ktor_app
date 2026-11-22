@@ -101,8 +101,8 @@ button:not(:disabled) { cursor: pointer; }
 .suggestions svg { flex: none; color: var(--granite); }
 .replay-link { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; color: var(--iron); text-underline-offset: 3px; }
 
-/* Loki appears in the header and beside his replies. */
-.mark--loki { width: 40px; height: 40px; background: none; border-radius: 0; display: block; }
+/* Tikt appears in the header and beside his replies. */
+.mark--tikt { width: 40px; height: 40px; background: none; border-radius: 0; display: block; }
 .say { align-self: flex-start; display: flex; align-items: flex-end; gap: 8px; max-width: 92%; animation: rise 250ms ease; }
 .say .bubble { max-width: 100%; animation: none; }
 .say .avatar, .avatar-gap { width: 32px; flex: none; margin-bottom: 2px; }
