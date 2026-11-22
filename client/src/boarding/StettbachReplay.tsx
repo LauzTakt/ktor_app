@@ -1,4 +1,4 @@
-import { ArrowRight, RotateCcw, TramFront, X } from "lucide-react";
+import { ArrowRight, RotateCcw, TrainFront, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { MapController } from "../map/MapController";
 import { BoardingCard } from "./BoardingCard";
@@ -127,7 +127,7 @@ export function StettbachReplay() {
       <div ref={mapNode} className="map" role="region" aria-label="Rail map from Zürich HB to Stettbach" />
       <header ref={top} className="topbar">
         <div className="brand">
-          <span className="mark" aria-hidden="true"><TramFront size={20} strokeWidth={2.1} /></span>
+          <span className="mark" aria-hidden="true"><TrainFront size={20} strokeWidth={2.1} /></span>
           <div>
             <h1>Travel assistant</h1>
             <p className="status">Disruption replay · 25 Sep 2026</p>
