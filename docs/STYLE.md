@@ -167,3 +167,16 @@ colour inside buttons). Do not mix icon families.
 - Text contrast at least 4.5 : 1 (the tokens above meet it on `white`).
 - Keyboard focus always visible (2 px `sky` outline). Every icon-only button has a `title` and an `aria-label`.
 - Respect `prefers-color-scheme` on first visit; remember the user's choice.
+
+## 9. Mascot (passenger view only)
+
+"Loki" is a small flat vector train (`static/onboarding.js`) that guides the first-run tour of the passenger view.
+It is the one place where the app is playful, so the rules are tighter, not looser:
+
+- Built from the palette only: `red` body, white windscreen and lamps, `#212121` eyes and wheels. No gradients, glow,
+  outlines or emoji; no SBB logo or pictogram on it.
+- Motion: a slow idle sway (3 px), blinking, the mouth moving while its text appears, a short nod when it arrives,
+  and driving along its rail between targets (≈ 500 ms ease). Nothing spins or bounces. `prefers-reduced-motion`
+  turns all of it off (and the text appears at once).
+- It appears only in the tour (once per browser, replayed with the "?" button in the header), never on top of live
+  data or alerts. The tour dims the page and spotlights one control at a time; Escape or "Skip tour" closes it.
