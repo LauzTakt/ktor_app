@@ -36,6 +36,18 @@ import kotlin.test.assertTrue
 
 class TripWatchIntegrationTest {
     @Test
+    fun tripWatchDefaultsOnAndHonorsDeploymentOverrides() {
+        fun enabled(vararg settings: Pair<String, String>) =
+            TripWatchConfig.fromEnvironment(":memory:", mapOf(*settings)::get).enabled
+
+        assertTrue(enabled())
+        assertFalse(enabled("TRIP_WATCH_ENABLED" to "false"))
+        assertFalse(enabled("WALLET_ENABLED" to "false"))
+        assertTrue(enabled("TRIP_WATCH_ENABLED" to "true", "WALLET_ENABLED" to "false"))
+        assertFalse(enabled("TRIP_WATCH_ENABLED" to "false", "WALLET_ENABLED" to "true"))
+    }
+
+    @Test
     fun passengerSelectionIsVerifiedAndOnlyItsOwnerCanStopIt() = testApplication {
         val state = LiveState()
         val offset = System.currentTimeMillis() - T0 + 10_000L
@@ -48,9 +60,10 @@ class TripWatchIntegrationTest {
         }))
         val db = Database(":memory:")
         application {
-            configureHttp(state, db, wallet = WalletConfig(enabled = true, path = ":memory:")) { false }
+            configureHttp(state, db, tripWatchConfig = TripWatchConfig.fromEnvironment(":memory:") { null }) { false }
         }
         val base = "/api/v1/trip-watches"
+        assertTrue(client.get("$base/availability").bodyAsText().json()["enabled"]!!.jsonPrimitive.boolean)
         suspend fun save(to: String) = client.post(base) {
             contentType(ContentType.Application.Json)
             setBody("""{"trainId":"service-a","fromStopId":"A","toStopId":"$to"}""")
@@ -62,6 +75,8 @@ class TripWatchIntegrationTest {
         val view = response.bodyAsText().json()
         val url = "$base/${view["id"]!!.jsonPrimitive.content}"
         assertTrue(view["canManage"]!!.jsonPrimitive.boolean)
+        assertFalse(view["apple"]!!.jsonPrimitive.boolean)
+        assertFalse(view["google"]!!.jsonPrimitive.boolean)
         assertFalse(view.containsKey("appleToken"))
         // The page previews the Wallet pass from the same face the passes use.
         val pass = view["pass"]!!.jsonObject
