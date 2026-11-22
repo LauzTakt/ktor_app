@@ -28,6 +28,9 @@ services:
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:push@train-twin.invalid}
+      # Deep links into the mobile app (/.well-known/, mobile/README.md "Deep links"): empty = not served
+      ANDROID_CERT_SHA256: ${ANDROID_CERT_SHA256:-}
+      IOS_APP_ID: ${IOS_APP_ID:-}
       JAVA_OPTS: ${JAVA_OPTS:--XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError}
       PORT: 8080
       DB_PATH: /app/data/twin.sqlite
