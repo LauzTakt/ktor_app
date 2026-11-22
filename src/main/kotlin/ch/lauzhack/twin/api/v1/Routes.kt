@@ -8,6 +8,7 @@ import ch.lauzhack.twin.query.JourneyQueries
 import ch.lauzhack.twin.query.StopState
 import ch.lauzhack.twin.query.TrainFilter
 import ch.lauzhack.twin.query.TwinQueries
+import ch.lauzhack.twin.routing.RoutePlanner
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -23,8 +24,23 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.route
 
 /** Public read API, mounted at `/api/v1`. Contract: docs/API.md. */
-fun Route.apiV1(q: TwinQueries, journey: JourneyQueries, incidents: IncidentQueries, mqttConnected: () -> Boolean) = route("/api/v1") {
+fun Route.apiV1(
+    q: TwinQueries, journey: JourneyQueries, incidents: IncidentQueries, routes: RoutePlanner, mqttConnected: () -> Boolean,
+) = route("/api/v1") {
     get("/status") { call.respond(q.status(mqttConnected())) }
+
+    // Best route A -> B: the sbb-twin planner's journeys checked against live data and incidents, safest-earliest first.
+    get("/routes") {
+        val p = call.request.queryParameters
+        call.respond(
+            routes.routes(
+                from = p["from"]?.trim() ?: bad("bad_from", "from (origin stopId or name) is required"),
+                to = p["to"]?.trim() ?: bad("bad_to", "to (destination stopId or name) is required"),
+                after = p["after"]?.let { it.toLongOrNull() ?: bad("bad_after", "after must be epoch milliseconds") },
+                limit = p.limit(default = 4, max = 6),
+            ),
+        )
+    }
 
     route("/trains") {
         get {

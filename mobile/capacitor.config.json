@@ -3,10 +3,10 @@
   "appName": "Takt",
   "webDir": "www",
   "server": {
-    "url": "https://te3uiwccllmbqi32ye5jpxx6.94.130.67.179.sslip.io/",
+    "url": "https://takt.latragallucci.dev/",
     "errorPath": "index.html",
     "allowNavigation": [
-      "te3uiwccllmbqi32ye5jpxx6.94.130.67.179.sslip.io"
+      "takt.latragallucci.dev"
     ]
   },
   "android": {

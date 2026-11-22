@@ -321,6 +321,53 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { type: object } } } }
         "400": { description: Bad parameter }
+  /routes:
+    get:
+      tags: [stations]
+      summary: Best routes from A to B (planner checked against live data and incidents)
+      description: >-
+        Candidates from the sbb-twin planner, each leg checked against our live state (expected times, cancellation,
+        skipped stops, train already gone) plus our active incidents; changes recomputed. Feasible routes first by
+        `effectiveArrival` (expected arrival + risk penalty), the recommended one first. See docs/API.md "Routes".
+      operationId: getRoutes
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string }, description: Origin stopId or name }
+        - { name: to, in: query, required: true, schema: { type: string }, description: Destination stopId or name }
+        - { name: after, in: query, schema: { type: integer, format: int64 }, description: Earliest departure, epoch ms }
+        - { name: limit, in: query, schema: { type: integer, default: 4, minimum: 1, maximum: 6 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  from: { type: object }
+                  to: { type: object }
+                  generatedAt: { type: integer, format: int64 }
+                  recommendedId: { type: string, nullable: true }
+                  routes:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        journeyId: { type: string }
+                        recommended: { type: boolean }
+                        departure: { type: integer, format: int64 }
+                        arrival: { type: integer, format: int64 }
+                        effectiveArrival: { type: integer, format: int64 }
+                        durationMin: { type: integer }
+                        transfers: { type: integer }
+                        feasible: { type: boolean }
+                        risk: { type: string, enum: [low, medium, high] }
+                        why: { type: string, nullable: true }
+                        notes: { type: array, items: { type: string } }
+                        legs: { type: array, items: { type: object } }
+                        incidents: { type: array, items: { type: object } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { description: The sbb-twin planner is unavailable }
   /stations/{stopId}/screen:
     get:
       tags: [stations]

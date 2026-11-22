@@ -407,6 +407,10 @@ export function connectionsScreen(from, to) {
       <div class="step">From ${esc(from.name)}</div>
       <h1>Trains to ${esc(to.name)}</h1>
       <div id="alerts" class="list"></div>
+      <h2>Best routes</h2>
+      <div class="list" id="routes">${placeholders(2, "Finding the best route…")}</div>
+      <p class="note">Ranked by the arrival you can count on: live delays, incidents and changes included.</p>
+      <h2>Direct trains in service</h2>
       <div class="list" id="list">${placeholders(3, "Finding trains for you…")}</div>
       <p class="note">Live data. Only trains already in service are shown.</p>`;
     $("[data-back]", s).onclick = () => destinationScreen(from);
@@ -436,18 +440,58 @@ export function connectionsScreen(from, to) {
         onTracksScreen(el.dataset.id, { fromStopId: from.stopId, toStopId: to.stopId }, () => connectionsScreen(from, to));
       }));
     };
+    const routesEl = $("#routes", s);
+    let shownRoutes = [];
+    const drawRoutes = (plan) => {
+      shownRoutes = plan.routes;
+      if (!plan.routes.length) {
+        routesEl.innerHTML = `<p class="empty">The planner found no route to ${esc(to.name)} in the next hours.</p>`;
+        return;
+      }
+      routesEl.innerHTML = plan.routes.map((r, i) => routeHtml(r, i)).join("");
+      routesEl.querySelectorAll(".route-opt").forEach((el) => (el.onclick = () => {
+        const r = shownRoutes[+el.dataset.i];
+        const leg = r?.legs.find((l) => !l.departed) || r?.legs[0];
+        if (!leg?.trainId) return;
+        buzz(15);
+        onTracksScreen(leg.trainId, { fromStopId: leg.from.stopId, toStopId: leg.to.stopId }, () => connectionsScreen(from, to));
+      }));
+    };
+    const refreshRoutes = () => api(`/routes?from=${encodeURIComponent(from.stopId)}&to=${encodeURIComponent(to.stopId)}&limit=4`)
+      .then(drawRoutes)
+      .catch(() => { if (!shownRoutes.length) routesEl.innerHTML = `<p class="empty">The route planner is not available right now. The direct trains below are live.</p>`; });
     const refresh = () => api(`/stations/${encodeURIComponent(from.stopId)}/connections?to=${encodeURIComponent(to.stopId)}&windowMin=240&limit=12`)
       .then(draw).catch(() => toast("Connection problem. Retrying…"));
     refresh();
+    refreshRoutes();
     const poll = setInterval(refresh, 20_000);
+    const pollRoutes = setInterval(refreshRoutes, 60_000);
+    onLeave(() => clearInterval(pollRoutes));
     const clock = setInterval(() => list.querySelectorAll("[data-until]").forEach((el) => {
       if (el.dataset.until && !el.textContent.startsWith("Now")) el.textContent = untilText(+el.dataset.until);
     }), 5_000);
     onLeave(() => { clearInterval(poll); clearInterval(clock); });
     onLeave(live.subscribe("station", from.stopId, { frequencySec: 3600, windowMin: 30 }, (m) => {
-      if (m.type === "incident" && m.event !== "active") { buzz([20, 40, 20]); toast(m.incident.title); refresh(); }
+      if (m.type === "incident" && m.event !== "active") { buzz([20, 40, 20]); toast(m.incident.title); refresh(); refreshRoutes(); }
     }));
   });
+}
+
+const RISK = { low: "No known problems", medium: "Some risk", high: "At risk" };
+
+/** One planner route: times, legs as line badges, changes, the weightiest notes; the recommended one first. */
+function routeHtml(r, i) {
+  const first = r.legs[0];
+  const legs = r.legs.map((l, k) => `${lineLabel(l)}${k < r.legs.length - 1 ? ` <span class="via">${esc(l.to.name)}${l.changeMin != null ? ` ${l.changeMin}'` : ""}</span> ` : ""}`).join(" ");
+  const state = !r.feasible ? `<span class="warn">Not possible</span>` : r.recommended ? `<span class="rec">Recommended</span>` : "";
+  const notes = r.notes.slice(0, 2).map((n) => `<span class="${r.feasible ? "" : "warn"}">${esc(n)}</span>`).join(" · ");
+  return `<button class="row conn route-opt risk-${esc(r.risk)}${r.feasible ? "" : " off"}" type="button" data-i="${i}" style="--i:${Math.min(i, 10)}">
+    <div class="dep">${timeHtml(first.from.plannedTime ?? r.plannedDeparture, r.departure, first.cancelled)}<small data-until="${r.departure}">${untilText(r.departure)}</small></div>
+    <div class="l1">${legs}</div>
+    <div class="r">${state}</div>
+    <div class="l2">Arrival ${hhmm(r.arrival)}${r.arrivalDelayMin >= 1 ? ` <span class="delay">+${r.arrivalDelayMin}'</span>` : ""} · ${r.durationMin} min · ${r.transfers ? `${r.transfers} change${r.transfers > 1 ? "s" : ""}` : "Direct"}${r.feasible ? ` · ${RISK[r.risk] || ""}` : ""}</div>
+    ${r.why || notes ? `<div class="l3">${r.why ? esc(r.why) : notes}</div>` : ""}
+  </button>`;
 }
 
 // ------------------------------------------------------------------ 5. on tracks (on a train)

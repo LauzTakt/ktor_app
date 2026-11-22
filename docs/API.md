@@ -39,6 +39,7 @@ written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lau
 | `GET /stations/nearby` | `NearbyStation[]`: stations near a location, nearest first |
 | `GET /stations/{stopId}/destinations` | `Destination[]`: stations reachable from here with a train in service, most served first |
 | `GET /stations/{stopId}/connections` | `Connections`: trains in service going from this station to `?to=`, by departure |
+| `GET /routes?from=&to=` | `RoutePlan`: best routes A -> B (with changes): the sbb-twin planner checked against live data and incidents, recommended first. See "Routes" below |
 | `GET /stations/{stopId}/screen` | `Screen`: compact view for small displays (next departures + related incidents) |
 | `GET /stations/{stopId}/screen.txt` | the same view as plain text for microcontrollers (ETag, 304 when unchanged) |
 | `GET /lines` | `Line[]`: lines of the trains in service (`?q=` filters by name), with trains and incidents counts |
@@ -215,6 +216,33 @@ I|major|1|3|Overhead line fault: Lausanne – Fribourg|Lausanne – Fribourg
 { "from": Station, "to": Station, "now": ..., "windowMin": 180,
   "entries": [ { "train": TrainSummary, "departure": Stop, "arrival": Stop, "departureTime": ..., "arrivalTime": ...,
                  "plannedDepartureTime": ..., "durationMin": 32, "stopsBetween": 3, "atStation": false, "incidents": Incident[] } ] }
+```
+
+### Routes (`GET /routes`)
+
+`from`, `to` (required): stopId or station name; `after` (epoch ms, default now); `limit` (1-6, default 4).
+The sbb-twin planner (`/api/plan`, earliest arrival first, already aware of its disruptions) gives the candidates
+(a few more than `limit`); `routing/RoutePlanner` then checks every leg against our live state when its train is in
+service (latest expected times, cancellation, boarding/alighting stop skipped, train already gone) and adds our active
+incidents of that train. Changes are recomputed on those times. Ranking: feasible routes first, by
+`effectiveArrival` = expected arrival + penalty minutes (incident critical 30, major 12, minor 4; change < 3 min 8;
+each change 3; a leg > 5 min late 2). Infeasible routes (cancelled leg, skipped stop, missed change, train gone) come
+last with the reason in `notes`. The journeys are cached by id (`JourneyCache`), so Trip Watch accepts their
+`journeyId`. Errors: `planner_unavailable` (503), `station_not_found` (404), `same_station`, `bad_from`, `bad_to`, `bad_after` (400).
+
+```jsonc
+// RoutePlan
+{ "from": Station, "to": Station, "generatedAt": ..., "recommendedId": "j-c3eaae8093",
+  "routes": [ { "journeyId": "j-c3eaae8093", "recommended": true, "departure": ..., "arrival": ...,
+                "plannedDeparture": ..., "plannedArrival": ..., "durationMin": 56, "transfers": 0, "arrivalDelayMin": 0,
+                "effectiveArrival": ..., "feasible": true, "risk": "low|medium|high",
+                "why": "Arrives first, no known problems",          // recommended route only
+                "notes": ["Tight change at Olten: 2 min"],          // worst first
+                "incidents": [ { "id": "...", "title": "...", "severity": "minor", "source": "sbb" } ],
+                "legs": [ { "trainId": "...", "line": "IC1", "category": "IC", "headsign": "St. Gallen",
+                            "from": { "stopId": "8507000", "name": "Bern", "lat": ..., "lon": ..., "plannedTime": ..., "expectedTime": ..., "skipped": false },
+                            "to": { ... }, "stopsBetween": 0, "delaySec": -42, "cancelled": false, "live": true,
+                            "departed": false, "changeMin": null, "incidents": [] } ] } ] }
 ```
 
 ### How incidents are matched (`match`)
@@ -503,7 +531,8 @@ All pages follow [`docs/STYLE.md`](STYLE.md) (SBB look: SBB Web font, SBB palett
   - On tracks: a Three.js scene (always the same train on the same track; it moves with the real speed), the whole
     route with the ETA of every stop and where the train is, incidents on top. Live over the WebSocket `train` topic.
   - At a station: destination by text or map (reachable stations from `/stations/{id}/destinations` highlighted),
-    then `/stations/{id}/connections?to=`; tap a train to follow it on tracks.
+    then "Best routes" (`/routes`, with changes, recommended first, every 60 s and on incident events) and the direct
+    trains in service (`/stations/{id}/connections?to=`); tap a route or a train to follow it on tracks.
   - Station view (`/?stop=<stopId>`; also from "Station info" on the destination screen, from "Departures and
     incidents at a station" on "Plan a trip", and by tapping any stop in a train's route): a collapsible list of
     incidents (those of the station from `/stations/{id}` plus those of its departing trains, worst first; hidden

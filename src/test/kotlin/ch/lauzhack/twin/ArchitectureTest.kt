@@ -20,6 +20,7 @@ class ArchitectureTest {
         "twinapi" to setOf("common"),
         "query" to setOf("model", "common", "state", "db"),
         "report" to setOf("model", "common", "state", "db", "query"),
+        "routing" to setOf("model", "common", "state", "db", "query", "twinapi"),
         "mqtt" to setOf("model", "common", "state", "db"),
     )
 

@@ -3,6 +3,8 @@ package ch.lauzhack.twin
 import ch.lauzhack.twin.assistant.AssistantAgent
 import ch.lauzhack.twin.assistant.AssistantConfig
 import ch.lauzhack.twin.twinapi.JourneyCache
+import ch.lauzhack.twin.twinapi.SbbTwinClient
+import ch.lauzhack.twin.routing.RoutePlanner
 import ch.lauzhack.twin.assistant.assistantV1
 import ch.lauzhack.twin.assistant.assistantFactory
 import ch.lauzhack.twin.api.v1.apiV1
@@ -156,7 +158,7 @@ fun Application.configureHttp(
         appLinks(appLinks) // /.well-known/ files: QR codes and links open the mobile app (web/AppLinks.kt)
         // Swagger UI at /swagger, spec at /swagger/documentation.yaml (keep in sync with docs/API.md and api/v1/).
         swaggerUI(path = "swagger", swaggerFile = "openapi/documentation.yaml")
-        apiV1(queries, journeyQueries, IncidentQueries(db.incidents), mqttConnected)
+        apiV1(queries, journeyQueries, IncidentQueries(db.incidents), RoutePlanner.of(SbbTwinClient(passenger.twinUrl, timeoutMs = 8_000), queries, journeys), mqttConnected)
         authV1(auth)
         reportsV1(ReportService(db.reports, state))
         assistantV1(agent)
