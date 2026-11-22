@@ -303,3 +303,23 @@ button:not(:disabled) { cursor: pointer; }
 .welcome-loc { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .welcome-loc span { flex: 1 1 200px; }
 .welcome-loc button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--cloud); background: var(--white); border-radius: 999px; padding: 7px 12px; font-size: 13.5px; color: var(--charcoal); }
+.option-watch {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  color: inherit;
+  font-weight: 700;
+  text-decoration: none;
+  margin-top: 8px;
+  touch-action: manipulation;
+  transition: transform 120ms ease, background-color 150ms ease;
+}
+.option-watch:active { transform: scale(.985); }
+.option-watch:focus-visible { outline: 2px solid #0079c7; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .option-watch { transition: none; }
+  .option-watch:active { transform: none; }
+}

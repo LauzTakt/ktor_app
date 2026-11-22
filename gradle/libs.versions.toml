@@ -5,6 +5,7 @@ logback = "1.5.38"
 paho = "1.2.5"
 sqlite = "3.54.1.0"
 anthropic = "3.12.0"
+bouncycastle = "1.87"
 
 [libraries]
 ktor-server-core = { module = "io.ktor:ktor-server-core", version.ref = "ktor" }
@@ -23,6 +24,7 @@ logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "lo
 paho-mqttv3 = { module = "org.eclipse.paho:org.eclipse.paho.client.mqttv3", version.ref = "paho" }
 sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite" }
 anthropic-java = { module = "com.anthropic:anthropic-java", version.ref = "anthropic" }
+bouncycastle-pkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = "bouncycastle" }
 kotlin-test-junit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
 
 [plugins]

@@ -87,6 +87,16 @@ export function SituationCard({ items }: { items: SituationItem[] }) {
 }
 
 export function OptionsCard({ options, selected, onChoose }: { options: Option[]; selected: string | null; onChoose: (o: Option) => void }) {
+  const selectedJourney = options.find((option) => option.journeyId === selected)?.journeyId;
+  const [canWatch, setCanWatch] = useState(false);
+  useEffect(() => {
+    const abort = new AbortController();
+    fetch("/api/v1/trip-watches/availability", { signal: abort.signal })
+      .then((response) => response.ok ? response.json() : null)
+      .then((config) => setCanWatch(config?.enabled === true))
+      .catch(() => {});
+    return () => abort.abort();
+  }, []);
   return (
     <article className="card">
       <h3>Your options</h3>
@@ -112,6 +122,11 @@ export function OptionsCard({ options, selected, onChoose }: { options: Option[]
           );
         })}
       </ul>
+      {canWatch && selectedJourney && (
+        <a className="option-watch" href={`/trip-watch.html?${new URLSearchParams({ journeyId: selectedJourney })}`} target="_top">
+          Watch this trip
+        </a>
+      )}
     </article>
   );
 }

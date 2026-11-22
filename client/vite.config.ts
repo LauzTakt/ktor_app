@@ -10,6 +10,8 @@ const ktor = process.env.KTOR_URL ?? "http://127.0.0.1:8080";
 const proxy = {
   "/api": { target: ktor, changeOrigin: true },
   "/data": { target: ktor, changeOrigin: true },
+  "/trip-watch": { target: ktor, changeOrigin: true },
+  "/passenger.css": { target: ktor, changeOrigin: true },
   "/ws": { target: ktor.replace(/^http/, "ws"), ws: true, changeOrigin: true },
 };
 

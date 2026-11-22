@@ -3,7 +3,7 @@ info:
   title: Train digital twin — REST API v1
   version: "1.0"
   description: |
-    Read API over the live twin data ingested from MQTT, plus staff incident reports (`/reports`, the only writes) and the passenger assistant (`/assistant/ask`) (contract: `docs/API.md`; keep both in sync with `api/v1/` and `assistant/`).
+    Read API over the live twin data ingested from MQTT, plus staff incident reports, the passenger assistant and Trip Watch. See docs/API.md.
 
     - **Times** are epoch milliseconds UTC (Swiss local time = Europe/Zurich). **Delays** are seconds, `+` = late.
     - `trainId` = `{YYYYMMDD}_{GTFS trip_id}`; `stopId` = 7-digit UIC/DIDOK id (e.g. `8503000` Zürich HB, `8507000` Bern).
@@ -30,6 +30,106 @@ tags:
     description: Passenger assistant (Claude Sonnet 5.5 agent over the live data) for the passenger web app
 
 paths:
+  /trip-watches/availability:
+    get:
+      tags: [trip-watch]
+      summary: Check Trip Watch availability
+      responses:
+        "200":
+          description: Feature availability
+          content:
+            application/json:
+              schema: { type: object, required: [enabled], properties: { enabled: { type: boolean } } }
+  /trip-watches:
+    get:
+      tags: [trip-watch]
+      summary: List watches owned by this browser
+      responses:
+        "200":
+          description: Active watches
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/TripWatch" } }
+    post:
+      tags: [trip-watch]
+      summary: Save a verified passenger selection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                journeyId: { type: string }
+                trainId: { type: string }
+                fromStopId: { type: string }
+                toStopId: { type: string }
+                onBoard: { type: boolean, default: false }
+              oneOf:
+                - required: [journeyId]
+                - required: [trainId, fromStopId, toStopId]
+      responses:
+        "201": { $ref: "#/components/responses/TripWatchCreated" }
+        "400": { description: Missing or conflicting selection fields }
+        "409": { description: The connection has changed or cannot be verified }
+  /trip-watches/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string }, description: Opaque watch link identifier }
+    get:
+      tags: [trip-watch]
+      summary: Get the current instruction
+      responses:
+        "200": { $ref: "#/components/responses/TripWatchView" }
+        "404": { description: Watch unavailable }
+    patch:
+      tags: [trip-watch]
+      summary: Confirm leg progress or wait for a verified departure
+      security: [{ tripWatchOwner: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [action], properties: { action: { type: string, enum: [boarded, alighted, wait] } } }
+      responses:
+        "200": { $ref: "#/components/responses/TripWatchView" }
+        "400": { description: Invalid action }
+        "404": { description: Watch unavailable to this browser }
+    delete:
+      tags: [trip-watch]
+      summary: Stop watching this itinerary
+      security: [{ tripWatchOwner: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/TripWatchView" }
+        "404": { description: Watch unavailable to this browser }
+  /trip-watches/{id}/apple.pkpass:
+    get:
+      tags: [trip-watch]
+      summary: Download the signed Apple Wallet pass
+      security: [{ tripWatchOwner: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Signed pass
+          content:
+            application/vnd.apple.pkpass:
+              schema: { type: string, format: binary }
+        "404": { description: Pass unavailable }
+  /trip-watches/{id}/google:
+    post:
+      tags: [trip-watch]
+      summary: Create the Google Wallet pass and return its save link
+      security: [{ tripWatchOwner: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Signed Add to Google Wallet link
+          content:
+            application/json:
+              schema: { type: object, required: [url], properties: { url: { type: string, format: uri } } }
+        "404": { description: Pass unavailable }
+        "502": { description: Google Wallet unavailable }
   /status:
     get:
       tags: [status]
@@ -514,6 +614,11 @@ paths:
 
 components:
   securitySchemes:
+    tripWatchOwner:
+      type: apiKey
+      in: cookie
+      name: twin_trip_watch
+      description: Browser owner cookie set by POST /trip-watches
     bearerAuth:
       type: http
       scheme: bearer
@@ -535,6 +640,12 @@ components:
       example: "8.4,47.3,8.6,47.45"
 
   responses:
+    TripWatchCreated:
+      description: Verified watch created and owner cookie set
+      content: { application/json: { schema: { $ref: "#/components/schemas/TripWatch" } } }
+    TripWatchView:
+      description: Current watch and available controls
+      content: { application/json: { schema: { $ref: "#/components/schemas/TripWatch" } } }
     Unauthorized:
       description: "`unauthorized`: missing, invalid or expired staff token"
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
@@ -546,6 +657,24 @@ components:
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
 
   schemas:
+    TripWatch:
+      type: object
+      required: [id, origin, destination, instruction, detail, kind, expiresAt, leg, legCount, canManage, actions, apple, google, alternativesUrl]
+      properties:
+        id: { type: string }
+        origin: { type: string }
+        destination: { type: string }
+        instruction: { type: string }
+        detail: { type: string, nullable: true }
+        kind: { type: string, enum: [board, alight, wait, check, ended] }
+        expiresAt: { type: integer, format: int64 }
+        leg: { type: integer, minimum: 1 }
+        legCount: { type: integer, minimum: 1 }
+        canManage: { type: boolean }
+        actions: { type: array, items: { type: string, enum: [boarded, alighted, wait, stop] } }
+        apple: { type: boolean }
+        google: { type: boolean }
+        alternativesUrl: { type: string }
     Login:
       type: object
       required: [username, password]

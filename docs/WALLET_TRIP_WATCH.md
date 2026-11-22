@@ -1,88 +1,44 @@
 # Wallet disruption alerts
 
-Trip Watch is a proposed informational pass for a journey the passenger chooses in the app. Ktor will resolve the journey, watch its remaining legs, and update the pass when verified information changes the next step. The pass shows where to board, change or get off, any published departure time, and a link to the trip. The project can issue its own pass. Updating a ticket issued by SBB would require SBB's issuer integration. [Apple pass issuance](https://developer.apple.com/wallet/get-started/) · [Google generic passes](https://developers.google.com/wallet/generic)
+Trip Watch follows an itinerary the passenger selects in the app. It stores the ordered legs and shows the next instruction, including where to board or get off. The passenger connection view and the voice assistant both open the same watch screen. The Android shell loads that screen from the hosted app. [Passenger connections](../src/main/resources/static/passenger.js) · [Assistant options](../client/src/ui.tsx) · [Android shell](../mobile/README.md)
 
-## What Apple and Google can deliver
+## Run it
 
-| | Nearby reminder | Update when advice changes |
+Set `WALLET_ENABLED=true` in the Ktor service environment. With live data configured, choose a connection as usual, open **Watch this trip**, and confirm the selection. The watch works in the browser before either issuer is configured. **Watched trips** lists watches created by that browser. A pass links back to a read view that also shows management controls in the owning browser. [Environment example](../.env.example) · [API](API.md#endpoints)
+
+When using a Wallet issuer, set `WALLET_PUBLIC_BASE_URL` to the public HTTPS origin of the app. Set `WALLET_DB_PATH` if the service should store watch state elsewhere. By default Ktor puts `.wallet.sqlite` beside the main database. Use a persistent volume for both. The issuer settings take file paths to mounted credentials.
+
+| Provider | Configuration |
+| --- | --- |
+| Apple Wallet | Set `WALLET_APPLE_PASS_TYPE_ID`, `WALLET_APPLE_TEAM_ID`, `WALLET_APPLE_P12` and its password if applicable. Set `WALLET_APPLE_WWDR_CERT` to the matching WWDR certificate if the PKCS#12 lacks it. The pass update service runs at `/wallet/apple/v1`. |
+| Google Wallet | Create a Generic class on the Wallet issuer, configure its ID as `WALLET_GOOGLE_CLASS_ID` and set `GOOGLE_APPLICATION_CREDENTIALS` to the issuer's authorized service account JSON. Issuers in demo mode can save through their test accounts. |
+
+Apple Pass Type ID and Google issuer credentials belong to the project that issues the informational pass. Updating an actual SBB ticket would require SBB's issuer integration. [Apple signing](https://developer.apple.com/documentation/walletpasses/building-a-pass) · [Google issuer setup](https://developers.google.com/wallet/generic/getting-started/issuer-onboarding) · [Google REST credentials](https://developers.google.com/wallet/generic/getting-started/auth/rest)
+
+## How trip data becomes advice
+
+* The passenger connection screen supplies a run ID and its two selected stop IDs. Ktor checks the ordered calls. The assistant supplies a journey ID drawn from a server-cached planner result. Ktor saves its underlying run IDs, board and alight stops, and times so the watch survives planner cache expiry.
+* Ktor rechecks the remaining legs using live stop calls. Cancellations, skipped calls and a transfer that has become impossible can change the advice. When a selected connection can no longer work and the passenger is still at the boarding stage, the service looks for a usable trip in the twin planner. It shows a check-your-connection instruction when it has insufficient information for boarding. A missing live run can also mean its departure is still in the future.
+* The passenger can confirm boarding and alighting to move to the next leg. Those confirmations and forecast-only detail changes sync silently. A verified change to what the passenger should board or where they should get off is eligible for a notification. The pass uses station coordinates from that leg for nearby relevance.
+* Incident changes wake the watch worker promptly and periodic checks also pick up stop-call updates and expire watches. The watch database stores revision and delivery progress through restarts. A trip ends when the passenger stops watching or the watch expires. On expiry the pass clears nearby relevance.
+
+Station and run IDs, not a route name or an area around one station, determine which trip is affected. Direct stop calls are limited to trains or supported replacement services available to the current twin. A separate verified multimodal planner would be needed for alternatives outside its coverage. [Journey queries](../src/main/kotlin/ch/lauzhack/twin/api/v1/Journey.kt) · [Twin planner](https://github.com/lauzhack2026/sbb-twin/blob/main/src/planner.ts) · [Watch service](../src/main/kotlin/ch/lauzhack/twin/wallet/TripWatchService.kt)
+
+## Nearby reminders and update alerts
+
+| | Nearby reminder | Change alert |
 | --- | --- | --- |
-| Apple Wallet | Set `locations` to the next relevant boarding station and add a trip time window. Wallet decides when to show the pass on the lock screen. | Wake Wallet over APNs so it fetches a signed pass. A changed field with `changeMessage` can alert the passenger. |
-| Google Wallet | Set `merchantLocations` on the individual pass object. Google chooses proximity, dwell time and reminder copy. The passenger needs Wallet notifications and precise, always-on location access for Wallet. | Patch the pass to show the latest instruction. Add a `TEXT_AND_NOTIFY` message when the passenger needs to act. Google documents a limit of three notification-triggering messages per 24 hours and controls the lock-screen presentation. |
+| Apple Wallet | The signed pass contains the next boarding location and a relevant departure date. Wallet decides lock-screen presentation. | An empty APNs update wakes Wallet to fetch the latest signed revision. A change to the pass's alert field can display a notification. |
+| Google Wallet | The Generic object includes its boarding location. Google sets proximity, dwell and wording. The rider needs Wallet notifications and precise background location enabled for nearby reminders. | Ktor patches the Generic object and sends a `TEXT_AND_NOTIFY` message for an actionable revision. A stable message ID is checked before sending a retry. Google limits notification-triggering messages. |
 
-Wallet determines proximity on the device. Its documented issuer APIs expose pass management and updates. For an alert that must send custom wording only when the rider is inside a station zone and their trip is affected, a native client needs to monitor that zone with permission and check fresh trip advice. The web MVP can use Wallet relevance and send action changes independently. Configure relevance only for the next boarding location and expire the pass after the trip. [Apple lock-screen relevance](https://developer.apple.com/documentation/walletpasses/showing-a-pass-on-the-lock-screen) · [Apple change messages](https://developer.apple.com/documentation/walletpasses/passfieldcontent) · [Google notifications](https://developers.google.com/wallet/generic/use-cases/trigger-push-notifications) · [Google callbacks](https://developers.google.com/wallet/generic/use-cases/use-callbacks-for-saves-and-deletions) · [iOS region monitoring](https://developer.apple.com/documentation/corelocation/monitoring-the-user-s-proximity-to-geographic-regions) · [Android geofencing](https://developer.android.com/develop/sensors-and-location/location/geofencing)
+Wallet proximity and issuer alerts are independent. The server stores the selected station coordinates. A product rule that sends custom copy only after crossing an exact geofence requires location authorization and monitoring in a native app. [Apple lock-screen relevance](https://developer.apple.com/documentation/walletpasses/showing-a-pass-on-the-lock-screen) · [Apple pass update protocol](https://developer.apple.com/documentation/walletpasses/adding-a-web-service-to-update-passes) · [Google nearby and update behavior](https://developers.google.com/wallet/generic/use-cases/trigger-push-notifications)
 
-## Where it fits in this repo
+## Verify it
 
-Add **Watch this trip** to the passenger connection selection. For a direct connection, send the selected run and the origin and destination stop IDs from `connectionsScreen`. The integrated voice client can send the selected planner journey and use the same Ktor watch API. The Android shell loads the passenger web UI, so the same entry point is available there. A link on the pass opens the watch and lets the passenger choose a different plan or stop watching. [Passenger connections](../src/main/resources/static/passenger.js) · [Assistant options](../client/src/contract.ts) · [Android shell](../mobile/README.md)
+Run the local provider and itinerary tests with JDK 21. The Apple test validates the ZIP hashes and detached signature with a test key. The Google test verifies the save JWT and the retry contract against a local HTTP fixture.
 
-| Existing code | Use in Trip Watch |
-| --- | --- |
-| [`JourneyQueries.connections`](../src/main/kotlin/ch/lauzhack/twin/api/v1/Journey.kt) and [`TwinQueries`](../src/main/kotlin/ch/lauzhack/twin/api/v1/TwinQueries.kt) | Work with station IDs and ordered stop calls. Verify that the selected in-service train serves the boarding stop and destination. Check cancellation, upcoming calls and departure freshness before offering boarding. Connections list direct trains already in service. Source verified platform assignments separately. |
-| [`SbbTwinClient.plan`](../src/main/kotlin/ch/lauzhack/twin/assistant/SbbTwinClient.kt) | Reuse the planner already called by the assistant for future departures, interchanges and supported replacement buses. Resolve the selected result to ordered legs before persisting it. The assistant's journey references can expire, so keep the leg identities needed to revalidate the trip. |
-| [`MqttIngestor`](../src/main/kotlin/ch/lauzhack/twin/mqtt/MqttIngestor.kt) and [`LiveState`](../src/main/kotlin/ch/lauzhack/twin/state/LiveState.kt) | Recheck relevant watches when a train's stop calls or status change. The ingestor subscribes to the twin's `incidents/+`, train info, fleet and status. Real public GTFS service alerts use the twin's separate `/api/alerts` or `alerts/+` feed. |
-| [`Database.addIncidentListener`](../src/main/kotlin/ch/lauzhack/twin/db/Database.kt) | Wake a watch worker on an incident create, update or withdrawal. The listener runs on the SQLite writer thread under the database lock. Enqueue work there and fetch alternatives or contact Wallet outside the callback. Use a bounded periodic reconciliation of active watches for missed events, watch deadlines and restart. |
-| [`Application.configureHttp`](../src/main/kotlin/ch/lauzhack/twin/Application.kt) | Inject the watch service alongside `TwinQueries` when its routes are ready. Start the worker in `Application.module` and stop it before `Database.close()`. Update the OpenAPI file and `docs/API.md` when adding routes. |
+~~~sh
+./gradlew test --tests 'ch.lauzhack.twin.wallet.*' --no-daemon --max-workers=2
+~~~
 
-Use a verified multimodal source such as Swiss OJP for bus and tram options outside the twin's coverage. A train that has yet to start may only be visible in the timetable. A section reopening estimate is a reason to recheck the itinerary. A boarding instruction needs a named or otherwise verified departure that serves the passenger's stop. [Twin planner](https://github.com/lauzhack2026/sbb-twin/blob/main/src/planner.ts) · [Twin alerts](https://github.com/lauzhack2026/sbb-twin/blob/main/src/alerts.ts) · [Swiss Open Journey Planner](https://opentransportdata.swiss/en/cookbook/open-journey-planner-ojp-landing-page/) · [Reviewed boarding logic](https://github.com/lauzhack2026/sbb-disruption-research/blob/f620499b18d176058d675ed084f62fdd186b7431/docs/integration.md)
-
-## Watch state and delivery
-
-1. Resolve the selection on the server. Save the origin, destination, ordered legs, passenger choice and expiry. Each leg carries its provider, service date, run ID, boarding and alighting stop IDs, and scheduled times. Use stop sequences where a service calls at the same place twice. For passengers continuing across midnight, keep the timetable service date for each run. Use UTC epoch milliseconds for times and `Europe/Zurich` for display.
-2. Match updates to the remaining legs by run or affected stops and sections, with direction and time in scope. Recheck both stop calls and transfer viability. For example, if a train skips one stop, riders going farther along the same train may still have a usable plan. Keep the rider's chosen alternative while it remains feasible. If the selected action is invalidated, offer a verified departure or give a check-the-trip instruction. Keep provider issue time, receipt time and revision distinct. A retained removal or stale feed prompts revalidation.
-3. Compare advice for the same watch after resolving its plan. [`TripWatchUpdate.kt`](../src/main/kotlin/ch/lauzhack/twin/wallet/TripWatchUpdate.kt) classifies initial advice and copy-only changes as a silent sync. It requests an alert for a changed service, boarding or alighting stop, boarding point or published departure. It skips exact repeats. Match run IDs across providers only when the timetable mapping verifies that they refer to the same service. Put minor forecast changes in `detail`. When the rider confirms progress through the trip, update the pass and move its relevance to the next boarding location using coordinates from the station catalog or verified timetable. Treat normal trip progress as a silent update.
-4. Store the advice and an outbox entry together in SQLite. Key jobs by pass and revision so repeated feed events do not produce duplicate notifications. Keep pass revision and delivery progress separate so a provider failure can retry the outstanding work. Serialize updates per pass, combine bulletin edits that change the same instruction within a short interval, and recheck the watch's expiry before delivery. If a cleared incident returns and changes the advice again, the resulting revision can notify once.
-
-Proposed persistence consists of a trip watch and its owner, a provider pass record with current advice and delivery revision, and an outbox. Apple also needs device registrations and a monotonic revision cursor for listing changed passes. Derive or securely store the Apple pass authentication token so it stays the same across signed versions. Keep credential material, push tokens and private trip links out of application logs and source control. On expiry or opt-out, cancel pending action alerts and queue a final silent sync to clear relevance or expire the pass.
-
-### Proposed watch API
-
-| Method | Input and result |
-| --- | --- |
-| `POST /api/v1/trip-watches` | Create a watch for a server-validated itinerary and explicit choice. Return watch ID, advice, expiry and the supported Add to Wallet links. |
-| `GET /api/v1/trip-watches/{id}` | Return the latest advice for the owner. Use a scoped read link if the pass needs to open the trip without a browser session. |
-| `PATCH /api/v1/trip-watches/{id}` | Set the selected plan and re-resolve its advice. A tap that changes the rider's own selection can sync silently because the trip UI has shown the change. |
-| `DELETE /api/v1/trip-watches/{id}` | Stop watching and expire the provider passes. |
-
-The existing auth service protects staff tools. Use a passenger session for watch ownership, or a bounded, opt-in demo session with an opaque management token. Keep Apple device callbacks under their own auth. Both issuer adapters should receive the same resolved advice and a delivery decision. The branch adds the decision code. Watch routes, persistence and provider delivery are implementation steps below.
-
-## Apple Wallet adapter
-
-* Build a generic `.pkpass` with a `passTypeIdentifier`, team identifier, random serial number, pass assets, `webServiceURL` and a stable `authenticationToken`. Set `expirationDate`, `locations` and a relevant date or supported `relevantDates` interval. Pass JSON should contain the public action, a separate detail field and a trip link. Sign the manifest with the project's Pass Type ID certificate and Apple intermediate. The pass downloads as `application/vnd.apple.pkpass`. A JVM signing library such as jPassKit is a candidate. Check its support for the selected relevance fields before adding it to Gradle. [Apple pass format](https://developer.apple.com/documentation/walletpasses/pass) · [Signing a pass](https://developer.apple.com/documentation/walletpasses/building-a-pass) · [jPassKit](https://github.com/drallgood/jpasskit)
-* Mount the protocol paths under the pass `webServiceURL`, for example `https://<pass-host>/wallet/apple`. They are relative to that URL and separate from the passenger API. Requests for individual passes use `Authorization: ApplePass <token>`. [Apple update web service](https://developer.apple.com/documentation/walletpasses/adding-a-web-service-to-update-passes)
-
-| Request | Handling |
-| --- | --- |
-| `POST /v1/devices/{deviceId}/registrations/{passTypeId}/{serial}` | Authorize the pass token and upsert registration and push token. Return 201 for a new registration and 200 for an existing one. |
-| `DELETE /v1/devices/{deviceId}/registrations/{passTypeId}/{serial}` | Authorize the pass token and remove the registration. |
-| `GET /v1/devices/{deviceId}/registrations/{passTypeId}?passesUpdatedSince={cursor}` | Use the device identifier to select only the registrations for that device. Send `serialNumbers` and `lastUpdated`, or 204 when there are no changes. |
-| `GET /v1/passes/{passTypeId}/{serial}` | Authorize the pass token and return the signed version, with `Last-Modified` and conditional `304` support. |
-| `POST /v1/log` | Accept bounded Wallet diagnostics and redact payloads before recording them. |
-
-The backend publishes the new signed-pass revision before waking the phone via production APNs. Use the Pass Type ID certificate with the registered push token and an empty JSON payload. The pass is fetched after the wake-up. Wallet compares field values to decide whether to show a message. Keep the field with `changeMessage` stable when only forecast or explanation copy changes. Test that a correction still appears if the device fetches only the latest of several revisions. [Apple APNs flow](https://developer.apple.com/documentation/walletpasses/adding-a-web-service-to-update-passes) · [Apple field comparison and caching](https://developer.apple.com/library/archive/documentation/UserExperience/Conceptual/PassKit_PG/Updating.html)
-
-## Google Wallet adapter
-
-* Enable the Wallet REST API and grant the server service account Developer access on the Wallet issuer. Demo mode supports issuer roles and configured test accounts. Use one Generic class for branding and one Generic object per issued watch. Sign the Add to Google Wallet JWT on the server. The browser receives the save URL. [Issuer onboarding](https://developers.google.com/wallet/generic/getting-started/issuer-onboarding) · [REST API credentials](https://developers.google.com/wallet/generic/getting-started/auth/rest) · [Web save flow](https://developers.google.com/wallet/generic/web)
-* On that object, use `merchantLocations` for the relevant station, `validTimeInterval` for the watch's validity, and `linksModuleData` to open the trip. Use the validity interval to expire the pass. Measure the timing of nearby reminders on device because Google sets their trigger. [Generic object fields](https://developers.google.com/wallet/reference/rest/v1/genericobject) · [Nearby reminders](https://developers.google.com/wallet/generic/use-cases/trigger-push-notifications#nearby_notifications)
-* Obtain an OAuth token scoped to `https://www.googleapis.com/auth/wallet_object.issuer`. Google's Java client can be called from Kotlin and handles credential refresh. Patch `/walletobjects/v1/genericObject/{id}` with the instruction and details. For an alert, call the object's `addMessage` using `TEXT_AND_NOTIFY` after the patch. Use a stable message ID for the advice revision and look it up after an ambiguous failure before retrying the notification. Track quota-related failures separately from pass sync so the advice can still appear on the pass. [Google client authentication](https://developers.google.com/wallet/generic/use-cases/auth) · [Patch](https://developers.google.com/wallet/reference/rest/v1/genericobject/patch) · [Add message](https://developers.google.com/wallet/reference/rest/v1/genericobject/addmessage)
-
-## Implementation order and acceptance
-
-1. Build the watch flow from the app's normal trip selection. Use the shared journey data to resolve direct and connecting itineraries. Persist the selection and return the current advice from Ktor. Use a recording delivery adapter for integration tests so the tests can assert which watches were refreshed or notified.
-2. Connect incident and stop-call updates to the watch worker. Verify behavior across different services, stations, directions and the stages below. Record source revision, resulting instruction, delivery decision and provider outcome so a failed delivery can be retried without reprocessing the incident.
-3. Add each Wallet adapter behind its own configuration. Use a public HTTPS base URL, an Apple Pass Type ID and signing credentials, and a Google issuer, class and server credential. On a physical phone, verify adding the pass, quiet updates, alerts, nearby reminders, opt-out and expiry. Use a current time window and a station the tester can approach. Apple documents that the simulator cannot show a nearby pass on the lock screen. Google's nearby check needs Wallet notifications and precise background location enabled. [Apple device testing](https://developer.apple.com/documentation/walletpasses/showing-a-pass-on-the-lock-screen) · [Google nearby setup](https://developers.google.com/wallet/generic/use-cases/trigger-push-notifications#nearby_notifications)
-
-| Scenario | Expected behavior |
-| --- | --- |
-| Direct and connecting journeys | The same watch API accepts both selections and keeps their ordered legs across restart. |
-| Two riders at the same station | A cancellation or skipped stop changes the affected rider's advice. A rider taking a different service or alighting at a stop still served keeps their instructions. |
-| Platform or transfer change | Update the relevant boarding or alighting point for that rider. Check that a transfer in the remaining itinerary is still feasible. |
-| Replacement service and reopening estimate | Keep confirmed replacement directions for riders who chose them. Treat the estimate as detail. A rider waiting for a usable departure gets an alert once one is confirmed. |
-| Stale data or a withdrawn alternative | Recheck availability. Correct invalidated advice once and show an actionable fallback when it can be verified. |
-| Retry, repeated bulletin and watch expiry | Preserve a single delivery per actionable update through retry or restart. Expire completed or stopped watches. |
-
-Run the local classifier tests with JDK 21. They cover resolved advice for rail, bus, changed transfers and alighting instructions. The acceptance scenarios cover the watch service and provider integration once those are wired.
-
-```sh
-./gradlew test --tests 'ch.lauzhack.twin.wallet.TripWatchUpdateTest' --no-daemon --max-workers=2
-```
+For issuer acceptance, use one physical iPhone and one Android phone with test accounts. Choose a direct and a connecting trip. Add the pass, verify the current information on the phone, then change the confirmed boarding advice for one selected trip. A rider whose destination is still served should keep their instructions. Verify boarding and alighting move nearby relevance to the correct interchange. Test nearby reminders with a current trip and an actual approach to the relevant station. Finish by stopping the watch and checking the pass expiry. [Apple testing guidance](https://developer.apple.com/documentation/walletpasses/showing-a-pass-on-the-lock-screen) · [Google demo mode](https://developers.google.com/wallet/generic/getting-started/issuer-onboarding)

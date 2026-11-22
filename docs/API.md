@@ -47,6 +47,16 @@ written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lau
 | `GET /reports/{id}` | `Report` |
 | `POST /reports/{id}/resolve` | `{ "resolution": "text" \| null }` (optional body) → resolved `Report`; `409 already_resolved` if not open |
 | `POST /assistant/ask` | `AskResponse`: the passenger assistant's answer (see [Passenger assistant](#passenger-assistant-post-assistantask)) |
+| `GET /trip-watches/availability` | `{ "enabled": boolean }` |
+| `GET /trip-watches` | Active watches for the calling browser |
+| `POST /trip-watches` | Resolve a selected departure or plan and start watching. Returns the watch and sets its owner cookie. |
+| `GET /trip-watches/{id}` | Read the watch from its opaque link |
+| `PATCH /trip-watches/{id}` | Apply `boarded`, `alighted` or `wait`. The owner's cookie is required. |
+| `DELETE /trip-watches/{id}` | Stop watching. The owner's cookie is required. The response describes the ended watch. |
+| `GET /trip-watches/{id}/apple.pkpass` | Signed pass for the owner when Apple Wallet is configured |
+| `POST /trip-watches/{id}/google` | `{ "url": "…" }` for the owner when Google Wallet is configured |
+
+Trip Watch accepts a `journeyId` from a server-cached planner result, or `trainId`, `fromStopId` and `toStopId` from the live connection screen. Set the optional `onBoard` flag after the passenger confirms they have boarded. Expired or changed selections return 409 with a prompt to select a connection again. The remaining access routes require the feature to be enabled. [Trip Watch](WALLET_TRIP_WATCH.md)
 
 ### Query parameters
 

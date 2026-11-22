@@ -52,7 +52,9 @@ private fun stopTime(stop: JsonObject?, vararg keys: String): Long? = keys.first
  * as routes on the real track, the disruptions on the way as sections, stations with their times, the first train,
  * a countdown and the options. Throws when the twin's planner fails (the caller then has no extras).
  */
-internal suspend fun routeExtras(twin: TwinHttp, from: Station, to: Station): RouteExtras = coroutineScope {
+internal suspend fun routeExtras(
+    twin: TwinHttp, from: Station, to: Station, onJourney: (JsonObject) -> Unit = {},
+): RouteExtras = coroutineScope {
     val planD = async { twin.json("/api/plan?from=${enc(from.id)}&to=${enc(to.id)}&limit=4").obj() }
     val alertsD = async { runCatching { twin.json("/api/alerts").objs() }.getOrDefault(emptyList()) }
     val incidentsD = async { runCatching { twin.json("/api/incidents").objs() }.getOrDefault(emptyList()) }
@@ -116,6 +118,7 @@ internal suspend fun routeExtras(twin: TwinHttp, from: Station, to: Station): Ro
 
     // real track geometry for every journey shown
     val shown = listOf(rec) + alts
+    shown.forEach(onJourney)
     val geos = shown.map { j -> async { runCatching { twin.json("/api/geometry/journey/${enc(j.str("id") ?: "")}").obj() }.getOrNull() } }.awaitAll()
     fun routeOf(j: JsonObject, i: Int, style: String) = buildJsonObject {
         val legs = j.objs("legs")

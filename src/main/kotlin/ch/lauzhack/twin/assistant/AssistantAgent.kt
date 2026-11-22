@@ -111,9 +111,10 @@ fun buildAssistant(
     queries: ch.lauzhack.twin.api.v1.TwinQueries,
     state: ch.lauzhack.twin.state.LiveState,
     db: ch.lauzhack.twin.db.Database,
+    journeys: JourneyCache = JourneyCache(),
 ): AssistantAgent {
     val stations = StationResolver(state) { db.stations() }
-    val tools = AssistantTools(queries, db, stations, SbbTwinClient(cfg.twinUrl, cfg.twinTimeoutMs))
+    val tools = AssistantTools(queries, db, stations, SbbTwinClient(cfg.twinUrl, cfg.twinTimeoutMs), journeys)
     return AssistantAgent(cfg, llm, tools)
 }
 
