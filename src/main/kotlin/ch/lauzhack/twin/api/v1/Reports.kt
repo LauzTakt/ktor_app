@@ -17,6 +17,7 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import kotlinx.serialization.Serializable
 import java.util.UUID
+import ch.lauzhack.twin.query.Severity
 
 /*
  * Staff incident reports: railway staff report what they see (web UI `/report.html`). Stored in our SQLite only;
@@ -25,7 +26,6 @@ import java.util.UUID
 
 enum class ReportCategory { rolling_stock, infrastructure, signalling, station, person, obstacle, weather, other }
 enum class ReportScope { station, section, train, point }
-private val SEVERITIES = listOf("info", "minor", "major", "critical")
 
 @Serializable
 data class CreateReportDto(
@@ -91,7 +91,7 @@ fun buildReport(
     if (req.description.length > 4000) bad("bad_description", "description must be at most 4000 characters")
     val category = ReportCategory.entries.firstOrNull { it.name == req.category }?.name
         ?: bad("bad_category", "category must be one of ${ReportCategory.entries.joinToString { it.name }}")
-    val severity = req.severity.takeIf { it in SEVERITIES } ?: bad("bad_severity", "severity must be one of ${SEVERITIES.joinToString()}")
+    val severity = Severity.of(req.severity)?.id ?: bad("bad_severity", "severity must be one of ${Severity.IDS.reversed().joinToString()}")
     val scope = ReportScope.entries.firstOrNull { it.name == req.scope }
         ?: bad("bad_scope", "scope must be one of ${ReportScope.entries.joinToString { it.name }}")
 

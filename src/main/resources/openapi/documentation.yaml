@@ -148,7 +148,7 @@ paths:
       summary: List trains (paged, sorted by trainId)
       operationId: listTrains
       parameters:
-        - { name: line, in: query, schema: { type: string }, description: "e.g. `IC1`, `S3` (case-insensitive)" }
+        - { name: line, in: query, schema: { type: string }, description: "e.g. `IC1`, `S3` (case and spaces ignored: `IC1` = `IC 1`)" }
         - { name: category, in: query, schema: { type: string }, description: "e.g. `IC`, `S`, `RE`" }
         - name: status
           in: query

@@ -67,7 +67,7 @@ Trip Watch accepts a `journeyId` from a server-cached planner result, or `trainI
 
 | Endpoint | Parameter | Default | Meaning |
 |---|---|---|---|
-| `/trains` | `line` | | e.g. `IC1`, `S3` (case-insensitive) |
+| `/trains` | `line` | | e.g. `IC1`, `S3` (case and spaces ignored: `IC1` = `IC 1`) |
 | | `category` | | e.g. `IC`, `S`, `RE` |
 | | `status` | | `active`, `cancelled`, `unknown` (position known, info not yet) |
 | | `stationId` | | only trains that will still call at / pass through this station |
@@ -387,7 +387,7 @@ Implementation: `push/` (Web Push encryption + VAPID with the JDK, FCM HTTP v1);
   Always: every incident concerning the train (same matching as `/trains/{id}/incidents`) when it starts, and
   `"Resolved: …"` when it is removed. The subscription ends by itself once the train has left that station or has
   left service.
-- **A line** `{ "line": "IC 1" }` (case-insensitive; must have a train in service): incidents only. An incident concerns
+- **A line** `{ "line": "IC 1" }` (case and spaces ignored; must have a train in service): incidents only. An incident concerns
   the line if its scope is the line or the network, or if it concerns any train in service on the line.
 
 Each incident is announced once per subscription (updates do not repeat it); incidents already active when you

@@ -9,7 +9,6 @@ import ch.lauzhack.twin.common.obj
 import ch.lauzhack.twin.common.objects
 import ch.lauzhack.twin.common.str
 import ch.lauzhack.twin.twinapi.SbbTwinClient
-import ch.lauzhack.twin.twinapi.enc
 import kotlin.math.roundToLong
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -23,6 +22,14 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
+import ch.lauzhack.twin.common.spacedLine
+import ch.lauzhack.twin.common.cleanDashes
+import ch.lauzhack.twin.common.urlEncode
+import ch.lauzhack.twin.common.geometry
+import ch.lauzhack.twin.common.capitalised
+import ch.lauzhack.twin.query.Severity
+import ch.lauzhack.twin.common.coordsOf
+import ch.lauzhack.twin.common.BBoxBuilder
 
 /** What a route brief draws and lists: map visuals, the situation on the way, the options (contract.ts shapes). */
 internal class RouteExtras(val visuals: JsonArray, val situation: JsonArray, val options: JsonArray)
@@ -31,10 +38,6 @@ private val CAUSES = mapOf(
     "construction" to "construction work", "technical_problem" to "a technical problem", "accident" to "an accident",
     "weather" to "the weather", "strike" to "a strike", "maintenance" to "maintenance work",
 )
-private val SEVERITIES = listOf("critical", "major", "minor", "info")
-private fun severityOf(s: String?) = if (s == "critical" || s == "major" || s == "minor") s else "info"
-private fun colourOf(s: String) = if (s == "critical" || s == "major") "red" else if (s == "minor") "orange" else "blue"
-internal fun cleanTitle(t: String) = t.replace(" - ", " – ")
 
 private class Sit(val id: String, val title: String, val where: String?, val severity: String, val source: String?, var geometry: JsonElement?) {
     fun json() = buildJsonObject { put("id", id); put("title", title); put("where", where); put("severity", severity); put("source", source) }
@@ -46,9 +49,10 @@ private fun isLines(g: JsonElement?): Boolean {
     return x.str("type") == "MultiLineString" || (x.str("type") == "LineString" && x.array("coordinates").size > 2)
 }
 
+/** A `focus` visual on the unpadded bounding box of [points] (`(lon, lat)`). */
 internal fun focusOn(points: List<Pair<Double, Double>>): JsonObject = buildJsonObject {
     put("type", "focus")
-    putJsonArray("bbox") { add(points.minOf { it.first }); add(points.minOf { it.second }); add(points.maxOf { it.first }); add(points.maxOf { it.second }) }
+    putJsonArray("bbox") { BBoxBuilder().apply { points.forEach { add(it.first, it.second) } }.raw()?.forEach { add(it) } }
 }
 
 internal fun stationVisual(s: CatalogStation, role: String, label: String) = buildJsonObject {
@@ -65,7 +69,7 @@ private fun stopTime(stop: JsonObject?, vararg keys: String): Long? = keys.first
 internal suspend fun routeExtras(
     twin: SbbTwinClient, from: CatalogStation, to: CatalogStation, onJourney: (JsonObject) -> Unit = {},
 ): RouteExtras = coroutineScope {
-    val planD = async { twin.json("/api/plan?from=${enc(from.id)}&to=${enc(to.id)}&limit=4").obj() }
+    val planD = async { twin.json("/api/plan?from=${urlEncode(from.id)}&to=${urlEncode(to.id)}&limit=4").obj() }
     val alertsD = async { runCatching { twin.json("/api/alerts").objects() }.getOrDefault(emptyList()) }
     val incidentsD = async { runCatching { twin.json("/api/incidents").objects() }.getOrDefault(emptyList()) }
     val plan = planD.await()
@@ -83,7 +87,7 @@ internal suspend fun routeExtras(
         val inc = incidents.find { it.str("id") == id }
         val cause = a.str("cause")?.let { CAUSES[it] }
         seen[id] = Sit(
-            id, cleanTitle(title), where ?: inc.str("where") ?: cause?.capitalised(), severityOf(severity),
+            id, cleanDashes(title), where ?: inc.str("where") ?: cause?.capitalised(), Severity.parse(severity).id,
             source ?: if (id.startsWith("sa-")) "sbb" else inc.str("source") ?: "staff",
             a.geometry() ?: inc.geometry(),
         )
@@ -97,7 +101,7 @@ internal suspend fun routeExtras(
             listOf(sc.str("stopId"), sc.str("from"), sc.str("to")).any { it == from.id || it == to.id }
         ) note(inc.str("id") ?: continue, inc.str("title") ?: "", inc.str("severity"), inc.str("source"), inc.str("where"))
     }
-    val situation = seen.values.sortedBy { SEVERITIES.indexOf(it.severity) }
+    val situation = seen.values.sortedBy { Severity.parse(it.severity).rank }
 
     val visuals = mutableListOf<JsonObject>(buildJsonObject { put("type", "clear") })
     // the track of each disruption: its own lines, else the track between the first two stations the alert names
@@ -106,7 +110,7 @@ internal suspend fun routeExtras(
             if (!isLines(s.geometry)) {
                 val st = alerts.find { it.str("id") == s.id }.objects("stations").filter { it.str("id") != null }
                 if (st.size >= 2) {
-                    val g = runCatching { twin.json("/api/geometry/section?from=${enc(st[0].str("id")!!)}&to=${enc(st[1].str("id")!!)}").obj() }.getOrNull()
+                    val g = runCatching { twin.json("/api/geometry/section?from=${urlEncode(st[0].str("id")!!)}&to=${urlEncode(st[1].str("id")!!)}").obj() }.getOrNull()
                     s.geometry = g.geometry() ?: s.geometry
                 }
             }
@@ -114,7 +118,7 @@ internal suspend fun routeExtras(
         }
     }.awaitAll().forEach { s ->
         if (isLines(s.geometry)) visuals += buildJsonObject {
-            put("type", "section"); put("id", s.id); put("colour", colourOf(s.severity)); put("label", s.title); put("geometry", s.geometry!!)
+            put("type", "section"); put("id", s.id); put("colour", Severity.parse(s.severity).colour); put("label", s.title); put("geometry", s.geometry!!)
         }
     }
     val situationJson = JsonArray(situation.map { it.json() })
@@ -129,11 +133,11 @@ internal suspend fun routeExtras(
     // real track geometry for every journey shown
     val shown = listOf(rec) + alts
     shown.forEach(onJourney)
-    val geos = shown.map { j -> async { runCatching { twin.json("/api/geometry/journey/${enc(j.str("id") ?: "")}").obj() }.getOrNull() } }.awaitAll()
+    val geos = shown.map { j -> async { runCatching { twin.json("/api/geometry/journey/${urlEncode(j.str("id") ?: "")}").obj() }.getOrNull() } }.awaitAll()
     fun routeOf(j: JsonObject, i: Int, style: String) = buildJsonObject {
         val legs = j.objects("legs")
         put("type", "route"); put("id", j.str("id")); put("style", style)
-        put("label", "${spaced(legs.firstOrNull().str("line") ?: "")} → ${to.name}, ${hhmm(j.long("departure") ?: 0)}")
+        put("label", "${spacedLine(legs.firstOrNull().str("line") ?: "")} → ${to.name}, ${hhmm(j.long("departure") ?: 0)}")
         putJsonArray("legs") {
             legs.forEachIndexed { k, l ->
                 addJsonObject {
@@ -172,11 +176,11 @@ internal suspend fun routeExtras(
     }
     val first = legs.first()
     first.str("trainId")?.let { tid ->
-        visuals += buildJsonObject { put("type", "train"); put("trainId", tid); put("label", "Your train · ${spaced(first.str("line") ?: "")}"); put("follow", false) }
+        visuals += buildJsonObject { put("type", "train"); put("trainId", tid); put("label", "Your train · ${spacedLine(first.str("line") ?: "")}"); put("follow", false) }
     }
-    visuals += buildJsonObject { put("type", "timer"); put("label", "${spaced(first.str("line") ?: "")} leaves in"); put("until", recDep) }
+    visuals += buildJsonObject { put("type", "timer"); put("label", "${spacedLine(first.str("line") ?: "")} leaves in"); put("until", recDep) }
     val coords = mutableListOf(from.lon to from.lat, to.lon to to.lat)
-    for (l in geos.firstOrNull().objects("legs")) collectCoords(l.geometry(), coords)
+    for (l in geos.firstOrNull().objects("legs")) coords += coordsOf(l.geometry())
     visuals += focusOn(coords)
 
     val options = buildJsonArray {
@@ -186,8 +190,8 @@ internal suspend fun routeExtras(
             val delay = j.double("arrivalDelayMin")?.toInt() ?: 0
             addJsonObject {
                 put("id", ('A' + i).toString())
-                put("label", if (transfers == 0) "${spaced(jl[0].str("line") ?: "")} to ${jl[0].str("headsign")?.takeIf { it.isNotEmpty() } ?: to.name}"
-                    else "${spaced(jl[0].str("line") ?: "")}, change at ${jl.getOrNull(1).obj("from").str("name")} to the ${spaced(jl.getOrNull(1).str("line") ?: "")}")
+                put("label", if (transfers == 0) "${spacedLine(jl[0].str("line") ?: "")} to ${jl[0].str("headsign")?.takeIf { it.isNotEmpty() } ?: to.name}"
+                    else "${spacedLine(jl[0].str("line") ?: "")}, change at ${jl.getOrNull(1).obj("from").str("name")} to the ${spacedLine(jl.getOrNull(1).str("line") ?: "")}")
                 put("departure", j.long("departure") ?: 0)
                 put("arrival", j.long("arrival") ?: 0)
                 put("transfers", transfers)
