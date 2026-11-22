@@ -15,6 +15,12 @@ When using a Wallet issuer, set `WALLET_PUBLIC_BASE_URL` to the public HTTPS ori
 
 Apple Pass Type ID and Google issuer credentials belong to the project that issues the informational pass. Updating an actual SBB ticket would require SBB's issuer integration. [Apple signing](https://developer.apple.com/documentation/walletpasses/building-a-pass) · [Google issuer setup](https://developers.google.com/wallet/generic/getting-started/issuer-onboarding) · [Google REST credentials](https://developers.google.com/wallet/generic/getting-started/auth/rest)
 
+## What the pass shows
+
+Both passes look like a rail ticket in Apple Wallet: a white train boarding pass with black type. The header shows the planned departure of the leg the passenger boards next (`Departure:` `dd.MM.yyyy HH:mm`, Europe/Zurich). The origin and destination of the trip sit on each side of the train glyph. Below them are the line of that leg, `Direct` or the number of changes, and the date, then `Next step` with the current instruction. A large QR code opens the Trip Watch page. The Google Generic object shows the same face: `Departure …` as subheader, `Origin → Destination` as header, the QR code, and text modules for the next step, the line and changes, and the trip update. The watch page renders an HTML replica of the Apple pass above its controls. The three read one shared face. [Pass face](../src/main/kotlin/ch/lauzhack/twin/wallet/TripWatchPass.kt) · [Page preview](../src/main/resources/static/trip-watch.js)
+
+The pass copies the ticket layout but carries no railway branding and no ticket data. Its logo is a plain red bar next to the name "Train twin". The QR code encodes only the watch page URL, captioned "Travel information · not a ticket", and a back field repeats that the pass is not valid for travel. Google crops logos into a circle, so Ktor serves a white square with the bar inside the circle at `/wallet/logo.png`. Lock-screen alerts still come from the back `alert` field. It changes only for actionable advice, so the passenger's own boarding and alighting confirmations update the pass silently.
+
 ## How trip data becomes advice
 
 * The passenger connection screen supplies a run ID and its two selected stop IDs. Ktor checks the ordered calls. The assistant supplies a journey ID drawn from a server-cached planner result. Ktor saves its underlying run IDs, board and alight stops, and times so the watch survives planner cache expiry.

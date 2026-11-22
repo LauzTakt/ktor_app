@@ -44,19 +44,21 @@ internal class AppleWallet(
 ) {
     fun pass(watch: TripWatch, site: String): ByteArray {
         val relevant = watch.relevantLeg()
+        val face = watch.passFace(site)
         val fields = buildJsonObject {
             put("formatVersion", 1)
             put("description", "Trip Watch travel updates")
-            put("organizationName", "Train twin")
-            put("logoText", "Trip Watch")
+            put("organizationName", PASS_BRAND)
+            put("logoText", PASS_BRAND)
             put("passTypeIdentifier", passType)
             put("teamIdentifier", team)
             put("serialNumber", watch.id)
             put("authenticationToken", watch.appleToken)
             put("webServiceURL", "$site/wallet/apple")
-            put("foregroundColor", "rgb(33, 33, 33)")
+            // A rail ticket in Wallet: white card, black values and black (bold) labels.
+            put("foregroundColor", "rgb(0, 0, 0)")
             put("backgroundColor", "rgb(255, 255, 255)")
-            put("labelColor", "rgb(104, 104, 104)")
+            put("labelColor", "rgb(0, 0, 0)")
             put("expirationDate", Instant.ofEpochMilli(if (watch.ended) minOf(watch.expiresAt, watch.updatedAt) else watch.expiresAt).toString())
             if (watch.ended) put("voided", true)
             if (relevant != null && relevant.from.lat != null && relevant.from.lon != null) {
@@ -69,9 +71,25 @@ internal class AppleWallet(
                     })
                 })
             }
-            put("generic", buildJsonObject {
-                put("primaryFields", buildJsonArray { add(field("action", "Next step", watch.instruction())) })
-                put("secondaryFields", buildJsonArray { add(field("destination", "Destination", watch.destination.name)) })
+            // The QR code opens the Trip Watch page. It never carries ticket data.
+            put("barcodes", buildJsonArray {
+                add(buildJsonObject {
+                    put("format", "PKBarcodeFormatQR"); put("message", face.url)
+                    put("messageEncoding", "iso-8859-1"); put("altText", PASS_NOTICE)
+                })
+            })
+            put("boardingPass", buildJsonObject {
+                put("transitType", "PKTransitTypeTrain")
+                put("headerFields", buildJsonArray { add(field("departure", "Departure:", face.departure)) })
+                put("primaryFields", buildJsonArray {
+                    add(value("origin", face.origin)); add(value("destination", face.destination))
+                })
+                put("secondaryFields", buildJsonArray {
+                    add(value("line", face.line)); add(value("changes", face.changes)); add(value("date", face.date))
+                })
+                // Lock-screen alerts stay on the back "alert" field, which changes only for actionable advice. A
+                // change message here would also fire on the passenger's own boarded/alighted taps (silent syncs).
+                put("auxiliaryFields", buildJsonArray { add(field("next", "Next step", face.nextStep)) })
                 put("backFields", buildJsonArray {
                     watch.advice.detail?.let { add(field("detail", "Trip update", it)) }
                     if (!watch.ended) add(buildJsonObject {
@@ -80,8 +98,9 @@ internal class AppleWallet(
                     })
                     add(buildJsonObject {
                         put("key", "open"); put("label", "Journey"); put("value", "Open Trip Watch")
-                        put("attributedValue", "<a href=\"$site/trip-watch.html?id=${watch.id}\">Open Trip Watch</a>")
+                        put("attributedValue", "<a href=\"${face.url}\">Open Trip Watch</a>")
                     })
+                    add(field("notice", "About this pass", PASS_ABOUT))
                 })
             })
         }
@@ -90,6 +109,9 @@ internal class AppleWallet(
             "icon.png" to walletIcon32,
             "icon@2x.png" to walletIcon64,
             "icon@3x.png" to walletIcon96,
+            "logo.png" to walletLogo1x,
+            "logo@2x.png" to walletLogo2x,
+            "logo@3x.png" to walletLogo3x,
         )
         val manifest = buildJsonObject {
             for ((name, bytes) in assets) put(name, HexFormat.of().formatHex(MessageDigest.getInstance("SHA-1").digest(bytes)))
@@ -129,6 +151,9 @@ internal class AppleWallet(
         put("key", key); put("label", label); put("value", value)
     }
 
+    /** A plain value without a label, like the station names and ticket details on a rail ticket. */
+    private fun value(key: String, value: String) = buildJsonObject { put("key", key); put("value", value) }
+
     companion object {
         fun load(passType: String, team: String, path: String, password: String, intermediate: String?): AppleWallet {
             val secret = password.toCharArray()
@@ -160,6 +185,9 @@ internal fun TripWatch.relevantLeg(): WatchLeg? =
 private val walletIcon32 by lazy { walletIcon(32) }
 private val walletIcon64 by lazy { walletIcon(64) }
 internal val walletIcon96 by lazy { walletIcon(96) }
+private val walletLogo1x by lazy { passLogo(1) }
+private val walletLogo2x by lazy { passLogo(2) }
+private val walletLogo3x by lazy { passLogo(3) }
 
 private fun walletIcon(size: Int): ByteArray {
     val image = BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB)

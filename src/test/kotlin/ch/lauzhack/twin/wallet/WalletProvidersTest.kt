@@ -3,6 +3,7 @@ package ch.lauzhack.twin.wallet
 import com.sun.net.httpserver.HttpServer
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -25,6 +26,8 @@ import java.util.Base64
 import java.util.Date
 import java.util.HexFormat
 import java.util.zip.ZipInputStream
+import javax.imageio.ImageIO
+import kotlin.math.hypot
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -66,7 +69,69 @@ class WalletProvidersTest {
         val pass = Json.parseToJsonElement(entries.getValue("pass.json").decodeToString()).jsonObject
         assertEquals(47.1, pass["locations"]!!.jsonArray.single().jsonObject["latitude"]!!.jsonPrimitive.content.toDouble())
         assertEquals("$site/wallet/apple", pass["webServiceURL"]!!.jsonPrimitive.content)
-        assertFalse(pass.containsKey("barcodes"))
+
+        // Laid out like a rail ticket in Wallet: a white train boarding pass with black values and labels.
+        assertFalse(pass.containsKey("generic"))
+        assertEquals("Train twin", pass.text("organizationName"))
+        assertEquals("Train twin", pass.text("logoText"))
+        assertEquals("rgb(255, 255, 255)", pass.text("backgroundColor"))
+        assertEquals("rgb(0, 0, 0)", pass.text("foregroundColor"))
+        assertEquals("rgb(0, 0, 0)", pass.text("labelColor"))
+        val board = pass["boardingPass"]!!.jsonObject
+        assertEquals("PKTransitTypeTrain", board.text("transitType"))
+        assertEquals(listOf("Departure:" to "10.01.2030 09:00"), board.fields("headerFields"))
+        assertEquals(listOf(null to "Station A", null to "Station B"), board.fields("primaryFields"))
+        assertEquals(listOf(null to "IC 1", null to "Direct", null to "10.01.2030"), board.fields("secondaryFields"))
+        assertEquals(listOf("Next step" to "Take IC 1 from Station A at 09:00"), board.fields("auxiliaryFields"))
+        val back = board["backFields"]!!.jsonArray.map { it.jsonObject }
+        assertEquals("%@", back.single { it.text("key") == "alert" }.text("changeMessage"))
+        assertTrue(back.single { it.text("key") == "notice" }.text("value")!!.contains("not a ticket"))
+
+        // The QR code opens the watch page and says it is not a ticket.
+        val qr = pass["barcodes"]!!.jsonArray.single().jsonObject
+        assertEquals("PKBarcodeFormatQR", qr.text("format"))
+        assertEquals("$site/trip-watch.html?id=opaque-id", qr.text("message"))
+        assertEquals("iso-8859-1", qr.text("messageEncoding"))
+        assertEquals("Travel information · not a ticket", qr.text("altText"))
+
+        // The logo is a plain red 3:1 bar at every scale, and it is signed with the rest of the pass.
+        for ((name, scale) in listOf("logo.png" to 1, "logo@2x.png" to 2, "logo@3x.png" to 3)) {
+            assertTrue(hashes.containsKey(name), name)
+            val logo = ImageIO.read(ByteArrayInputStream(entries.getValue(name)))
+            assertEquals(45 * scale to 15 * scale, logo.width to logo.height)
+            assertEquals(0xEB0000, logo.getRGB(logo.width / 2, logo.height / 2) and 0xFFFFFF)
+        }
+    }
+
+    @Test
+    fun googlePassShowsTheSameTicketFaceAndQrCode() {
+        val pass = GoogleWallet("123.trip", "issuer@example.test", keys.private).pass(watch, site)
+        assertEquals("#ffffff", pass.text("hexBackgroundColor"))
+        assertEquals("Train twin", pass.localized("cardTitle"))
+        assertEquals("Departure 10.01.2030 09:00", pass.localized("subheader"))
+        assertEquals("Station A → Station B", pass.localized("header"))
+        assertEquals("$site/wallet/logo.png", pass["logo"]!!.jsonObject["sourceUri"]!!.jsonObject.text("uri"))
+        val qr = pass["barcode"]!!.jsonObject
+        assertEquals("QR_CODE", qr.text("type"))
+        assertEquals("$site/trip-watch.html?id=opaque-id", qr.text("value"))
+        assertEquals("Travel information · not a ticket", qr.text("alternateText"))
+        val modules = pass["textModulesData"]!!.jsonArray.associate { it.jsonObject.text("id") to it.jsonObject.text("body") }
+        assertEquals("Take IC 1 from Station A at 09:00", modules["next"])
+        assertEquals("IC 1 · Direct", modules["line"])
+        assertTrue(modules.getValue("notice")!!.contains("not a ticket"))
+
+        // Google crops logos to a circle: the red bar must sit well inside it on a white square.
+        val logo = ImageIO.read(ByteArrayInputStream(passCircleLogo()))
+        assertEquals(logo.width, logo.height)
+        val red = buildList {
+            for (y in 0 until logo.height) for (x in 0 until logo.width) {
+                if (logo.getRGB(x, y) and 0xFFFFFF == 0xEB0000) add(x to y)
+            }
+        }
+        val radius = logo.width / 2.0
+        assertTrue(red.all { (x, y) -> hypot(x + 0.5 - radius, y + 0.5 - radius) < radius * 0.85 })
+        assertEquals(0xFFFFFF, logo.getRGB(0, 0) and 0xFFFFFF)
+        assertEquals(0xEB0000, logo.getRGB(logo.width / 2, logo.height / 2) and 0xFFFFFF)
     }
 
     @Test
@@ -119,4 +184,8 @@ class WalletProvidersTest {
             server.stop(0)
         }
     }
+
+    private fun JsonObject.text(key: String) = this[key]?.jsonPrimitive?.content
+    private fun JsonObject.localized(key: String) = this[key]!!.jsonObject["defaultValue"]!!.jsonObject.text("value")
+    private fun JsonObject.fields(key: String) = this[key]!!.jsonArray.map { it.jsonObject.text("label") to it.jsonObject.text("value") }
 }

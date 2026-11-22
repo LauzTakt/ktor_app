@@ -63,6 +63,14 @@ class TripWatchIntegrationTest {
         val url = "$base/${view["id"]!!.jsonPrimitive.content}"
         assertTrue(view["canManage"]!!.jsonPrimitive.boolean)
         assertFalse(view.containsKey("appleToken"))
+        // The page previews the Wallet pass from the same face the passes use.
+        val pass = view["pass"]!!.jsonObject
+        assertEquals("Station A", pass["origin"]!!.jsonPrimitive.content)
+        assertEquals("Station C", pass["destination"]!!.jsonPrimitive.content)
+        assertEquals(view["instruction"]!!.jsonPrimitive.content, pass["nextStep"]!!.jsonPrimitive.content)
+        assertEquals("Direct", pass["changes"]!!.jsonPrimitive.content)
+        assertEquals("/trip-watch.html?id=${view["id"]!!.jsonPrimitive.content}", pass["url"]!!.jsonPrimitive.content)
+        assertEquals("Travel information · not a ticket", pass["notice"]!!.jsonPrimitive.content)
         assertFalse(client.get(url).bodyAsText().json()["canManage"]!!.jsonPrimitive.boolean)
         assertEquals(HttpStatusCode.NotFound, client.delete(url).status)
         val ended = client.delete(url) { header(HttpHeaders.Cookie, cookie) }

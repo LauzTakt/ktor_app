@@ -1,3 +1,5 @@
+import { qrcodegen } from "./vendor/qrcodegen-v1.8.0.js";
+
 const root = document.querySelector("#watch-page-content");
 const feedback = document.querySelector("#watch-feedback");
 const params = new URLSearchParams(location.search);
@@ -54,23 +56,106 @@ async function transact(element, fn) {
   }
 }
 
-function heading(label) {
-  const title = node("h1", label);
+function heading(label, classes) {
+  const title = node("h1", label, classes);
   title.tabIndex = -1;
   return title;
+}
+
+const svgNs = "http://www.w3.org/2000/svg";
+
+function svg(viewBox, classes, paths) {
+  const element = document.createElementNS(svgNs, "svg");
+  element.setAttribute("viewBox", viewBox);
+  element.setAttribute("class", classes);
+  element.setAttribute("aria-hidden", "true");
+  for (const [d, attributes = {}] of paths) {
+    const path = document.createElementNS(svgNs, "path");
+    path.setAttribute("d", d);
+    for (const [name, value] of Object.entries(attributes)) path.setAttribute(name, value);
+    element.append(path);
+  }
+  return element;
+}
+
+// Front view of a train, the glyph Wallet draws between origin and destination on a train boarding pass.
+const trainGlyph = () => svg("0 0 46 60", "pass-glyph", [
+  ["M12 4h22a6 6 0 0 1 6 6v27a6 6 0 0 1-6 6H12a6 6 0 0 1-6-6V10a6 6 0 0 1 6-6z" +
+    "M16.5 7h13a1.5 1.5 0 0 1 1.5 1.5v1a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 15 9.5v-1A1.5 1.5 0 0 1 16.5 7z" +
+    "M12 14h22a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H12a2 2 0 0 1-2-2V16a2 2 0 0 1 2-2z" +
+    "M10 35.5a2.6 2.6 0 1 0 5.2 0a2.6 2.6 0 1 0-5.2 0z" +
+    "M30.8 35.5a2.6 2.6 0 1 0 5.2 0a2.6 2.6 0 1 0-5.2 0z", { "fill-rule": "evenodd" }],
+  ["M14.8 44.5 6.3 58.5M31.2 44.5 39.7 58.5M10.5 49.8h25", { fill: "none", stroke: "currentColor", "stroke-width": "4.5" }],
+]);
+
+const walletIcon = () => svg("0 0 24 24", "icon", [
+  ["M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"],
+  ["M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"],
+]);
+
+function qrCode(text) {
+  const qr = qrcodegen.QrCode.encodeText(text, qrcodegen.QrCode.Ecc.MEDIUM);
+  let d = "";
+  for (let y = 0; y < qr.size; y++) {
+    for (let x = 0; x < qr.size; x++) if (qr.getModule(x, y)) d += `M${x} ${y}h1v1h-1z`;
+  }
+  const code = svg(`0 0 ${qr.size} ${qr.size}`, "pass-qr", [[d]]);
+  code.setAttribute("shape-rendering", "crispEdges");
+  return code;
+}
+
+function passField(label, value, classes) {
+  const field = node("div", "", classes);
+  if (label) field.append(node("span", label, "pass-label"));
+  field.append(node("span", value, "pass-value"));
+  return field;
+}
+
+/** HTML replica of the Wallet pass: the same face (`watch.pass`) that Apple and Google Wallet show. */
+function passPreview(watch) {
+  const face = watch.pass;
+  const card = node("div", "", "pass-card");
+  card.dataset.state = watch.kind;
+
+  const head = node("div", "", "pass-head");
+  const logo = node("div", "", "pass-logo");
+  logo.append(node("span", "", "pass-bar"), node("span", face.brand, "pass-brand"));
+  head.append(logo, passField("Departure:", face.departure, "pass-header-field"));
+
+  const route = node("div", "", "pass-primary");
+  route.setAttribute("aria-label", `${face.origin} to ${face.destination}`);
+  route.append(node("span", face.origin, "pass-station"), trainGlyph(), node("span", face.destination, "pass-station"));
+
+  const details = node("div", "", "pass-secondary");
+  for (const value of [face.line, face.changes, face.date]) details.append(node("span", value));
+
+  const code = node("div", "", "pass-code");
+  const url = new URL(face.url, location.origin).href;
+  const qr = qrCode(url);
+  qr.setAttribute("aria-hidden", "false");
+  qr.setAttribute("role", "img");
+  qr.setAttribute("aria-label", "QR code that opens this trip page");
+  code.append(qr, node("span", face.notice, "pass-alt"));
+
+  card.append(head, route, details, passField("Next step", face.nextStep, "pass-aux"), code);
+  const pass = node("section", "", "pass");
+  pass.setAttribute("aria-label", "Wallet pass");
+  pass.append(card);
+  return pass;
 }
 
 function render(next, focus = false) {
   if (!focus && JSON.stringify(next) === JSON.stringify(watch)) return;
   watch = next;
-  const title = heading(`${watch.origin} to ${watch.destination}`);
+  const title = heading(`${watch.origin} to ${watch.destination}`, "sr-only");
   const panel = node("section", "", "card watch-panel");
   panel.dataset.state = watch.kind;
   const status = node("div", "", "state");
   status.append(node("span", "", "dot"), node("span", watch.kind === "ended" ? "Watch ended" :
     watch.kind === "check" ? "Connection changed" : "Watching trip"));
-  panel.append(status, node("h2", watch.instruction));
-  if (watch.detail) panel.append(node("p", watch.detail, "lead"));
+  // The next step is on the pass above: the panel adds the live detail, or what the watch does.
+  panel.append(status, node("p", watch.detail || (watch.kind === "ended" ? "Updates have stopped for this trip." :
+    "Your next step updates here and on the pass if this connection changes."), "lead"));
   if (watch.legCount > 1 && watch.kind !== "ended") {
     panel.append(node("p", `Leg ${watch.leg} of ${watch.legCount}`, "note"));
   }
@@ -87,21 +172,26 @@ function render(next, focus = false) {
       render(await json(`/${watchId}`, { method: "DELETE" }), true);
     }));
   }
-  root.replaceChildren(title, panel);
-  if (controls.childElementCount) root.append(controls);
-
+  root.replaceChildren(title, passPreview(watch));
   if (watch.apple || watch.google) {
-    const wallet = node("section", "", "card watch-panel");
-    wallet.append(node("h2", "Add to Wallet"), node("p", "Keep the next step handy at your boarding station.", "lead"));
-    const links = node("div", "", "watch-actions");
-    if (watch.apple) links.append(link("Add to Apple Wallet", `${base}/${watchId}/apple.pkpass`));
-    if (watch.google) links.append(button("Add to Google Wallet", async () => {
-      const result = await json(`/${watchId}/google`, { method: "POST" });
-      location.assign(result.url);
-    }));
-    wallet.append(links);
+    const wallet = node("div", "", "wallet-buttons");
+    if (watch.apple) {
+      const apple = link("Add to Apple Wallet", `${base}/${watchId}/apple.pkpass`, "btn wallet");
+      apple.prepend(walletIcon());
+      wallet.append(apple);
+    }
+    if (watch.google) {
+      const google = button("Add to Google Wallet", async () => {
+        const result = await json(`/${watchId}/google`, { method: "POST" });
+        location.assign(result.url);
+      }, "btn wallet");
+      google.prepend(walletIcon());
+      wallet.append(google);
+    }
     root.append(wallet);
   }
+  root.append(panel);
+  if (controls.childElementCount) root.append(controls);
   if (focus) title.focus();
 }
 
