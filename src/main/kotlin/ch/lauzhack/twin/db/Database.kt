@@ -300,6 +300,25 @@ class Database(path: String) : AutoCloseable {
 
     fun incident(id: String): IncidentRow? = query("SELECT * FROM incident WHERE id=?", id) { it.toIncidentRow(withGeometry = true) }.firstOrNull()
 
+    /**
+     * Latest raw MQTT payload of each incident (from its history), for fields the `incident` table does not keep
+     * (e.g. `cause`, `effect`, `until`, `replacementBus`). Incident id -> payload JSON.
+     */
+    fun latestIncidentPayloads(ids: Collection<String>): Map<String, String> {
+        if (ids.isEmpty()) return emptyMap()
+        val marks = ids.joinToString(",") { "?" }
+        val rows = query(
+            "SELECT incident_id, payload_json FROM incident_event WHERE payload_json IS NOT NULL AND incident_id IN ($marks) ORDER BY seq",
+            *ids.toTypedArray(),
+        ) { it.getString(1) to it.getString(2) }
+        return rows.toMap() // later rows (higher seq) win
+    }
+
+    /** The station catalog: every station seen in a train run so far (outlives the trains in service). */
+    fun stations(): List<Station> = query("SELECT stop_id, name, lat, lon FROM station") {
+        Station(it.getString("stop_id"), it.getString("name"), it.doubleOrNull("lat"), it.doubleOrNull("lon"))
+    }
+
     private fun ResultSet.toIncidentRow(withGeometry: Boolean = false) = IncidentRow(
         id = getString("id"), title = getString("title"), description = getString("description"),
         severity = getString("severity"), type = getString("type"), reasonCode = getString("reason_code"),

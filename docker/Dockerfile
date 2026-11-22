@@ -1,6 +1,18 @@
 # syntax=docker/dockerfile:1
 # Build context = repository root:  docker build -f docker/Dockerfile -t ktor-app .
 
+# ---------- passenger voice assistant (client/, React + Vite) ----------
+FROM node:22-slim AS client
+WORKDIR /src/client
+COPY docker/certs/ /tmp/certs/
+# Extra CAs for npm behind a TLS-intercepting proxy (no-op when the folder is empty)
+RUN cat /tmp/certs/*.crt > /tmp/extra-ca.pem 2>/dev/null || true
+ENV NODE_EXTRA_CA_CERTS=/tmp/extra-ca.pem
+COPY client/package.json client/package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
+COPY client/ ./
+RUN npm run build
+
 # ---------- build ----------
 FROM gradle:9.9-jdk21 AS build
 WORKDIR /src
@@ -19,8 +31,9 @@ RUN --mount=type=cache,target=/home/gradle/.gradle \
     gradle --no-daemon -q dependencies --configuration runtimeClasspath > /dev/null
 
 COPY src src
+COPY --from=client /src/build/client build/client
 RUN --mount=type=cache,target=/home/gradle/.gradle \
-    gradle --no-daemon -q installDist -x test
+    gradle --no-daemon -q installDist -x test -PskipClient=true
 
 # ---------- runtime ----------
 FROM eclipse-temurin:21-jre

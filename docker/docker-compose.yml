@@ -18,6 +18,11 @@ services:
       MQTT_USERNAME: ${MQTT_USERNAME:-}
       MQTT_PASSWORD: ${MQTT_PASSWORD:-}
       MQTT_ENABLED: ${MQTT_ENABLED:-true}
+      # Passenger assistant (/api/v1/assistant/ask) and voice app (/assistant/)
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      SBB_TWIN_URL: ${SBB_TWIN_URL:-http://127.0.0.1:8787}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+      PASSENGER_AGENT_ID: ${PASSENGER_AGENT_ID:-}
       JAVA_OPTS: ${JAVA_OPTS:--XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError}
       PORT: 8080
       DB_PATH: /app/data/twin.sqlite

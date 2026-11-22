@@ -34,6 +34,7 @@ dependencies {
     implementation(libs.logback.classic)
     implementation(libs.paho.mqttv3)
     implementation(libs.sqlite.jdbc)
+    implementation(libs.anthropic.java)
 
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.kotlin.test.junit)
@@ -52,3 +53,26 @@ tasks.named<JavaExec>("run") {
             }
     }
 }
+
+// Passenger voice assistant (client/, React + Vite, ex sbb-client): built into build/client/static/assistant/ and
+// packaged as resources, served at /assistant/. Needs Node + npm on the PATH. `-PskipClient=true` skips npm and
+// packages whatever build/client already holds (the Docker build compiles the client in its own Node stage).
+val skipClient = providers.gradleProperty("skipClient").map { it.toBoolean() }.getOrElse(false)
+val npmCi by tasks.registering(Exec::class) {
+    onlyIf { !skipClient }
+    workingDir = file("client")
+    commandLine("npm", "ci", "--no-audit", "--no-fund")
+    inputs.file("client/package-lock.json")
+    outputs.dir("client/node_modules")
+}
+val buildClient by tasks.registering(Exec::class) {
+    onlyIf { !skipClient }
+    dependsOn(npmCi)
+    workingDir = file("client")
+    commandLine("npm", "run", "build")
+    inputs.dir("client/src")
+    inputs.dir("client/public")
+    inputs.files("client/index.html", "client/vite.config.ts", "client/package-lock.json")
+    outputs.dir(layout.buildDirectory.dir("client"))
+}
+sourceSets.main { resources.srcDir(buildClient.map { it.outputs.files.singleFile }) }
