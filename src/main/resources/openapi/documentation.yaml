@@ -210,6 +210,7 @@ paths:
     get:
       tags: [stations]
       summary: Search stations
+      description: The station catalog is restored from SQLite at startup and updated from the feed.
       operationId: listStations
       parameters:
         - { name: q, in: query, schema: { type: string }, description: "Substring of the name (case- and accent-insensitive), or exact stopId; prefix matches first", example: bern }

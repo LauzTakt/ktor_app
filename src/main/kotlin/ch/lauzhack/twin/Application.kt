@@ -69,9 +69,9 @@ data class Health(val status: String)
 /** Entry point referenced from application.yaml (ktor.application.modules). */
 fun Application.module() {
     val conf = environment.config
-    val state = LiveState()
     val dbPath = conf.propertyOrNull("db.path")?.getString() ?: "data/twin.sqlite"
     val db = Database(dbPath)
+    val state = LiveState(db.stations())
     val journeys = JourneyCache()
 
     val mqttEnabled = conf.propertyOrNull("mqtt.enabled")?.getString()?.toBooleanStrictOrNull() ?: true

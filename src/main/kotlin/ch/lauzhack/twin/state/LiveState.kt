@@ -20,12 +20,12 @@ data class TrainState(
 )
 
 /**
- * In-memory last known state. Nothing here is written to disk: the retained `trains/+/info` topics rebuild it
- * a few seconds after (re)connecting, and `fleet` refreshes every position each second.
+ * The saved station catalog is available at startup. Train state is rebuilt from the retained
+ * `trains/+/info` topics after (re)connecting, and `fleet` refreshes every position each second.
  *
  * Writers: the MQTT callback thread. Readers: HTTP/WebSocket handlers. Maps are concurrent; values are immutable.
  */
-class LiveState {
+class LiveState(savedStations: Collection<Station> = emptyList()) {
     private val infos = ConcurrentHashMap<String, TrainInfo>()
     @Volatile private var positions: Map<String, TrainPosition> = emptyMap()
 
@@ -34,14 +34,14 @@ class LiveState {
 
     /** stopId -> trainIds whose run calls at that stop (kept in sync with [infos]). */
     private val trainsByStop = ConcurrentHashMap<String, MutableSet<String>>()
-    private val stations = ConcurrentHashMap<String, Station>()
+    private val stations = ConcurrentHashMap(savedStations.associateBy { it.stopId })
 
     @Volatile var status: TwinStatus? = null
         private set
     @Volatile var lastFleetTs: Long = 0
         private set
 
-    /** Returns stations seen for the first time (so the caller can persist them). */
+    /** Returns new or updated station records for persistence. */
     fun upsertInfo(info: TrainInfo): List<Station> {
         val old = infos.put(info.trainId, info)
         val oldStops = old?.calls?.mapTo(HashSet()) { it.stopId } ?: emptySet()
@@ -49,14 +49,12 @@ class LiveState {
         (oldStops - newStops).forEach { unindex(it, info.trainId) }
         (newStops - oldStops).forEach { trainsByStop.computeIfAbsent(it) { ConcurrentHashMap.newKeySet() }.add(info.trainId) }
 
-        val added = ArrayList<Station>()
+        val changed = ArrayList<Station>()
         for (c in info.calls) {
             val s = Station(c.stopId, c.name, c.lat, c.lon)
-            val prev = stations.putIfAbsent(c.stopId, s)
-            if (prev == null) added += s
-            else if (prev != s) stations[c.stopId] = s // name/coords corrected upstream
+            if (stations.put(c.stopId, s) != s) changed += s
         }
-        return added
+        return changed
     }
 
     fun removeInfo(trainId: String) {
