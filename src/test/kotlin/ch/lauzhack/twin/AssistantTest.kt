@@ -42,6 +42,11 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import ch.lauzhack.twin.query.IncidentQueries
 import ch.lauzhack.twin.report.ReportService
+import ch.lauzhack.twin.assistant.describeContext
+import ch.lauzhack.twin.assistant.describeScreen
+import ch.lauzhack.twin.assistant.guessDestination
+import ch.lauzhack.twin.assistant.guessLine
+import ch.lauzhack.twin.assistant.guessTrip
 
 class AssistantTest {
     /** One local HTTP server standing in for the Claude API (`/v1/messages`) and for sbb-twin (`/api/...`). */
