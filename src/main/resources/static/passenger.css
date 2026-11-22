@@ -265,13 +265,15 @@ button.stop:hover { background: var(--milk); }
 
 /* Origin / destination */
 .od { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; padding: 4px 8px 4px 0; align-items: center; }
-.od-field { grid-column: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 14px; border: 0; background: none; text-align: left;
-  cursor: pointer; border-radius: 10px; transition: background-color 200ms var(--ease); }
+.od-field { grid-column: 1; align-self: stretch; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 14px; border: 0; background: none; text-align: left;
+  cursor: text; border-radius: 10px; transition: background-color 200ms var(--ease); }
 .od-field + .swap + .od-field { border-top: 1px solid var(--cloud); border-radius: 0 0 10px 10px; }
 .od-field.active { background: var(--milk); }
 .od-field .k { font-size: 12px; color: var(--metal); }
-.od-field .v { font-size: 15px; color: var(--smoke); }
-.od-field .v.set { color: var(--charcoal); font-weight: 700; }
+.od-field:focus-within { outline: 2px solid var(--sky); outline-offset: -2px; }
+.od-field .v { width: 100%; min-width: 0; padding: 0; border: 0; outline: 0; background: none; font: inherit; font-size: 15px; color: var(--charcoal); }
+.od-field .v::placeholder { color: var(--smoke); }
+.od-field .v.set { font-weight: 700; }
 .od .swap { grid-column: 2; grid-row: 1 / span 2; }
 .od > .od-field:last-of-type { grid-row: 2; }
 
