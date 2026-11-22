@@ -94,12 +94,12 @@ class TwinQueries(
     // ------------------------------------------------------------------ stations
 
     fun stations(q: String?, bbox: BBox?, limit: Int): List<StationDto> {
-        val needle = q?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
+        val needle = q?.let(::searchKey)?.takeIf { it.isNotEmpty() }
         return state.stations().asSequence()
-            .filter { needle == null || needle in it.name.lowercase() || it.stopId == needle }
+            .filter { needle == null || needle in searchKey(it.name) || it.stopId == needle }
             .filter { bbox == null || bbox.contains(it.lon, it.lat) }
             // exact / prefix matches first, then alphabetical
-            .sortedWith(compareBy<Station>({ needle != null && !it.name.lowercase().startsWith(needle) }, { it.name }))
+            .sortedWith(compareBy<Station>({ needle != null && !searchKey(it.name).startsWith(needle) }, { it.name }))
             .take(limit)
             .map { it.toDto() }
             .toList()
@@ -301,6 +301,12 @@ class TwinQueries(
         }
     }
 }
+
+private val DIACRITICS = Regex("\\p{Mn}+")
+
+/** Station-name search key: trimmed, lower case, accents removed ("Zürich" and "zurich" match; ß -> ss). */
+internal fun searchKey(s: String): String =
+    java.text.Normalizer.normalize(s.trim().lowercase(), java.text.Normalizer.Form.NFD).replace(DIACRITICS, "").replace("ß", "ss")
 
 private fun severityRank(s: String?) = when (s?.lowercase()) {
     "critical" -> 0
