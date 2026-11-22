@@ -157,7 +157,7 @@ internal fun parseWatchLegs(journey: JsonObject): List<WatchLeg>? {
 
 internal fun WatchLeg.boardAdvice(): TripWatchAdvice =
     TripWatchAdvice(TripWatchAction.Board(serviceId, from.id, to.id, departure),
-        if (expectedDeparture != departure) "Expected departure ${watchTime(expectedDeparture)}." else null)
+        if (watchTime(expectedDeparture) != watchTime(departure)) "Expected departure ${watchTime(expectedDeparture)}." else null)
 
 private fun StopDto.watchStop() = WatchStop(stopId, name, lat, lon)
 private fun JsonObject.watchStop() = string("id")?.let { WatchStop(it, string("name") ?: it, number("lat"), number("lon")) }
