@@ -39,6 +39,7 @@ written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lau
 | `GET /stations/{stopId}/destinations` | `Destination[]`: stations reachable from here with a train in service, most served first |
 | `GET /stations/{stopId}/connections` | `Connections`: trains in service going from this station to `?to=`, by departure |
 | `GET /stations/{stopId}/screen` | `Screen`: compact view for small displays (next departures + related incidents) |
+| `GET /stations/{stopId}/screen.txt` | the same view as plain text for microcontrollers (ETag, 304 when unchanged) |
 | `GET /incidents` | `Incident[]` |
 | `GET /incidents/{id}` | `Incident` with `geometry` (GeoJSON) |
 | `GET /incidents/{id}/history` | `IncidentEvent[]` |
@@ -90,6 +91,8 @@ Trip Watch accepts a `journeyId` from a server-cached planner result, or `trainI
 | | `windowMin`, `limit` | 180 (1…1440), 10 (max 100) | departures within the window (trains at the station always included) |
 | `/stations/{id}/screen` | `limit` | 6 (max 20) | number of departures |
 | | `windowMin` | 120 (1…1440) | departures window |
+| `/stations/{id}/screen.txt` | `limit`, `windowMin` | as `/screen` | |
+| | `incidents` | 3 (0…5) | number of incidents |
 | `/incidents` | `all` | `false` | `true` = also removed incidents |
 | | `severity` | | `info`, `minor`, `major`, `critical` |
 | | `scopeKind` | | `section`, `station`, `train`, `line`, `network` |
@@ -153,6 +156,18 @@ Trip Watch accepts a `journeyId` from a server-cached planner result, or `trainI
                     "to": "St. Gallen", "cancelled": false, "atStation": false } ],
   "incidents": [ { "id": "i-4d5811f3", "severity": "major", "title": "Overhead line fault: Lausanne – Fribourg",
                    "where": "Lausanne – Fribourg", "atStation": true, "trains": 3, "updatedAt": 1795294200000 } ] }
+
+// Screen, text form (GET /stations/{id}/screen.txt): for microcontrollers (ESP32 station screen), ~250 B.
+// text/plain UTF-8, one item per line, fields separated by "|" (never inside a value), Swiss local times, delays in
+// whole minutes (early = 0). Titles ≤ 96 chars, `where` ≤ 48, destinations ≤ 40. Header `ETag` covers everything but
+// the clock: send it back in `If-None-Match` and an unchanged board answers 304 with no body.
+//   S|name|HH:MM now|now epoch s
+//   D|HH:MM planned|delay min|line|category|to|cancelled 0/1|atStation 0/1     (departures, in board order)
+//   I|severity|atStation 0/1|trains|title|where                               (incidents, worst first)
+S|Lausanne|23:27|1795294228
+D|23:34|2|IC1|IC|St. Gallen|0|0
+D|23:36|0|S1|S|Villeneuve|0|1
+I|major|1|3|Overhead line fault: Lausanne – Fribourg|Lausanne – Fribourg
 
 // IncidentEvent (history, oldest first)
 { "seq": 1, "kind": "created", "receivedAt": ..., "updatedAt": ..., "status": "active", "severity": "critical" }
@@ -348,6 +363,7 @@ curl localhost:8080/api/v1/trains/20261121_ojp-91-1-D.1.TA.2207.j26 # one train,
 curl "localhost:8080/api/v1/trains?bbox=8.4,47.3,8.6,47.45"          # trains around Zürich
 curl localhost:8080/api/v1/incidents/i-4d5811f3/history
 curl "localhost:8080/api/v1/stations/8501120/screen?limit=6"         # compact view for a small display
+curl -i "localhost:8080/api/v1/stations/8501120/screen.txt"         # same as text, with ETag
 websocat ws://localhost:8080/api/v1/ws   # then: {"op":"subscribe","topic":"station","id":"8507000","frequencySec":5}
 ```
 

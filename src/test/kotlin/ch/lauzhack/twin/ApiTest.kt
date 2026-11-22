@@ -5,8 +5,10 @@ import ch.lauzhack.twin.model.Incident
 import ch.lauzhack.twin.model.IncidentScope
 import ch.lauzhack.twin.state.LiveState
 import io.ktor.client.request.get
+import io.ktor.client.request.header
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
@@ -118,6 +120,30 @@ class ApiTest {
         assertEquals(1, json("/api/v1/stations/C/screen?limit=1").o["departures"]!!.jsonArray.size)
         assertEquals("bad_limit", json("/api/v1/stations/C/screen?limit=50", HttpStatusCode.BadRequest).o["error"]!!.s("code"))
         assertEquals("station_not_found", json("/api/v1/stations/nope/screen", HttpStatusCode.NotFound).o["error"]!!.s("code"))
+    }
+
+    @Test
+    fun stationScreenAsText() = api {
+        val r = client.get("/api/v1/stations/C/screen.txt")
+        assertEquals(HttpStatusCode.OK, r.status)
+        val lines = r.bodyAsText().trimEnd('\n').split('\n')
+        assertEquals("S", lines[0].split('|')[0])
+        assertEquals(2, lines.count { it.startsWith("D|") })
+        val late = lines.filter { it.startsWith("D|") }[1].split('|')
+        assertEquals(8, late.size)
+        assertEquals("2", late[2])                                              // t-to-c: 120 s late = 2 min
+        val inc = lines.single { it.startsWith("I|") }.split('|')
+        assertEquals(listOf("I", "critical", "1", "2", "Fault C-D"), inc.take(5))
+
+        // unchanged board: 304 with no body
+        val etag = r.headers[HttpHeaders.ETag]!!
+        val again = client.get("/api/v1/stations/C/screen.txt") { header(HttpHeaders.IfNoneMatch, etag) }
+        assertEquals(HttpStatusCode.NotModified, again.status)
+        assertEquals("", again.bodyAsText())
+        assertEquals(HttpStatusCode.OK, client.get("/api/v1/stations/C/screen.txt") { header(HttpHeaders.IfNoneMatch, "\"x\"") }.status)
+
+        assertEquals(0, client.get("/api/v1/stations/C/screen.txt?incidents=0").bodyAsText().lines().count { it.startsWith("I|") })
+        assertEquals(HttpStatusCode.NotFound, client.get("/api/v1/stations/nope/screen.txt").status)
     }
 
     @Test
