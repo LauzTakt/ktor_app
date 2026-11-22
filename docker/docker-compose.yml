@@ -28,6 +28,19 @@ services:
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:push@train-twin.invalid}
+      # Trip Watch + Wallet passes (docs/WALLET_TRIP_WATCH.md). Off unless WALLET_ENABLED=true; the watch DB defaults to
+      # DB_PATH.wallet.sqlite (same volume). Google: issuer class id + service account (file path, or JSON raw/base64).
+      # Apple: WALLET_APPLE_P12 / WALLET_APPLE_WWDR_CERT are file paths (mount them, e.g. under /app/data).
+      WALLET_ENABLED: ${WALLET_ENABLED:-false}
+      WALLET_PUBLIC_BASE_URL: ${WALLET_PUBLIC_BASE_URL:-}
+      WALLET_DB_PATH: ${WALLET_DB_PATH:-}
+      WALLET_GOOGLE_CLASS_ID: ${WALLET_GOOGLE_CLASS_ID:-}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
+      WALLET_APPLE_PASS_TYPE_ID: ${WALLET_APPLE_PASS_TYPE_ID:-}
+      WALLET_APPLE_TEAM_ID: ${WALLET_APPLE_TEAM_ID:-}
+      WALLET_APPLE_P12: ${WALLET_APPLE_P12:-}
+      WALLET_APPLE_P12_PASSWORD: ${WALLET_APPLE_P12_PASSWORD:-}
+      WALLET_APPLE_WWDR_CERT: ${WALLET_APPLE_WWDR_CERT:-}
       # Deep links into the mobile app (/.well-known/, mobile/README.md "Deep links"): empty = not served
       ANDROID_CERT_SHA256: ${ANDROID_CERT_SHA256:-}
       IOS_APP_ID: ${IOS_APP_ID:-}

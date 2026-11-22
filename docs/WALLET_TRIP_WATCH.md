@@ -11,7 +11,7 @@ When using a Wallet issuer, set `WALLET_PUBLIC_BASE_URL` to the public HTTPS ori
 | Provider | Configuration |
 | --- | --- |
 | Apple Wallet | Set `WALLET_APPLE_PASS_TYPE_ID`, `WALLET_APPLE_TEAM_ID`, `WALLET_APPLE_P12` and its password if applicable. Set `WALLET_APPLE_WWDR_CERT` to the matching WWDR certificate if the PKCS#12 lacks it. The pass update service runs at `/wallet/apple/v1`. |
-| Google Wallet | Create a Generic class on the Wallet issuer, configure its ID as `WALLET_GOOGLE_CLASS_ID` and set `GOOGLE_APPLICATION_CREDENTIALS` to the issuer's authorized service account JSON. Issuers in demo mode can save through their test accounts. |
+| Google Wallet | Create a Generic class on the Wallet issuer, configure its ID as `WALLET_GOOGLE_CLASS_ID` and set `GOOGLE_APPLICATION_CREDENTIALS` to the issuer's authorized service account JSON: a file path, or the JSON itself (raw or base64, handy in Coolify). Issuers in demo mode can save through their test accounts. |
 
 Apple Pass Type ID and Google issuer credentials belong to the project that issues the informational pass. Updating an actual SBB ticket would require SBB's issuer integration. [Apple signing](https://developer.apple.com/documentation/walletpasses/building-a-pass) · [Google issuer setup](https://developers.google.com/wallet/generic/getting-started/issuer-onboarding) · [Google REST credentials](https://developers.google.com/wallet/generic/getting-started/auth/rest)
 
