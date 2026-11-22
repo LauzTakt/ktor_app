@@ -71,7 +71,8 @@ class TripWatchConfig(
     }
 }
 
-@Serializable private data class WatchAvailability(val enabled: Boolean)
+/** `apple` / `google`: the passenger view offers "Add to … Wallet" on a train only when that wallet is configured. */
+@Serializable private data class WatchAvailability(val enabled: Boolean, val apple: Boolean = false, val google: Boolean = false)
 @Serializable private data class WatchError(val error: String)
 @Serializable private data class WatchChange(val action: String)
 @Serializable private data class WatchLink(val url: String)
@@ -124,7 +125,7 @@ private fun TripWatch.view(canManage: Boolean, service: TripWatchService): Watch
 
 internal fun Route.tripWatchRoutes(service: TripWatchService?) {
     route("/api/v1/trip-watches") {
-        get("/availability") { call.respond(WatchAvailability(service != null)) }
+        get("/availability") { call.respond(WatchAvailability(service != null, service?.apple != null, service?.google != null)) }
         if (service == null) return@route
         get {
             call.privateResponse()

@@ -53,7 +53,7 @@ written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lau
 | `GET /reports/{id}` | `Report` |
 | `POST /reports/{id}/resolve` | `{ "resolution": "text" \| null }` (optional body) → resolved `Report`; `409 already_resolved` if not open |
 | `POST /assistant/ask` | `AskResponse`: the passenger assistant's answer (see [Passenger assistant](#passenger-assistant-post-assistantask)) |
-| `GET /trip-watches/availability` | `{ "enabled": boolean }` |
+| `GET /trip-watches/availability` | `{ "enabled": boolean, "apple": boolean, "google": boolean }` (`apple` / `google`: that Wallet is configured) |
 | `GET /trip-watches` | Active watches for the calling browser |
 | `POST /trip-watches` | Resolve a selected departure or plan and start watching. Returns the watch and sets its owner cookie. |
 | `GET /trip-watches/{id}` | Read the watch from its opaque link |
@@ -545,6 +545,9 @@ All pages follow [`docs/STYLE.md`](STYLE.md) (SBB look: SBB Web font, SBB palett
   - At a station: destination by text or map (reachable stations from `/stations/{id}/destinations` highlighted),
     then "Best routes" (`/routes`, with changes, recommended first, every 60 s and on incident events) and the direct
     trains in service (`/stations/{id}/connections?to=`); tap a route or a train to follow it on tracks.
+  - "Add to Google Wallet" on a train (Android browser or app, when `availability.google`): starts a Trip Watch for
+    the planned trip (`journeyId`), else this leg / the selected trip, else this train from its next stop to its
+    terminus, then opens Google's save URL (`POST /trip-watches/{id}/google`). The pass follows the train live.
   - Trip with changes (a route tapped on "Best routes", `passenger/trip.js`, saved in `localStorage` `twin-trip`,
     URL `/?train=…&trip=<journeyId>&leg=<i>`): the path of trains stays on top of the train screen (tap a train to look
     at it), starting with the first one. A train whose run has not started yet shows "Not running yet" with its

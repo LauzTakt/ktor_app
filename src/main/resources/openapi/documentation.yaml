@@ -43,7 +43,13 @@ paths:
           description: Feature availability
           content:
             application/json:
-              schema: { type: object, required: [enabled], properties: { enabled: { type: boolean } } }
+              schema:
+                type: object
+                required: [enabled, apple, google]
+                properties:
+                  enabled: { type: boolean }
+                  apple: { type: boolean, description: Apple Wallet passes are configured }
+                  google: { type: boolean, description: Google Wallet passes are configured }
   /trip-watches:
     get:
       tags: [trip-watch]

@@ -2,7 +2,7 @@
 
 import { $, esc, LATE_SEC, publicApi as api, reducedMotion, time as hhmm } from "../common.js";
 import { tiktLoading } from "../tikt.js";
-import { ILLUSTRATION, NEAR_M, alertHtml, askAssistant, backBtn, buzz, clamp, distText, drawIncidents, ic, labelView, lineLabel, onLeave, placeholders, restartBtn, setUrl, setView, show, stateHtml, timeHtml, toast, tripWatchAvailable, untilText } from "./ui.js";
+import { ILLUSTRATION, NEAR_M, alertHtml, askAssistant, backBtn, buzz, clamp, distText, drawIncidents, ic, labelView, lineLabel, onLeave, placeholders, restartBtn, setUrl, setView, show, stateHtml, timeHtml, toast, googleWalletAvailable, tripWatchAvailable, untilText } from "./ui.js";
 import { geo, geoText, live, locate, nearbyStationsFor, nearbyTrainsFor } from "./location.js";
 import { stationPicker } from "./stations.js";
 import { alerts, followCard } from "./alerts.js";
@@ -520,6 +520,7 @@ export function onTracksScreen(trainId, trip = null, onBack = null) {
       <div class="nextstop card" id="next"></div>
       <div class="follow card" id="follow"></div>
       ${trip ? '<a id="watch-train" class="btn btn-block watch-entry" hidden>Watch this trip</a>' : ''}
+      <button id="gwallet" class="btn btn-block wallet-add" type="button" hidden>${ic("wallet")} Add to Google Wallet</button>
       <h2>Route</h2>
       <div class="route" id="route">${placeholders(4, "Loading the route…")}</div>
       <p class="note">Tap a stop to see its departures and incidents.</p>`;
@@ -542,6 +543,32 @@ export function onTracksScreen(trainId, trip = null, onBack = null) {
       link.href = `/trip-watch.html?${new URLSearchParams({ trainId, ...trip })}`;
       link.hidden = false;
     });
+    // Google Wallet (Android): a Trip Watch pass for this train, kept up to date; then Google's "save" page.
+    googleWalletAvailable.then((ok) => { const b = $("#gwallet", s); if (ok && b?.isConnected) b.hidden = false; });
+    $("#gwallet", s).onclick = async (e) => {
+      const btn = e.currentTarget;
+      if (btn.disabled) return;
+      buzz(15);
+      btn.disabled = true;
+      try {
+        location.assign(await addToGoogleWallet(walletSelection()));
+      } catch (err) {
+        toast(err.message || "Google Wallet is unavailable. Try again shortly.");
+      } finally {
+        btn.disabled = false;
+      }
+    };
+    // What the pass follows: the whole planned trip, this leg, or this train from its next stop to its terminus.
+    const walletSelection = () => {
+      if (legs?.length > 1 && trip.id) return [{ journeyId: trip.id }, { trainId, fromStopId: leg.from.stopId, toStopId: leg.to.stopId }];
+      if (leg) return [{ trainId, fromStopId: leg.from.stopId, toStopId: leg.to.stopId }];
+      if (trip) return [{ trainId, fromStopId: trip.fromStopId, toStopId: trip.toStopId }];
+      const stops = last?.stops ?? [];
+      const from = stops.find((x) => (x.state === "current" || x.state === "next") && !x.skipped);
+      const to = [...stops].reverse().find((x) => !x.skipped);
+      if (!from || !to || from.stopId === to.stopId) throw new Error("This train has no stop ahead to put in Wallet.");
+      return [{ trainId, fromStopId: from.stopId, toStopId: to.stopId }];
+    };
     const incidents = new Map();
     let last = null;
     const scene = trainScene($("#scene", s));
@@ -690,4 +717,24 @@ export function onTracksScreen(trainId, trip = null, onBack = null) {
     const tick = setInterval(() => last && draw(last.train, last.stops), 15_000);
     onLeave(() => clearInterval(tick));
   });
+}
+
+/** Starts a Trip Watch for the first selection that resolves and returns its Google Wallet "save" URL. */
+async function addToGoogleWallet(selections) {
+  const call = async (path, body) => {
+    const r = await fetch(`/api/v1/trip-watches${path}`, {
+      method: "POST", credentials: "same-origin",
+      headers: { Accept: "application/json", ...(body ? { "Content-Type": "application/json" } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw Object.assign(new Error(typeof j.error === "string" ? j.error : "Google Wallet is unavailable. Try again shortly."), { status: r.status });
+    return j;
+  };
+  let watch = null, error = null;
+  for (const sel of selections) {
+    try { watch = await call("", sel); break; } catch (e) { error = e; if (e.status !== 409) break; }
+  }
+  if (!watch) throw error;
+  return (await call(`/${encodeURIComponent(watch.id)}/google`)).url;
 }

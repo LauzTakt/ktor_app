@@ -391,3 +391,9 @@ button.stop { font: inherit; color: inherit; }
 .trip-path .leg.done { opacity: .5; }
 .trip-path .chg { margin-left: 14px; padding: 2px 0 2px 12px; border-left: 2px dotted var(--cloud); font-size: 12px; color: var(--metal); }
 .trip-path .chg.done { opacity: .5; }
+
+/* Google Wallet: black button as in Google's brand rules (the one exception to the SBB palette, as on trip-watch.html). */
+.btn.wallet-add { background: #000; border-color: #000; color: #fff; gap: 8px; }
+.btn.wallet-add:hover { background: #262626; border-color: #262626; }
+.btn.wallet-add:disabled { opacity: .6; }
+.btn.wallet-add .icon { width: 18px; height: 18px; }
