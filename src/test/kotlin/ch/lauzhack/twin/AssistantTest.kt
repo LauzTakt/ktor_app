@@ -140,12 +140,12 @@ class AssistantTest {
                 // --- what was sent to Claude
                 assertEquals(2, fake.claudeRequests.size)
                 val first = fake.claudeRequests[0]
-                assertEquals("claude-opus-5-5", first["model"]!!.jsonPrimitive.content)
-                assertEquals("fast", first["speed"]!!.jsonPrimitive.content)
+                assertEquals("claude-sonnet-5-5", first["model"]!!.jsonPrimitive.content)
+                assertEquals(null, first["speed"])
                 assertEquals("low", first["output_config"]!!.jsonObject["effort"]!!.jsonPrimitive.content)
                 assertEquals("1h", first["system"]!!.jsonArray[0].jsonObject["cache_control"]!!.jsonObject["ttl"]!!.jsonPrimitive.content)
                 assertEquals(
-                    setOf("find_station", "station_board", "train_status", "plan_journey", "situation", "show_route", "show_section",
+                    setOf("find_station", "station_board", "train_status", "plan_journey", "situation", "bulletins", "show_route", "show_section",
                         "highlight_train", "mark_station", "start_timer", "focus_on", "respond"),
                     first["tools"]!!.jsonArray.map { it.jsonObject["name"]!!.jsonPrimitive.content }.toSet(),
                 )
