@@ -14,6 +14,7 @@
 import { addRail, applyTheme as applyMapTheme, baseStyle } from "./common.js";
 import * as push from "./push.js";
 import { startTour, tourSeen } from "./onboarding.js";
+import { lokiLoading } from "./loki.js";
 
 const TZ = "Europe/Zurich";
 const THEME_KEY = "twin-theme"; // shared with the staff pages
@@ -180,17 +181,37 @@ function show(build, { back = false, restart = true } = {}) {
   return s;
 }
 
-/** Keep the address shareable: `?train=` / `?station=` like the QR codes. */
+/** Keep the address shareable: `?train=` / `?station=` like the QR codes. Also tells the assistant what is open. */
 function setUrl(params) {
   const u = new URL(location.href);
   u.search = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString();
   history.replaceState(null, "", u);
+  const view = params.train ? { screen: "train", trainId: params.train, fromStopId: params.from, toStopId: params.to }
+    : params.line ? { screen: "line", line: params.line, label: params.line }
+    : params.stop ? { screen: "station", stopId: params.stop }
+    : params.station && params.to ? { screen: "connections", fromStopId: params.station, toStopId: params.to }
+    : params.station ? { screen: "destinations", stopId: params.station }
+    : null;
+  setView(view);
 }
+
+/**
+ * What the passenger has open, for the travel assistant (assistant-launcher.js posts it to the /assistant/ frame,
+ * which sends it with every question as `context.onScreen`). null = a generic screen (start, search, alerts).
+ * Screens call it again with a `label` once they know the names.
+ */
+function setView(view) {
+  window.twinView = view;
+  window.dispatchEvent(new CustomEvent("twin-view", { detail: view }));
+}
+const labelView = (label) => { if (window.twinView && label && window.twinView.label !== label) setView({ ...window.twinView, label }); };
 
 restartBtn.addEventListener("click", () => { buzz(); setUrl({}); geo.promise = null; detectScreen({ back: true }); });
 
 const backBtn = (label = "Back") => `<button class="back" type="button" data-back>${ic("back")}${esc(label)}</button>`;
-const placeholders = (n = 3) => Array.from({ length: n }, () => '<div class="placeholder"></div>').join("");
+// Loading lists: Loki rolling on his track above the skeleton rows (docs/STYLE.md "9. Mascot").
+const placeholders = (n = 3, caption = "Checking the live data…") =>
+  (caption ? lokiLoading({ caption, mini: true }) : "") + Array.from({ length: n }, () => '<div class="placeholder"></div>').join("");
 
 // ------------------------------------------------------------------ location
 
@@ -304,11 +325,10 @@ function liveBadge(on) {
 // ------------------------------------------------------------------ 1. detect (location)
 
 function detectScreen(opts = {}) {
+  setView(null);
   show((s) => {
     s.innerHTML = `
-      <div class="illus-box locating">${ILLUSTRATION.search}<span class="radar"></span></div>
-      <h1>Finding where you are…</h1>
-      <p class="lead">We look for a train or a station within ${NEAR_M} m of you.</p>
+      <div class="loki-hero">${lokiLoading({ caption: "Finding where you are…", sub: `I look for a train or a station within ${NEAR_M} m of you.`, mood: "think" })}</div>
       <div class="actions"><button class="btn block" id="skip">Just browsing</button></div>`;
     let alive = true;
     onLeave(() => (alive = false));
@@ -340,6 +360,7 @@ async function askStationOrBrowse(fix) {
 // ------------------------------------------------------------------ 2a. are you on this train?
 
 function askTrainScreen(candidates) {
+  setView(null);
   const [best, ...others] = candidates;
   show((s) => {
     const t = best.train;
@@ -365,6 +386,7 @@ function askTrainScreen(candidates) {
 // ------------------------------------------------------------------ 2b. are you at this station?
 
 function askStationScreen(near) {
+  setView(null);
   show((s) => {
     s.innerHTML = `
       <div class="illus-box">${ILLUSTRATION.station}</div>
@@ -484,12 +506,13 @@ async function stationMap(el, { reachable, onPick }) {
 
 function destinationScreen(from) {
   setUrl({ station: from.stopId });
+  labelView(from.name);
   show((s) => {
     s.innerHTML = `
       ${backBtn("Start again")}
       <div class="step-row"><span class="step">At ${esc(from.name)}</span><button class="link" type="button" id="info">Station info${ic("chevron")}</button></div>
       <div class="deps-head"><h2>Next departures</h2><span class="note" id="deps-note"></span></div>
-      <div class="deps card" id="deps">${placeholders(3)}</div>
+      <div class="deps card" id="deps">${placeholders(3, "Looking for departures…")}</div>
       <h1>Where are you going?</h1>
       <div id="picker"></div>`;
     $("[data-back]", s).onclick = () => restartBtn.click();
@@ -611,6 +634,7 @@ function departuresBoard(box, note, from, { onTrain = (id) => onTracksScreen(id)
  */
 function stationScreen(st, onBack = null) {
   setUrl({ stop: st.stopId });
+  labelView(st.name);
   const self = () => stationScreen(st, onBack);
   show((s) => {
     s.innerHTML = `
@@ -623,7 +647,7 @@ function stationScreen(st, onBack = null) {
         <div class="list" id="sinc-list"></div>
       </details>
       <div class="deps-head"><h2>Next departures</h2><span class="note" id="deps-note"></span></div>
-      <div class="deps card" id="deps">${placeholders(4)}</div>
+      <div class="deps card" id="deps">${placeholders(4, "Looking for departures…")}</div>
       <div class="actions"><button class="btn primary block" id="plan">Plan a trip from here</button></div>`;
     $("[data-back]", s).onclick = () => (onBack ? onBack() : restartBtn.click());
     $("#plan", s).onclick = () => { buzz(15); destinationScreen(st); };
@@ -685,8 +709,12 @@ function stationSearchScreen(onBack) {
 
 // ------------------------------------------------------------------ 3b. just browsing: origin + destination
 
-/** [noLocation]: we could not locate the user, so the travel assistant is the main action (card on top, red button). */
+/**
+ * The travel assistant card is always on top. [noLocation]: we could not locate the user, so it is the main action
+ * (red button, no picker opened at once).
+ */
 function browseScreen({ note = null, back = false, noLocation = false } = {}) {
+  setView(null);
   const pick = { from: null, to: null };
   const hint = { from: "Where do you start?", to: "Where do you go?" };
   show((s) => {
@@ -696,13 +724,13 @@ function browseScreen({ note = null, back = false, noLocation = false } = {}) {
       <div class="illus-box small">${ILLUSTRATION.search}</div>
       <h1>Plan a trip</h1>
       <p class="lead">${esc(note || "Choose where you start and where you go.")}</p>
-      ${noLocation ? `<div class="assistant-card card">
+      <div class="assistant-card card">
         <span class="fic">${ic("chat")}</span>
         <div class="main"><div class="t">Ask the travel assistant</div>
           <div class="m">Tell it where you are and where you go, by voice or chat. It finds your train.</div></div>
-        <button class="btn primary block" type="button" id="ask">Ask the assistant</button>
+        <button class="btn${noLocation ? " primary" : ""} block" type="button" id="ask">Ask the assistant</button>
       </div>
-      <h2>Or plan it yourself</h2>` : ""}
+      <h2>Or plan it yourself</h2>
       <div class="od card">
         ${field$("from")}
         <button class="icon-btn swap" type="button" title="Swap" aria-label="Swap">${ic("swap")}</button>
@@ -764,15 +792,14 @@ function browseScreen({ note = null, back = false, noLocation = false } = {}) {
     };
     $("#go", s).onclick = () => { buzz(15); connectionsScreen(pick.from, pick.to); };
     $("#board", s).onclick = () => { buzz(15); stationSearchScreen(() => browseScreen({ note, back: true, noLocation })); };
-    const ask = $("#ask", s);
-    if (ask) ask.onclick = () => {
+    $("#ask", s).onclick = () => {
       buzz(15);
       const fab = $("#assistant-fab");
       if (fab?.getAttribute("aria-expanded") !== "true") fab?.click();
     };
     render();
-    // Without location the assistant comes first: no keyboard popping up over it.
-    if (!noLocation) {
+    // Without location the assistant comes first; on a phone the keyboard would cover the assistant card.
+    if (!noLocation && !matchMedia("(pointer: coarse)").matches) {
       openPicker();
       setTimeout(() => inputOf("from")?.focus({ preventScroll: true }), 250);
     }
@@ -783,13 +810,14 @@ function browseScreen({ note = null, back = false, noLocation = false } = {}) {
 
 function connectionsScreen(from, to) {
   setUrl({ station: from.stopId, to: to.stopId });
+  labelView(`${from.name} to ${to.name}`);
   show((s) => {
     s.innerHTML = `
       ${backBtn()}
       <div class="step">From ${esc(from.name)}</div>
       <h1>Trains to ${esc(to.name)}</h1>
       <div id="alerts" class="list"></div>
-      <div class="list" id="list">${placeholders()}</div>
+      <div class="list" id="list">${placeholders(3, "Finding trains for you…")}</div>
       <p class="note">Live data. Only trains already in service are shown.</p>`;
     $("[data-back]", s).onclick = () => destinationScreen(from);
     const list = $("#list", s);
@@ -848,7 +876,7 @@ function onTracksScreen(trainId, trip = null, onBack = null) {
       <div class="follow card" id="follow"></div>
       ${trip ? '<a id="watch-train" class="btn block watch-entry" hidden>Watch this trip</a>' : ''}
       <h2>Route</h2>
-      <div class="route" id="route">${placeholders(4)}</div>
+      <div class="route" id="route">${placeholders(4, "Loading the route…")}</div>
       <p class="note">Tap a stop to see its departures and incidents.</p>`;
     if (onBack) $("[data-back]", s).onclick = () => onBack();
     $("#route", s).addEventListener("click", (e) => {
@@ -874,6 +902,7 @@ function onTracksScreen(trainId, trip = null, onBack = null) {
       const cancelled = train.status === "cancelled";
       $("#line", s).innerHTML = lineLabel(train, true);
       $("#to", s).textContent = `to ${train.headsign || train.destination?.name || "?"}`;
+      if (window.twinView?.trainId === trainId) labelView(`${train.line || train.category || "Train"} to ${train.headsign || train.destination?.name || "?"}`);
       $("#state", s).innerHTML = stateHtml(train);
       const standing = train.position?.motion === "stopped" && train.position?.atStopId;
       scene.then((x) => x?.update({ speedKmh: standing ? 0 : train.position?.speedKmh ?? 0, atStation: standing ? (train.currentStop?.name || " ") : null }));
@@ -1049,11 +1078,11 @@ function alertsScreen(onBack) {
       <h1>Your alerts</h1>
       <p class="lead">Trains and lines you follow. Alerts arrive even when this page is closed.</p>
       ${sup.ok ? "" : `<p class="note warnbox">${esc(sup.reason)}</p>`}
-      <div class="list" id="subs">${placeholders(2)}</div>
+      <div class="list" id="subs">${placeholders(2, null)}</div>
       <h2>Follow a line</h2>
       <p class="note">Get an alert when an incident starts or ends anywhere on a line.</p>
       <label class="search">${ic("search")}<input id="lq" type="search" placeholder="Line, e.g. IC 1 or S3" autocomplete="off" enterkeyhint="search" aria-label="Search a line"></label>
-      <div class="list" id="lines">${placeholders(3)}</div>
+      <div class="list" id="lines">${placeholders(3, "Loading the lines…")}</div>
       <div class="actions" id="test-box" hidden><button class="btn block" type="button" id="test">Send a test alert</button></div>`;
     $("[data-back]", s).onclick = () => onBack();
     const self = () => alertsScreen(onBack);
@@ -1115,9 +1144,9 @@ function lineScreen(line, onBack) {
       <p class="lead" id="lsum">&nbsp;</p>
       <div class="follow card" id="follow"><div class="main"><div class="m">&nbsp;</div></div></div>
       <h2>Incidents</h2>
-      <div class="list" id="linc">${placeholders(1)}</div>
+      <div class="list" id="linc">${placeholders(1, "Checking this line…")}</div>
       <h2>Trains in service</h2>
-      <div class="list" id="ltr">${placeholders(3)}</div>`;
+      <div class="list" id="ltr">${placeholders(3, null)}</div>`;
     $("[data-back]", s).onclick = () => onBack();
     let name = line;
 

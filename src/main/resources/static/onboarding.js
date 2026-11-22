@@ -1,6 +1,8 @@
 // First-run tour of the passenger view, guided by "Loki", a small flat vector train (docs/STYLE.md "Mascot").
 // Shown once per browser (localStorage), before the location prompt; the "?" button in the header replays it.
-// No dependencies: `startTour({ onDone })` builds its own overlay and removes it when finished or skipped.
+// Self-contained: `startTour({ onDone })` builds its own overlay and removes it when finished or skipped.
+
+import { LOKI_SVG } from "./loki.js";
 
 const SEEN_KEY = "twin-tour-v1";
 const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -14,35 +16,13 @@ const markSeen = () => { try { localStorage.setItem(SEEN_KEY, "done"); } catch {
 const STEPS = [
   { mood: "hello", title: "Hi, I'm Loki", text: "I'll show you around this app. It takes 30 seconds and you can skip me any time." },
   { mood: "point", title: "I find your train for you", text: "When we start, your phone asks for your location. I use it only to spot a train or a station close to you. Say no and you can still pick your stations by hand." },
-  { target: "#assistant-fab", mood: "point", title: "Ask the travel assistant", text: "Not sure which train to take? Tap here and ask, by voice or by chat." },
+  { target: "#assistant-fab", mood: "point", title: "Talk to me", text: "Not sure which train to take? Tap here and ask me, by voice or by chat. I am also your travel assistant." },
   { target: "#alerts-btn", mood: "point", title: "Your alerts", text: "Follow a train or a line and I let you know about delays, incidents and when you reach your stop." },
   { target: ".watched-trips-nav a", mood: "point", title: "Watched trips", text: "Trips you save show up here, so you can check them again later." },
   { target: "#theme", mood: "point", title: "Light or dark", text: "Switch the colours here, whatever is easier on your eyes." },
   { target: "#tour-btn", mood: "point", title: "Need me again?", text: "Tap the question mark and I come back for another round." },
   { mood: "cheer", title: "All aboard!", text: "Let's find your train.", last: true },
 ];
-
-const MASCOT = `
-<svg class="loki-svg" viewBox="0 0 100 92" aria-hidden="true">
-  <g class="loki-panto"><path d="M38 15 50 5 62 15" /><path d="M41 3h18" /></g>
-  <g class="loki-body">
-    <rect x="14" y="14" width="72" height="62" rx="18" class="loki-red" />
-    <rect x="22" y="22" width="56" height="28" rx="10" class="loki-glass" />
-    <path class="loki-brow l" d="M32 28q6-4 12 0" />
-    <path class="loki-brow r" d="M56 28q6-4 12 0" />
-    <g class="loki-eyes">
-      <g class="loki-eye"><circle cx="39" cy="38" r="6.5" class="loki-ink" /><circle class="loki-glint" cx="41" cy="36" r="2" /></g>
-      <g class="loki-eye"><circle cx="61" cy="38" r="6.5" class="loki-ink" /><circle class="loki-glint" cx="63" cy="36" r="2" /></g>
-    </g>
-    <circle cx="26" cy="62" r="4.5" class="loki-lamp" />
-    <circle cx="74" cy="62" r="4.5" class="loki-lamp" />
-    <path class="loki-smile" d="M41 58q9 8 18 0" />
-    <ellipse class="loki-mouth" cx="50" cy="61" rx="5.5" ry="4" />
-    <rect x="20" y="73" width="60" height="7" rx="3" class="loki-skirt" />
-    <circle cx="32" cy="83" r="6" class="loki-ink" /><circle cx="32" cy="83" r="2" class="loki-hub" />
-    <circle cx="68" cy="83" r="6" class="loki-ink" /><circle cx="68" cy="83" r="2" class="loki-hub" />
-  </g>
-</svg>`;
 
 const MASCOT_W = 84; // rendered width of the mascot in px (CSS .loki)
 
@@ -60,7 +40,7 @@ export function startTour({ onDone = () => {} } = {}) {
     <div class="tour-dim"></div>
     <div class="tour-spot off"></div>
     <div class="tour-guide" role="dialog" aria-modal="true" aria-labelledby="tour-title" aria-describedby="tour-text">
-      <div class="tour-track"><div class="loki">${MASCOT}</div><div class="tour-rail"></div></div>
+      <div class="tour-track"><div class="loki">${LOKI_SVG}</div><div class="tour-rail"></div></div>
       <div class="tour-bubble">
         <div class="tour-head"><span class="tour-count"></span><button class="tour-skip" type="button">Skip tour</button></div>
         <h2 id="tour-title"></h2>
