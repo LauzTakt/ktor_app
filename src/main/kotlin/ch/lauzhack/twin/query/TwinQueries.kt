@@ -4,12 +4,13 @@ import ch.lauzhack.twin.db.IncidentRow
 import ch.lauzhack.twin.model.Call
 import ch.lauzhack.twin.model.StopRef
 import ch.lauzhack.twin.state.LiveState
-import ch.lauzhack.twin.state.Station
+import ch.lauzhack.twin.model.Station
 import ch.lauzhack.twin.state.TrainState
 import ch.lauzhack.twin.common.NotFoundException
 import ch.lauzhack.twin.common.invalid
 import ch.lauzhack.twin.common.notFound
 import ch.lauzhack.twin.common.searchKey
+import ch.lauzhack.twin.common.lineKey
 
 /** Bounding box `minLon,minLat,maxLon,maxLat` (WGS84). */
 data class BBox(val minLon: Double, val minLat: Double, val maxLon: Double, val maxLat: Double) {
@@ -52,7 +53,7 @@ class TwinQueries(
         val source = f.stationId?.let { state.trainsCallingAt(it) } ?: state.trains()
         val matches = source.asSequence()
             .filter { t -> f.stationId == null || upcomingIndexAt(t, f.stationId) != null }
-            .filter { t -> f.line == null || t.line.equals(f.line, ignoreCase = true) }
+            .filter { t -> f.line == null || sameLine(t.line, f.line) }
             .filter { t -> f.category == null || t.category.equals(f.category, ignoreCase = true) }
             .filter { t -> f.status == null || t.status.equals(f.status, ignoreCase = true) }
             .filter { t -> f.atStation == null || (t.position?.atStopId != null) == f.atStation }
@@ -91,15 +92,12 @@ class TwinQueries(
     // ------------------------------------------------------------------ stations
 
     fun stations(q: String?, bbox: BBox?, limit: Int): List<StationDto> {
-        val needle = q?.let(::searchKey)?.takeIf { it.isNotEmpty() }
-        return state.stations().asSequence()
-            .filter { needle == null || needle in searchKey(it.name) || it.stopId == needle }
-            .filter { bbox == null || bbox.contains(it.lon, it.lat) }
-            // exact / prefix matches first, then alphabetical
-            .sortedWith(compareBy<Station>({ needle != null && !searchKey(it.name).startsWith(needle) }, { it.name }))
-            .take(limit)
-            .map { it.toDto() }
-            .toList()
+        val inBox = state.stations().filter { bbox == null || bbox.contains(it.lon, it.lat) }
+        val query = q?.trim()?.takeIf { it.isNotEmpty() }
+        val found = if (query == null) inBox.sortedBy { it.name }
+        else inBox.filter { it.stopId == query } +
+            StationSearch.rank(query, inBox, { it.name }) { state.trainsCallingAt(it.stopId).size }.filter { it.stopId != query }
+        return found.take(limit).map { it.toDto() }
     }
 
     fun station(stopId: String): StationDetailDto {
@@ -142,7 +140,7 @@ class TwinQueries(
                 delaySec = if (time != null && planned != null) ((time - planned) / 1000).toInt() else null,
                 atStation = atStation, startsHere = startsHere, terminatesHere = terminatesHere,
                 incidents = incidents.mapNotNull { inc -> trainIncidentMatch(inc, t)?.let { inc.toDto(it) } }
-                    .sortedWith(compareBy({ severityRank(it.severity) }, { -it.updatedAt })),
+                    .sortedWith(compareBy({ Severity.parse(it.severity).rank }, { -it.updatedAt })),
             )
         }.sortedWith(compareBy({ !it.atStation }, { it.time ?: Long.MAX_VALUE })).take(limit)
         return BoardDto(s.toDto(), type, now, windowMin, entries)
@@ -161,7 +159,7 @@ class TwinQueries(
             if (!here && trains == 0) null
             else ScreenIncidentDto(row.id, row.severity, row.title, row.where, here, trains, row.updatedAt)
         }.sortedWith(
-            compareBy<ScreenIncidentDto>({ severityRank(it.severity) }, { !it.atStation }).thenByDescending { it.updatedAt },
+            compareBy<ScreenIncidentDto>({ Severity.parse(it.severity).rank }, { !it.atStation }).thenByDescending { it.updatedAt },
         ).take(maxIncidents)
         return ScreenDto(
             stopId = b.station.stopId, name = b.station.name, now = b.now,
@@ -284,7 +282,7 @@ class TwinQueries(
                 else -> null
             }
             "station" -> "station".takeIf { (sc.from ?: sc.stopId) in upcoming }
-            "line" -> "line".takeIf { line != null && sc.line.equals(line, ignoreCase = true) }
+            "line" -> "line".takeIf { sameLine(sc.line, line) }
             "network" -> "network"
             else -> null
         }
@@ -307,7 +305,7 @@ class TwinQueries(
     fun lines(q: String? = null): List<LineDto> {
         val incidents = activeIncidents()
         val key = q?.trim()?.takeIf { it.isNotEmpty() }?.let(::searchKey)
-        return state.trains().filter { it.line != null }.groupBy { it.line!!.uppercase() }
+        return state.trains().filter { it.line != null }.groupBy { lineKey(it.line!!) }
             .map { (_, trains) ->
                 val line = trains.first().line!!
                 LineDto(
@@ -326,12 +324,12 @@ class TwinQueries(
         if (trains.isEmpty()) throw notFound("line", line)
         val name = trains.first().line!!
         val incidents = activeIncidents().mapNotNull { inc -> lineIncidentMatch(inc, name, trains)?.let { inc.toDto(it) } }
-            .sortedWith(compareBy({ severityRank(it.severity) }, { -it.updatedAt }))
+            .sortedWith(compareBy({ Severity.parse(it.severity).rank }, { -it.updatedAt }))
         return LineDetailDto(name, trains.firstNotNullOfOrNull { it.category }, trains.sortedBy { it.trainId }.map { summary(it) }, incidents)
     }
 
-    /** Trains in service on [line] (case-insensitive). */
-    fun trainsOnLine(line: String): List<TrainState> = state.trains().filter { it.line.equals(line, ignoreCase = true) }
+    /** Trains in service on [line] (case and spaces ignored: "IC1" = "IC 1"). */
+    fun trainsOnLine(line: String): List<TrainState> = state.trains().filter { sameLine(it.line, line) }
 
     /**
      * Why [inc] concerns line [line] (for line subscriptions, docs/API.md "Push notifications"): `line` (scope is the
@@ -340,21 +338,12 @@ class TwinQueries(
      */
     fun lineIncidentMatch(inc: IncidentRow, line: String, trains: List<TrainState> = trainsOnLine(line)): String? {
         val sc = inc.scope ?: return null
-        if (sc.kind == "line") return "line".takeIf { sc.line.equals(line, ignoreCase = true) }
+        if (sc.kind == "line") return "line".takeIf { sameLine(sc.line, line) }
         if (sc.kind == "network") return "network"
         return trains.firstNotNullOfOrNull { trainIncidentMatch(inc, it) }
     }
 }
 
-private fun severityRank(s: String?) = when (s?.lowercase()) {
-    "critical" -> 0
-    "major" -> 1
-    "minor" -> 2
-    "info" -> 3
-    else -> 4
-}
-
-private val TrainState.line get() = info?.line ?: position?.line
 private val TrainState.category get() = info?.category ?: position?.category
 private val TrainState.status get() = info?.status ?: "unknown"
 

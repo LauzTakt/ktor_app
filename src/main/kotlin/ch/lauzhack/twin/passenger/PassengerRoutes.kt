@@ -9,8 +9,7 @@ import ch.lauzhack.twin.common.objects
 import ch.lauzhack.twin.common.str
 import ch.lauzhack.twin.twinapi.SbbTwinClient
 import ch.lauzhack.twin.twinapi.TwinException
-import ch.lauzhack.twin.twinapi.enc
-import ch.lauzhack.twin.web.FleetFeed
+import ch.lauzhack.twin.query.FleetFeed
 import io.ktor.http.ContentType
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
@@ -46,6 +45,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import org.slf4j.LoggerFactory
+import ch.lauzhack.twin.common.urlEncode
 
 /**
  * Server side of the passenger voice app (port of sbb-client `server/plugin.ts` + `twin.ts`): ElevenLabs session
@@ -67,7 +67,7 @@ class PassengerService(
     suspend fun voiceSession(): Pair<HttpStatusCode, JsonObject> {
         if (!config.voiceEnabled) return HttpStatusCode.ServiceUnavailable to errorBody("Voice is not configured on this server")
         suspend fun get(path: String): JsonObject {
-            val uri = URI.create("${config.elevenLabsUrl.trimEnd('/')}/v1/convai/conversation/$path?agent_id=${enc(config.agentId)}")
+            val uri = URI.create("${config.elevenLabsUrl.trimEnd('/')}/v1/convai/conversation/$path?agent_id=${urlEncode(config.agentId)}")
             val req = HttpRequest.newBuilder(uri).timeout(Duration.ofMillis(8_000)).header("xi-api-key", config.elevenLabsKey).GET().build()
             val r = http.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()
             if (r.statusCode() !in 200..299) throw IllegalStateException("HTTP ${r.statusCode()}")

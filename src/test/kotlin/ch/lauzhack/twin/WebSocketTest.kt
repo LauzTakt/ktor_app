@@ -18,7 +18,6 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlin.io.path.createTempFile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -35,16 +34,16 @@ class WebSocketTest {
             mapOf("t-at-b" to pos("t-at-b", "B"), "t-to-c" to pos("t-to-c", null, delaySec = 120), "t-other" to pos("t-other", "X")),
             T0 + 1_200_000,
         )
-        db = Database(createTempFile("twin", ".sqlite").toString())
+        db = testDb()
         upsert("i-1", IncidentScope(kind = "section", from = "C", to = "D"))
-        repeat(50) { if (db.incidents(true).isEmpty()) Thread.sleep(20) }
+        db.awaitIncidents()
         application { configureHttp(st, db) { true } }
         wsClient().webSocket("/api/v1/ws") { test() }
     }
 
     private fun ApplicationTestBuilder.wsClient() = createClient { install(WebSockets) }
 
-    private fun upsert(id: String, scope: IncidentScope, updatedAt: Long = 1) = db.upsertIncident(
+    private fun upsert(id: String, scope: IncidentScope, updatedAt: Long = 1) = db.incidents.upsert(
         Incident(id = id, title = "Fault $id", severity = "major", createdAt = 1, updatedAt = updatedAt, scope = scope), "{}",
     )
 
@@ -87,7 +86,7 @@ class WebSocketTest {
         assertEquals("created", inc.s("event"))
         assertEquals("line", inc["trains"]!!.jsonArray.single().jsonObject.s("match"))
 
-        db.removeIncident("i-1")
+        db.incidents.remove("i-1")
         val rm = next("incident")
         assertEquals("removed", rm.s("event"))
         assertEquals("i-1", rm["incident"]!!.jsonObject.s("id"))
@@ -133,7 +132,7 @@ class WebSocketTest {
         assertEquals("false", inc.s("atStation"))
         assertEquals(1, inc["trains"]!!.jsonPrimitive.int)
 
-        db.removeIncident("i-1")
+        db.incidents.remove("i-1")
         val removed = next("screen_update")["data"]!!.jsonObject
         assertEquals(listOf("i-train"), removed["incidents"]!!.jsonArray.map { it.jsonObject.s("id") })
 

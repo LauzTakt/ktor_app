@@ -1,15 +1,15 @@
 import { api } from "./common.js";
 import { qrcodegen } from "./vendor/qrcodegen-v1.8.0.js";
 
-const $ = (id) => document.getElementById(id);
-const dialog = $("stationQrDialog");
-const toggle = $("stationQrToggle");
-const picker = $("stationQrPicker");
-const input = $("stationQrSearch");
-const results = $("stationQrResults");
-const status = $("stationQrStatus");
-const preview = $("stationQrPreview");
-const print = $("stationQrPrint");
+const byId = (id) => document.getElementById(id);
+const dialog = byId("stationQrDialog");
+const toggle = byId("stationQrToggle");
+const picker = byId("stationQrPicker");
+const input = byId("stationQrSearch");
+const results = byId("stationQrResults");
+const status = byId("stationQrStatus");
+const preview = byId("stationQrPreview");
+const print = byId("stationQrPrint");
 let trigger;
 let searchTimer;
 let search;
@@ -47,21 +47,21 @@ function showSign({ kind, param, value, title, lead, note, label, file }) {
   passenger.searchParams.set(param, value);
   const svg = qrSvg(passenger.href);
 
-  $("stationQrTitle").textContent = `${kind} QR`;
-  $("stationQrName").textContent = title;
-  $("stationQrLead").textContent = lead;
-  const noteEl = $("stationQrNote");
+  byId("stationQrTitle").textContent = `${kind} QR`;
+  byId("stationQrName").textContent = title;
+  byId("stationQrLead").textContent = lead;
+  const noteEl = byId("stationQrNote");
   noteEl.textContent = note ?? "";
   noteEl.hidden = !note;
-  const code = $("stationQrCode");
+  const code = byId("stationQrCode");
   code.innerHTML = svg;
   code.setAttribute("aria-label", label);
-  const download = $("stationQrDownload");
+  const download = byId("stationQrDownload");
   download.href = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
   download.download = file;
-  $("stationQrPassenger").href = passenger.href;
+  byId("stationQrPassenger").href = passenger.href;
   // A train sign comes from the selected train: there is no train search to go back to.
-  $("stationQrChange").hidden = kind !== "Station";
+  byId("stationQrChange").hidden = kind !== "Station";
 
   picker.hidden = true;
   preview.hidden = false;
@@ -154,7 +154,7 @@ function openStationQr(button, station) {
   input.value = "";
   status.textContent = "";
   results.replaceChildren();
-  $("stationQrTitle").textContent = "Station QR";
+  byId("stationQrTitle").textContent = "Station QR";
   showPicker();
   dialog.showModal();
   if (station) showStation(station);
@@ -168,16 +168,16 @@ function openTrainQr(button, train) {
 }
 
 toggle.addEventListener("click", () => openStationQr(toggle));
-$("map").addEventListener("click", (event) => {
+byId("map").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-station-qr]");
   if (button) openStationQr(button, { stopId: button.dataset.stationQr, name: button.dataset.stationName });
 });
 // The train panel is re-rendered every 10 s, so listen on the panel, not the button.
-$("trainPanel").addEventListener("click", (event) => {
+byId("trainPanel").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-train-qr]");
   if (button) openTrainQr(button, { trainId: button.dataset.trainQr, name: button.dataset.trainName, to: button.dataset.trainTo });
 });
-$("stationQrClose").addEventListener("click", () => dialog.close());
+byId("stationQrClose").addEventListener("click", () => dialog.close());
 dialog.addEventListener("click", (event) => {
   if (event.target === dialog) dialog.close();
 });
@@ -186,7 +186,7 @@ dialog.addEventListener("close", () => {
   cancelSearch();
   (trigger?.isConnected ? trigger : toggle).focus();
 });
-$("stationQrChange").addEventListener("click", () => {
+byId("stationQrChange").addEventListener("click", () => {
   showPicker();
   input.focus();
   input.select();

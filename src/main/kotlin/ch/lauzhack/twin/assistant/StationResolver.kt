@@ -1,14 +1,14 @@
 package ch.lauzhack.twin.assistant
 
 import ch.lauzhack.twin.common.distanceKm
-import ch.lauzhack.twin.common.searchKey
+import ch.lauzhack.twin.query.StationSearch
 import ch.lauzhack.twin.state.LiveState
-import ch.lauzhack.twin.state.Station
+import ch.lauzhack.twin.model.Station
 
 /**
- * Station search for the assistant: names in any of the Swiss languages or English, without accents, with or without
- * "station"/"Hauptbahnhof". Ranking: exact name, then name starting with the query, then every query word starting a
- * name word, then substring; ties go to the busier station (more trains calling), so "Zürich" is Zürich HB.
+ * Station search for the assistant over [StationSearch] (the matching shared with the REST API and the passenger app);
+ * ties go to the busier station (more trains calling), so "Zürich" is Zürich HB. Adds what the assistant needs on top:
+ * unknown UIC ids, a station named with confidence after "from"/"nach"/…, stations mentioned in free text.
  *
  * Catalog = [LiveState.stations]: the stations of the trains in service plus every station seen before (seeded from
  * SQLite at startup, see [LiveState.seedStations]).
@@ -33,12 +33,7 @@ class StationResolver(private val state: LiveState) {
         val raw = query.trim()
         if (raw.isEmpty()) return emptyList()
         byId(raw)?.let { return listOf(it) }
-        val q = cleanQuery(raw)
-        if (q.isEmpty()) return emptyList()
-        val stations = all().values
-        var hits = rank(q, stations)
-        if (hits.isEmpty() && q.endsWith(" hb")) hits = rank(q.removeSuffix(" hb"), stations)
-        return hits.take(limit)
+        return StationSearch.rank(raw, all().values, { it.name }, ::busy).take(limit)
     }
 
     /** A stopId (7 digits or any id the catalog knows) or a name -> the station; null if nothing matches. */
@@ -56,16 +51,15 @@ class StationResolver(private val state: LiveState) {
      * busy station's name ("Zürich" -> Zürich HB). Null when unsure.
      */
     fun confident(phrase: String): Station? {
-        val words = cleanQuery(phrase).split(' ').filter { it.isNotEmpty() }.take(8)
+        val words = StationSearch.cleanQuery(phrase).split(' ').filter { it.isNotEmpty() }.take(8)
         val stations = all().values
         for (skip in 0..minOf(1, words.size - 1)) {
             if (skip == 1 && words[0] !in ARTICLES) break
             for (len in (words.size - skip) downTo 1) {
-                val q = cleanQuery(words.subList(skip, skip + len).joinToString(" "))
+                val q = StationSearch.cleanQuery(words.subList(skip, skip + len).joinToString(" "))
                 if (q.length < 3) continue
                 val hit = rank(q, stations).firstOrNull() ?: continue
-                val n = normalized.getOrPut(hit.name) { normalize(hit.name) }
-                if (n == q || n.startsWith("$q ")) return hit
+                if (StationSearch.namesStart(q, hit.name)) return hit
             }
         }
         return null
@@ -84,12 +78,12 @@ class StationResolver(private val state: LiveState) {
             var found: Pair<Station, Int>? = null
             for (len in minOf(4, words.size - i) downTo 1) {
                 val raw = words.subList(i, i + len).joinToString(" ")
-                val q = cleanQuery(raw)
-                if (q.length < 3 || (len == 1 && normalize(raw) in ARTICLES)) continue
+                val q = StationSearch.cleanQuery(raw)
+                if (q.length < 3 || (len == 1 && StationSearch.normalize(raw) in ARTICLES)) continue
                 val hit = rank(q, stations).firstOrNull() ?: continue
-                val n = normalized.getOrPut(hit.name) { normalize(hit.name) }
                 val capitalised = words[i].first().isUpperCase()
-                if (n == q || (len == 1 && capitalised && q.length >= 4 && n.startsWith("$q "))) { found = hit to len; break }
+                val exact = StationSearch.tier(q, hit.name) == 0
+                if (exact || (len == 1 && capitalised && q.length >= 4 && StationSearch.namesStart(q, hit.name))) { found = hit to len; break }
             }
             if (found != null) {
                 out += found.first to words.getOrNull(i - 1)?.lowercase()
@@ -107,82 +101,15 @@ class StationResolver(private val state: LiveState) {
             .filter { it.second <= maxKm }
             .minByOrNull { it.second }
 
-    private val normalized = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private fun rank(q: String, stations: Collection<Station>) = StationSearch.rankClean(q, stations, { it.name }, ::busy)
 
-    private fun rank(q: String, stations: Collection<Station>): List<Station> {
-        val words = q.split(' ')
-        return stations.asSequence()
-            .mapNotNull { st ->
-                val n = normalized.getOrPut(st.name) { normalize(st.name) }
-                val tier = when {
-                    n == q -> 0
-                    n.startsWith("$q ") -> 1
-                    n.startsWith(q) -> 2
-                    n.split(' ').let { nw -> words.all { w -> nw.any { it.startsWith(w) } } } -> 3
-                    n.contains(q) -> 4
-                    else -> return@mapNotNull null
-                }
-                Triple(st, tier, state.trainsCallingAt(st.stopId).size)
-            }
-            .sortedWith(compareBy<Triple<Station, Int, Int>>({ it.second }, { -it.third }, { it.first.name.length }))
-            .map { it.first }
-            .toList()
-    }
+    private fun busy(st: Station) = state.trainsCallingAt(st.stopId).size
 
     companion object {
         private const val CACHE_MS = 60_000L
         private val UIC = Regex("\\d{7}")
 
-        private val NON_ALNUM = Regex("[^a-z0-9]+")
-
-        /** [searchKey] with punctuation as single spaces. */
-        fun normalize(s: String): String = searchKey(s).replace(NON_ALNUM, " ").trim()
-
         private val WORD = Regex("[\\p{L}\\p{N}][\\p{L}\\p{N}'’./-]*")
         private val ARTICLES = setOf("the", "der", "die", "das", "le", "la", "les", "l", "il", "lo", "gare", "bahnhof", "station")
-
-        /** Words that only say "station" (the names in the catalog don't carry them). */
-        private val FILLER = setOf("station", "gare", "bahnhof", "stazione", "railway", "train", "bhf")
-        private val MAIN_STATION = listOf(
-            "hauptbahnhof", "hbf", "main station", "central station", "gare centrale", "stazione centrale", "centrale",
-        )
-
-        /** Other-language and English names -> the catalog's name (normalized). */
-        private val ALIASES = mapOf(
-            "geneva" to "geneve", "genf" to "geneve", "ginevra" to "geneve", "cornavin" to "geneve",
-            "geneve cornavin" to "geneve",
-            "geneva airport" to "geneve aeroport", "genf flughafen" to "geneve aeroport", "geneve airport" to "geneve aeroport",
-            "zurich airport" to "zurich flughafen", "zurich aeroport" to "zurich flughafen", "zuerich" to "zurich",
-            "zurigo" to "zurich", "zuerich flughafen" to "zurich flughafen",
-            "lucerne" to "luzern", "lucerna" to "luzern",
-            "berne" to "bern", "berna" to "bern",
-            "bale" to "basel sbb", "basle" to "basel sbb", "basilea" to "basel sbb", "basel" to "basel sbb",
-            "losanna" to "lausanne",
-            "sitten" to "sion",
-            "brigue" to "brig", "briga" to "brig",
-            "freiburg" to "fribourg freiburg", "fribourg" to "fribourg freiburg", "friburgo" to "fribourg freiburg",
-            "biel" to "biel bienne", "bienne" to "biel bienne",
-            "neuenburg" to "neuchatel",
-            "saint gall" to "st gallen", "st gall" to "st gallen", "san gallo" to "st gallen", "sankt gallen" to "st gallen",
-            "saint gallen" to "st gallen",
-            "coire" to "chur", "coira" to "chur",
-            "bellinzone" to "bellinzona",
-            "schaffhouse" to "schaffhausen", "sciaffusa" to "schaffhausen",
-            "soleure" to "solothurn", "soletta" to "solothurn",
-            "thoune" to "thun",
-            "yverdon" to "yverdon les bains",
-            "winterthour" to "winterthur",
-            "zoug" to "zug", "zugo" to "zug",
-        )
-
-        fun cleanQuery(raw: String): String {
-            var q = " " + normalize(raw) + " "
-            for (m in MAIN_STATION) q = q.replace(" $m ", " hb ")
-            val words = q.trim().split(' ').filter { it.isNotEmpty() }
-            val kept = words.filter { it !in FILLER }.let { if (it.isEmpty()) words else it }
-                .let { if (it.size > 1 && it.first() in setOf("de", "di", "of")) it.drop(1) else it }
-            val joined = kept.joinToString(" ")
-            return ALIASES[joined] ?: ALIASES[joined.removeSuffix(" hb")]?.let { if (joined.endsWith(" hb")) "$it hb" else it } ?: joined
-        }
     }
 }

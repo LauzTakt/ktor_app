@@ -27,6 +27,9 @@ import kotlinx.coroutines.future.await
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonObject
 import org.slf4j.LoggerFactory
+import ch.lauzhack.twin.common.dayTime
+import ch.lauzhack.twin.common.toJsonElement
+import ch.lauzhack.twin.query.Severity
 
 data class AssistantConfig(
     /** sbb-twin base URL (`twin.url` / `SBB_TWIN_URL`, shared with the passenger app). */
@@ -108,17 +111,44 @@ class AnthropicLlm(private val client: AnthropicClient) : LlmClient {
     }
 }
 
+/**
+ * The assistant for [cfg] with the Claude API key from `ANTHROPIC_API_KEY`, built once the HTTP layer has its
+ * [ch.lauzhack.twin.query.TwinQueries]; warmed up 8 s after start. Null (the route answers 503) without a key.
+ */
+fun assistantFactory(
+    cfg: AssistantConfig,
+    state: ch.lauzhack.twin.state.LiveState,
+    incidents: ch.lauzhack.twin.query.IncidentQueries,
+    reports: ch.lauzhack.twin.report.ReportService,
+    journeys: JourneyCache,
+): ((ch.lauzhack.twin.query.TwinQueries) -> AssistantAgent)? {
+    val log = LoggerFactory.getLogger("assistant")
+    val llm = AnthropicLlm.fromEnv(cfg)
+    if (llm == null) {
+        log.warn("ANTHROPIC_API_KEY is not set: /api/v1/assistant/ask will answer 503")
+        return null
+    }
+    log.info("Assistant: model {} (fast mode {}, effort {}), sbb-twin at {}", cfg.model, cfg.fastMode, cfg.effort, cfg.twinUrl)
+    llm.keepWarm(cfg.model)
+    return { q ->
+        buildAssistant(cfg, llm, q, state, incidents, reports, journeys).also { a ->
+            Thread({ Thread.sleep(8_000); a.warmUp() }, "assistant-warm-up").apply { isDaemon = true }.start()
+        }
+    }
+}
+
 /** Builds the assistant over ktor_app's own data (live state, SQLite) and sbb-twin. */
 fun buildAssistant(
     cfg: AssistantConfig,
     llm: LlmClient,
     queries: ch.lauzhack.twin.query.TwinQueries,
     state: ch.lauzhack.twin.state.LiveState,
-    db: ch.lauzhack.twin.db.Database,
+    incidents: ch.lauzhack.twin.query.IncidentQueries,
+    reports: ch.lauzhack.twin.report.ReportService,
     journeys: JourneyCache = JourneyCache(),
 ): AssistantAgent {
     val stations = StationResolver(state)
-    val tools = AssistantTools(queries, db, stations, SbbTwinClient(cfg.twinUrl, cfg.twinTimeoutMs), journeys)
+    val tools = AssistantTools(queries, incidents, reports, stations, SbbTwinClient(cfg.twinUrl, cfg.twinTimeoutMs), journeys)
     return AssistantAgent(cfg, llm, tools)
 }
 
@@ -303,7 +333,7 @@ class AssistantAgent(
         }
 
         val situation = r?.situationIds?.mapNotNull { turn.situationItem(it) }?.distinctBy { it.id }
-            ?: turn.situationItems().sortedByDescending { AssistantTools.severityRank(it.severity) }.take(5)
+            ?: turn.situationItems().sortedBy { Severity.parse(it.severity).rank }.take(5)
 
         val unique = (drawn + autoRoutes).distinct()
         // The recommended route brings its origin, transfer and destination markers (unless the model marked them).

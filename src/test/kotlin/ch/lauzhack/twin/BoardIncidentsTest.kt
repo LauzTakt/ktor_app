@@ -1,6 +1,5 @@
 package ch.lauzhack.twin
 
-import ch.lauzhack.twin.db.Database
 import ch.lauzhack.twin.model.Incident
 import ch.lauzhack.twin.model.IncidentScope
 import ch.lauzhack.twin.state.LiveState
@@ -11,7 +10,6 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlin.io.path.createTempFile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -23,9 +21,9 @@ class BoardIncidentsTest {
         st.upsertInfo(info("t-hit", aheadFrom = 1))                                          // A B C D, at B
         st.upsertInfo(info("t-ok", aheadFrom = 0, stops = listOf("B", "X"), line = "IC 1"))  // B -> X
         st.replacePositions(mapOf("t-hit" to pos("t-hit", "B"), "t-ok" to pos("t-ok", "B")), T0 + 600_000)
-        val db = Database(createTempFile("twin", ".sqlite").toString())
-        db.upsertIncident(Incident(id = "i-cd", title = "Fault C-D", severity = "major", createdAt = 1, updatedAt = 1, scope = IncidentScope(kind = "section", from = "C", to = "D")), "{}")
-        repeat(50) { if (db.incidents(true).isEmpty()) Thread.sleep(20) }
+        val db = testDb()
+        db.incidents.upsert(Incident(id = "i-cd", title = "Fault C-D", severity = "major", createdAt = 1, updatedAt = 1, scope = IncidentScope(kind = "section", from = "C", to = "D")), "{}")
+        db.awaitIncidents()
         application { configureHttp(st, db) { true } }
 
         val entries = Json.parseToJsonElement(client.get("/api/v1/stations/B/board?type=departures").bodyAsText()).jsonObject["entries"]!!.jsonArray

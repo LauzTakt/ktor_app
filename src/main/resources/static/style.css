@@ -11,10 +11,11 @@
   --flash-bg: color-mix(in srgb, var(--orange) 12%, var(--surface));
   font-family: var(--rail-font);
 }
+:root[data-theme="dark"] { --sky: #8fb8ff; }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
 body { display: flex; flex-direction: column; background: var(--bg); }
-a:not(.btn) { color: var(--blue); }
+a:not(.btn) { color: var(--sky); }
 
 .topbar { display: flex; align-items: center; gap: 24px; padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--line); z-index: 2; }
 .brand { font-weight: 700; font-size: 17px; display: flex; align-items: center; gap: 8px; }

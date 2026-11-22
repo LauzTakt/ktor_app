@@ -8,6 +8,8 @@
 // The server returns a random deviceId on registration; it is kept in localStorage and is the only handle to the
 // device's subscriptions.
 
+import { publicApi } from "./common.js";
+
 const DEVICE_KEY = "twin-push-device";
 const cap = window.Capacitor;
 const native = Boolean(cap?.isNativePlatform?.());
@@ -16,22 +18,8 @@ const NativePush = native ? cap.Plugins?.PushNotifications : null;
 const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
 
-async function call(method, path, body) {
-  const r = await fetch(`/api/v1/push${path}`, {
-    method,
-    headers: body ? { "Content-Type": "application/json", Accept: "application/json" } : { Accept: "application/json" },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (r.status === 204) return null;
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) {
-    const e = new Error(data?.error?.message || `HTTP ${r.status}`);
-    e.status = r.status;
-    e.code = data?.error?.code;
-    throw e;
-  }
-  return data;
-}
+/** `/api/v1/push` call (errors carry `status` and `code`, see common.js). */
+const call = (method, path, body) => publicApi(`/push${path}`, { method, json: body });
 
 let configP = null;
 /** Seconds before arrival of the "arriving soon" alert (from the server config). */
@@ -59,7 +47,6 @@ export function support() {
 
 export const deviceId = () => localStorage.getItem(DEVICE_KEY);
 export const enabled = () => Boolean(deviceId());
-export const permissionDenied = () => !native && "Notification" in window && Notification.permission === "denied";
 
 const b64ToBytes = (s) => {
   const b = atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4));

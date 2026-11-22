@@ -30,7 +30,7 @@ data class AskContext(
     val onScreen: ScreenView? = null,
 )
 
-/** A screen of the passenger view (static/passenger.js `setView`). Fields not relevant to [screen] are null. */
+/** A screen of the passenger view (static/passenger/ui.js `setView`). Fields not relevant to [screen] are null. */
 @Serializable
 data class ScreenView(
     /** `train | line | station | destinations | connections` */

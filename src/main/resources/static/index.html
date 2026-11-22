@@ -5,10 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Train twin · Your trip</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <script>
-      // Same theme as the staff pages (docs/STYLE.md): saved choice, else the system preference. Before first paint.
-      document.documentElement.dataset.theme = localStorage.getItem("twin-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-    </script>
+    <script src="/theme-init.js"></script>
     <!-- Installable web app (needed for alerts on iPhone: Share > Add to Home Screen) -->
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#eb0000" />
@@ -54,6 +51,6 @@
     </button>
     <script src="/assistant-launcher.js" defer></script>
     <script src="/app-links.js" defer></script>
-    <script type="module" src="/passenger.js"></script>
+    <script type="module" src="/passenger/main.js"></script>
   </body>
 </html>

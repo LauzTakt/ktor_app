@@ -1,9 +1,11 @@
 package ch.lauzhack.twin
 
+import ch.lauzhack.twin.db.Database
 import ch.lauzhack.twin.model.Call
 import ch.lauzhack.twin.model.StopRef
 import ch.lauzhack.twin.model.TrainInfo
 import ch.lauzhack.twin.model.TrainPosition
+import kotlin.io.path.createTempFile
 
 const val T0 = 1_795_292_000_000L
 
@@ -21,6 +23,18 @@ fun info(id: String, aheadFrom: Int, stops: List<String> = listOf("A", "B", "C",
         )
     },
 )
+
+/** A fresh SQLite database in a temp file. */
+fun testDb(): Database = Database(createTempFile("twin", ".sqlite").toString())
+
+/** Polls [block] until [ok] (SQLite writes are queued on the writer thread); returns the last value. */
+fun <T> eventually(block: () -> T, ok: (T) -> Boolean): T {
+    repeat(100) { val v = block(); if (ok(v)) return v; Thread.sleep(20) }
+    return block()
+}
+
+/** Waits until the writer thread has stored at least [n] active incidents. */
+fun Database.awaitIncidents(n: Int = 1) = eventually({ incidents.list(true) }) { it.size >= n }
 
 fun pos(id: String, atStop: String?, delaySec: Int = 0, ts: Long = T0) =
     TrainPosition(trainId = id, lat = 47.0, lon = 8.0, atStopId = atStop, delaySec = delaySec, motion = if (atStop != null) "stopped" else "moving", ts = ts, streamId = "s")

@@ -11,7 +11,7 @@ html, body { margin: 0; min-height: 100%; background: var(--white); color: var(-
 body { font: 14px/1.45 var(--rail-font); -webkit-font-smoothing: antialiased;
   transition: background-color 250ms var(--ease), color 250ms var(--ease); }
 :focus-visible { outline: 2px solid var(--sky); outline-offset: 2px; }
-.time, .delay, .num, .tm { font-variant-numeric: tabular-nums; }
+.time, .delay, .tm { font-variant-numeric: tabular-nums; }
 .icon { width: 18px; height: 18px; flex: none; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .icon.lg { width: 24px; height: 24px; }
 
@@ -164,8 +164,6 @@ button.stop:hover { background: var(--milk); }
 .loki-hero { flex: 1; display: grid; place-items: center; padding-bottom: 10vh; }
 .loki-hero .loki { width: 128px; }
 .loki-hero .loki-track { width: min(320px, 80%); }
-.locating .radar { position: absolute; right: calc(50% - 160px + 30px); top: 30px; width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--sky);
-  animation: pulse 1.6s var(--ease) infinite; }
 
 /* Ask (train / station) */
 .ask { padding: 16px; display: flex; flex-direction: column; gap: 10px; }

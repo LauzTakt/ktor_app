@@ -13,6 +13,11 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import org.slf4j.LoggerFactory
+import ch.lauzhack.twin.common.urlEncode
+import ch.lauzhack.twin.common.lineKey
+import ch.lauzhack.twin.common.delayMin
+import ch.lauzhack.twin.query.Severity
+import ch.lauzhack.twin.query.line
 
 /**
  * Push configuration. VAPID keys: from env, else generated once and kept in SQLite (`push_setting`), so Web Push
@@ -141,7 +146,7 @@ class PushService(
         device(deviceId)
         val trains = queries.trainsOnLine(line.trim())
         if (trains.isEmpty()) throw NotFoundException("line_not_found", "no train in service on line '$line'")
-        val name = trains.first().info?.line ?: trains.first().position?.line ?: line.trim()
+        val name = trains.first().line ?: line.trim()
         val sub = store.upsertSubscription(deviceId, "line", name, null, "Line $name", null, now())
         queries.activeIncidentRows().filter { queries.lineIncidentMatch(it, name, trains) != null }.forEach { store.markNotified(sub.id, it.id) }
         return sub
@@ -174,12 +179,12 @@ class PushService(
         for (s in store.allSubscriptions()) {
             val match = when (s.kind) {
                 "train" -> queries.trainState(s.target)?.let { queries.trainIncidentMatch(row, it) }
-                "line" -> queries.lineIncidentMatch(row, s.target, lineTrains.getOrPut(s.target.uppercase()) { queries.trainsOnLine(s.target) })
+                "line" -> queries.lineIncidentMatch(row, s.target, lineTrains.getOrPut(lineKey(s.target)) { queries.trainsOnLine(s.target) })
                 else -> null
             } ?: continue
             if (!store.markNotified(s.id, row.id)) continue // already told (an update of the same incident)
             val where = row.where?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""
-            send(s, PushMessage("${severityWord(row.severity)}: ${row.title}", "${s.label ?: s.target}$where", urlOf(s), "inc-${row.id}"))
+            send(s, PushMessage("${Severity.parse(row.severity).word}: ${row.title}", "${s.label ?: s.target}$where", urlOf(s), "inc-${row.id}"))
         }
     }
 
@@ -215,7 +220,7 @@ class PushService(
             if (!s.approachingSent && eta - now <= config.arrivalLeadSec * 1000L) {
                 val min = ((eta - now + 30_000) / 60_000).coerceAtLeast(0)
                 val title = if (min <= 0) "Arriving at $stopName" else "$stopName in $min min"
-                val delay = call.plannedArr?.let { p -> ((eta - p) / 60_000).takeIf { it > 0 }?.let { " (+$it')" } } ?: ""
+                val delay = delayMin(eta, call.plannedArr)?.takeIf { it > 0 }?.let { " (+$it')" } ?: ""
                 send(s, PushMessage(title, "${s.label ?: "Your train"} · arrival ${hhmm(eta)}$delay. Get ready to get off.", urlOf(s), "arr-${s.id}"))
                 store.markArrivalSent(s.id, approaching = true, arrived = false)
             }
@@ -242,22 +247,13 @@ class PushService(
     private fun now() = System.currentTimeMillis()
 
     private fun trainLabel(t: TrainState): String {
-        val line = t.info?.line ?: t.position?.line ?: t.info?.category ?: "Train"
+        val line = t.line ?: t.info?.category ?: "Train"
         val to = t.info?.headsign ?: t.info?.destination?.name
         return if (to != null) "$line to $to" else line
     }
 
     private fun urlOf(s: PushSubscription) =
-        if (s.kind == "train") "/?train=${enc(s.target)}" else "/?line=${enc(s.target)}"
-
-    private fun enc(v: String) = java.net.URLEncoder.encode(v, Charsets.UTF_8).replace("+", "%20")
-
-    private fun severityWord(s: String?) = when (s?.lowercase()) {
-        "critical" -> "Severe disruption"
-        "major" -> "Disruption"
-        "minor" -> "Incident"
-        else -> "Information"
-    }
+        if (s.kind == "train") "/?train=${urlEncode(s.target)}" else "/?line=${urlEncode(s.target)}"
 
     private fun bad(code: String, msg: String): Nothing = invalid(code, msg)
 }

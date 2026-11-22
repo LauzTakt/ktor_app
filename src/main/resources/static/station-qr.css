@@ -168,7 +168,7 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--blue);
+  color: var(--sky);
   font: inherit;
   font-size: 0.875rem;
   text-decoration: underline;
@@ -180,7 +180,7 @@
 #stationQrToggle:focus-visible,
 [data-station-qr]:focus-visible,
 [data-train-qr]:focus-visible {
-  outline: 2px solid var(--blue);
+  outline: 2px solid var(--sky);
   outline-offset: 2px;
 }
 

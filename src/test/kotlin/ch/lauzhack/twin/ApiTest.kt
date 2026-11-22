@@ -20,7 +20,6 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlin.io.path.createTempFile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -34,13 +33,13 @@ class ApiTest {
             mapOf("t-at-b" to pos("t-at-b", "B"), "t-to-c" to pos("t-to-c", null, delaySec = 120), "t-other" to pos("t-other", "X")),
             T0 + 1_200_000, // twin clock = planned time at C
         )
-        val db = Database(createTempFile("twin", ".sqlite").toString())
-        db.upsertIncident(
+        val db = testDb()
+        db.incidents.upsert(
             Incident(id = "i-1", title = "Fault C-D", severity = "critical", createdAt = 1, updatedAt = 1,
                 scope = IncidentScope(kind = "section", from = "C", to = "D")),
             "{}",
         )
-        repeat(50) { if (db.incidents(true).isEmpty()) Thread.sleep(20) }
+        db.awaitIncidents()
         return st to db
     }
 

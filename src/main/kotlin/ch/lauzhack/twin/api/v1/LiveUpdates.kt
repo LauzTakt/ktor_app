@@ -1,6 +1,6 @@
 package ch.lauzhack.twin.api.v1
 
-import ch.lauzhack.twin.db.Database
+import ch.lauzhack.twin.db.IncidentRepository
 import ch.lauzhack.twin.db.IncidentRow
 import ch.lauzhack.twin.query.BoardDto
 import ch.lauzhack.twin.query.BoardType
@@ -108,8 +108,8 @@ data class WsPong(val ts: Long, val type: String = "pong")
 
 // ---------------------------------------------------------------- hub
 
-/** Fan-out of incident changes from [Database] to every WebSocket session. One per application. */
-class LiveUpdates(val queries: TwinQueries, db: Database, private val clock: () -> Long = { System.currentTimeMillis() }) {
+/** Fan-out of incident changes from [IncidentRepository] to every WebSocket session. One per application. */
+class LiveUpdates(val queries: TwinQueries, incidents: IncidentRepository, private val clock: () -> Long = { System.currentTimeMillis() }) {
     data class IncidentChange(val kind: String, val incident: IncidentRow)
 
     // Incidents are rare (a few per minute at most); a large buffer + DROP_OLDEST never blocks the SQLite writer thread.
@@ -117,7 +117,7 @@ class LiveUpdates(val queries: TwinQueries, db: Database, private val clock: () 
     val incidents: SharedFlow<IncidentChange> = _incidents
 
     init {
-        db.addIncidentListener { kind, row -> _incidents.tryEmit(IncidentChange(kind, row)) }
+        incidents.addListener { kind, row -> _incidents.tryEmit(IncidentChange(kind, row)) }
     }
 
     fun now() = clock()

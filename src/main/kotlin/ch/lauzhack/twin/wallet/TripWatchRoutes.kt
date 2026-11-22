@@ -23,6 +23,7 @@ import java.time.Instant
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import ch.lauzhack.twin.common.urlEncode
 
 class TripWatchConfig(
     val enabled: Boolean,
@@ -117,7 +118,7 @@ private fun TripWatch.view(canManage: Boolean, service: TripWatchService): Watch
         currentLeg + 1, legs.size, canManage, actions, canManage && !ended && service.apple != null,
         canManage && !ended && service.google != null,
         if (next == destination.id) "/" else
-            "/?station=${java.net.URLEncoder.encode(next, Charsets.UTF_8)}&to=${java.net.URLEncoder.encode(destination.id, Charsets.UTF_8)}",
+            "/?station=${urlEncode(next)}&to=${urlEncode(destination.id)}",
         passFace(service.site))
 }
 

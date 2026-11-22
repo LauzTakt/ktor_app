@@ -29,7 +29,7 @@ type Line = [number, number][];
 type Route = { id: string; label: string; legs: { line?: string | null; trainId?: string | null; lines: Line[] }[] };
 
 /** Every line of a GeoJSON value, whatever its wrapping. */
-export function linesOf(g: AnyGeoJSON | Geometry | null | undefined): Line[] {
+function linesOf(g: AnyGeoJSON | Geometry | null | undefined): Line[] {
   if (!g) return [];
   switch (g.type) {
     case "FeatureCollection":

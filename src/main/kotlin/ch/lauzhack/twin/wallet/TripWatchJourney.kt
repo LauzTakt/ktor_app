@@ -10,10 +10,10 @@ import ch.lauzhack.twin.common.hhmm
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.doubleOrNull
-import kotlinx.serialization.json.longOrNull
+import ch.lauzhack.twin.common.str
+import ch.lauzhack.twin.common.long
+import ch.lauzhack.twin.common.double
+import ch.lauzhack.twin.common.objects
 
 @Serializable
 data class TripWatchSelection(
@@ -139,12 +139,12 @@ internal fun parseWatchLegs(journey: JsonObject): List<WatchLeg>? {
         val leg = entry as? JsonObject ?: return null
         val from = leg["from"] as? JsonObject ?: return null
         val to = leg["to"] as? JsonObject ?: return null
-        val run = leg.string("trainId") ?: return null
-        if (leg.string("status") == "cancelled") return null
+        val run = leg.str("trainId") ?: return null
+        if (leg.str("status") == "cancelled") return null
         val departure = from.long("plannedDep") ?: from.long("expectedDep") ?: return null
         val arrival = to.long("plannedArr") ?: to.long("expectedArr") ?: return null
         if (departure <= 0 || arrival < departure) return null
-        WatchLeg(run, leg.string("line") ?: "Service", from.watchStop() ?: return null, to.watchStop() ?: return null,
+        WatchLeg(run, leg.str("line") ?: "Service", from.watchStop() ?: return null, to.watchStop() ?: return null,
             departure, arrival, from.long("expectedDep") ?: departure, to.long("expectedArr") ?: arrival)
     }
     if (legs.any { it.expectedArrival < it.expectedDeparture } ||
@@ -158,10 +158,6 @@ internal fun WatchLeg.boardAdvice(): TripWatchAdvice =
         if (watchTime(expectedDeparture) != watchTime(departure)) "Expected departure ${watchTime(expectedDeparture)}." else null)
 
 private fun StopDto.watchStop() = WatchStop(stopId, name, lat, lon)
-private fun JsonObject.watchStop() = string("id")?.let { WatchStop(it, string("name") ?: it, number("lat"), number("lon")) }
-private fun JsonObject.string(key: String) = (this[key] as? JsonPrimitive)?.contentOrNull?.takeIf(String::isNotBlank)
-private fun JsonObject.long(key: String) = (this[key] as? JsonPrimitive)?.longOrNull
-private fun JsonObject.number(key: String) = (this[key] as? JsonPrimitive)?.doubleOrNull
-private fun JsonObject.objects(key: String) = (this[key] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
+private fun JsonObject.watchStop() = str("id")?.let { WatchStop(it, str("name") ?: it, double("lat"), double("lon")) }
 
 internal fun watchTime(time: Long): String = hhmm(time)

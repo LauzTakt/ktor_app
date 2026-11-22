@@ -1,6 +1,6 @@
 package ch.lauzhack.twin.push
 
-import ch.lauzhack.twin.db.Database
+import ch.lauzhack.twin.db.Sqlite
 import java.security.SecureRandom
 import java.sql.Connection
 import java.sql.ResultSet
@@ -41,14 +41,14 @@ data class PushSubscription(
 )
 
 /**
- * SQLite tables for push notifications (same file as [Database], through [Database.withConnection]):
+ * SQLite tables for push notifications (the main SQLite file, through [Sqlite.withConnection]):
  * - `push_device`: one row per browser / app installation (unique endpoint or FCM token);
  * - `push_subscription`: train or line followed by a device (deleted with the device);
  * - `push_notified`: incidents already announced to a subscription, so it gets exactly one "created" and one
  *   "resolved" notification per incident;
  * - `push_setting`: key/value (the generated VAPID key pair).
  */
-class PushStore(private val db: Database) {
+class PushStore(private val db: Sqlite) {
     private val rnd = SecureRandom()
 
     init {
@@ -121,7 +121,7 @@ class PushStore(private val db: Database) {
 
     /** Registers a device, or refreshes it if the same endpoint / token is already known (same id is returned). */
     fun upsertDevice(kind: String, address: String, p256dh: String?, auth: String?, platform: String?, now: Long): PushDevice =
-        db.withConnection { c ->
+        db.transaction { c ->
             val existing = c.deviceBy("address", address)
             if (existing != null) {
                 c.prepareStatement("UPDATE push_device SET kind=?, p256dh=?, auth=?, platform=?, updated_at=? WHERE id=?").use { ps ->
@@ -162,7 +162,7 @@ class PushStore(private val db: Database) {
 
     /** Creates the subscription, or replaces the one the device already has for the same train / line. */
     fun upsertSubscription(deviceId: String, kind: String, target: String, stopId: String?, label: String?, stopName: String?, now: Long): PushSubscription =
-        db.withConnection { c ->
+        db.transaction { c ->
             c.prepareStatement("DELETE FROM push_subscription WHERE device_id=? AND kind=? AND target=?").use { ps ->
                 ps.setString(1, deviceId); ps.setString(2, kind); ps.setString(3, target); ps.executeUpdate()
             }
@@ -180,8 +180,6 @@ class PushStore(private val db: Database) {
         selectSubs("SELECT * FROM push_subscription WHERE device_id=? ORDER BY created_at", deviceId)
 
     fun allSubscriptions(): List<PushSubscription> = selectSubs("SELECT * FROM push_subscription")
-
-    fun subscription(id: String): PushSubscription? = selectSubs("SELECT * FROM push_subscription WHERE id=?", id).firstOrNull()
 
     fun deleteSubscription(deviceId: String, id: String): Boolean = db.withConnection { c ->
         c.prepareStatement("DELETE FROM push_subscription WHERE id=? AND device_id=?").use { ps ->
@@ -223,7 +221,7 @@ class PushStore(private val db: Database) {
     }
 
     /** Subscriptions that were told about [incidentId]; the records are deleted (the incident is over). */
-    fun takeNotified(incidentId: String): List<PushSubscription> = db.withConnection { c ->
+    fun takeNotified(incidentId: String): List<PushSubscription> = db.transaction { c ->
         val subs = c.prepareStatement(
             "SELECT s.* FROM push_subscription s JOIN push_notified n ON n.subscription_id = s.id WHERE n.incident_id=?",
         ).use { ps -> ps.setString(1, incidentId); ps.executeQuery().use { rs -> buildList { while (rs.next()) add(rs.toSub()) } } }

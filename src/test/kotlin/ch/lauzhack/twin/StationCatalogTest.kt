@@ -1,13 +1,11 @@
 package ch.lauzhack.twin
 
-import ch.lauzhack.twin.db.Database
 import ch.lauzhack.twin.state.LiveState
-import ch.lauzhack.twin.state.Station
+import ch.lauzhack.twin.model.Station
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.testing.testApplication
-import kotlin.io.path.createTempFile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -16,10 +14,10 @@ import kotlin.test.assertTrue
 class StationCatalogTest {
     @Test
     fun `catalog stations are found nearby without any train in service`() = testApplication {
-        val db = Database(createTempFile("twin", ".sqlite").toString())
-        db.saveStations(listOf(Station("8507100", "Thun", 46.754852, 7.629607)))
-        Thread.sleep(300) // single writer thread
-        val st = LiveState(db.stations())
+        val db = testDb()
+        db.stations.save(listOf(Station("8507100", "Thun", 46.754852, 7.629607)))
+        eventually({ db.stations.all() }) { it.isNotEmpty() }
+        val st = LiveState(db.stations.all())
         application { configureHttp(st, db) { true } }
         val r = client.get("/api/v1/stations/nearby?lat=46.75489&lon=7.629645&radiusM=500&limit=3")
         assertEquals(HttpStatusCode.OK, r.status)

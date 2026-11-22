@@ -36,11 +36,17 @@ import kotlinx.serialization.json.long
 import java.net.InetSocketAddress
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CopyOnWriteArrayList
-import kotlin.io.path.createTempFile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import ch.lauzhack.twin.query.IncidentQueries
+import ch.lauzhack.twin.report.ReportService
+import ch.lauzhack.twin.assistant.describeContext
+import ch.lauzhack.twin.assistant.describeScreen
+import ch.lauzhack.twin.assistant.guessDestination
+import ch.lauzhack.twin.assistant.guessLine
+import ch.lauzhack.twin.assistant.guessTrip
 
 class AssistantTest {
     /** One local HTTP server standing in for the Claude API (`/v1/messages`) and for sbb-twin (`/api/...`). */
@@ -78,13 +84,13 @@ class AssistantTest {
         st.upsertInfo(info("t-at-b", aheadFrom = 1))
         st.upsertInfo(info("t-to-c", aheadFrom = 2, delayMs = 120_000))
         st.replacePositions(mapOf("t-at-b" to pos("t-at-b", "B"), "t-to-c" to pos("t-to-c", null, delaySec = 120)), T0 + 1_200_000)
-        val db = Database(createTempFile("twin", ".sqlite").toString())
-        db.upsertIncident(
+        val db = testDb()
+        db.incidents.upsert(
             Incident(id = "i-1", title = "Fault C-D", severity = "critical", createdAt = 1, updatedAt = 1,
                 scope = IncidentScope(kind = "section", from = "C", to = "D")),
             "{}",
         )
-        repeat(50) { if (db.incidents(true).isEmpty()) Thread.sleep(20) }
+        db.awaitIncidents()
         return st to db
     }
 
@@ -131,7 +137,7 @@ class AssistantTest {
             val llm = AnthropicLlm(AnthropicOkHttpClient.builder().apiKey("test-key").baseUrl(fake.url).maxRetries(0).build())
 
             testApplication {
-                application { configureHttp(st, db, assistant = { q: TwinQueries -> buildAssistant(cfg, llm, q, st, db) }) { true } }
+                application { configureHttp(st, db, assistant = { q: TwinQueries -> buildAssistant(cfg, llm, q, st, IncidentQueries(db.incidents), ReportService(db.reports, st)) }) { true } }
                 val res = client.post("/api/v1/assistant/ask") {
                     contentType(ContentType.Application.Json)
                     setBody("""{"question":"How do I get to D?","context":{"fromStopId":"A","toStopId":"D","extra":1},"sessionId":"s1"}""")
@@ -205,7 +211,8 @@ class AssistantTest {
         assertEquals("8503000", resolver.search("zurich")[0].stopId)            // busiest "Zürich …" first
         assertEquals("8501008", resolver.resolve("Genf")!!.stopId)              // other-language name
         assertEquals("8507000", resolver.resolve("Bern Hauptbahnhof")!!.stopId) // filler words
-        val tools = AssistantTools(TwinQueries(st) { emptyList() }, Database(createTempFile("twin", ".sqlite").toString()), resolver, SbbTwinClient("http://127.0.0.1:9"))
+        val db = testDb()
+        val tools = AssistantTools(TwinQueries(st) { emptyList() }, IncidentQueries(db.incidents), ReportService(db.reports, st), resolver, SbbTwinClient("http://127.0.0.1:9"))
         assertEquals("8503000" to "8507000", tools.guessTrip("my train from Zürich HB to Bern, what's the best way now?")!!.let { it.first.stopId to it.second.stopId })
         assertEquals("8501120" to "8501008", tools.guessTrip("is there any problem between Lausanne and Genève?")!!.let { it.first.stopId to it.second.stopId })
         assertEquals("8501008", tools.guessDestination("I want to go to Geneva please")!!.stopId)
