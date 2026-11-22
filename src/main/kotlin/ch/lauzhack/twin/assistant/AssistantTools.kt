@@ -401,8 +401,22 @@ class AssistantTools(
         } else if (from != null && to == null && train == null) {
             guessDestination(turn.request.question)?.takeIf { it.stopId != from }?.let { to = it.stopId }
         }
-        val line = if (train == null) guessLine(turn.request.question) else null
+        // What is open on the screen fills what the question and the trip leave open.
+        val view = c.onScreen
+        val viewTrain = view?.trainId?.trim()?.takeIf { view.screen == "train" && it.isNotEmpty() && it != train }
+        // No destination given while the passenger looks at the trains from A to B: that trip (stronger than the GPS origin).
+        if (to == null && train == null && view?.screen == "connections") {
+            val a = view.fromStopId?.trim()?.takeIf { it.isNotEmpty() }
+            val b = view.toStopId?.trim()?.takeIf { it.isNotEmpty() }
+            if (a != null && b != null && a != b) { from = a; to = b }
+        }
+        val viewStop = view?.stopId?.trim()?.takeIf { (view.screen == "station" || view.screen == "destinations") && it.isNotEmpty() && it != from }
+        val line = if (train == null) guessLine(turn.request.question)
+            ?: view?.line?.trim()?.takeIf { view.screen == "line" && it.isNotEmpty() && viewTrain == null }?.replace(" ", "")?.uppercase()
+            else null
         val calls = buildList {
+            if (viewTrain != null) add("train_status" to jsonOf { put("trainId", viewTrain) })
+            if (viewStop != null && to == null && train == null) add("station_board" to jsonOf { put("stopId", viewStop); put("windowMin", 30) })
             if (line != null) add("train_status" to jsonOf { put("line", line); to?.let { put("destination", it) } })
             if (from != null && to != null) {
                 add("plan_journey" to jsonOf { put("fromStopId", from); put("toStopId", to) })
@@ -575,6 +589,28 @@ class AssistantTools(
     fun guessLine(question: String): String? =
         LINE_PATTERN.find(question)?.let { m -> m.groupValues[1].ifEmpty { m.groupValues[3] } + m.groupValues[2].ifEmpty { m.groupValues[4] } }
 
+    private fun trainText(id: String): String {
+        val t = runCatching { queries.trainSummary(id) }.getOrNull()
+        return (t?.let { "${it.line ?: ""} ${it.number ?: ""} to ${it.destination?.name ?: it.headsign ?: "?"} ".replace(Regex("\\s+"), " ").trim() + " " } ?: "") + "(trainId $id)"
+    }
+
+    /** What the passenger has open in the app right now, in words (null = nothing specific). */
+    fun describeScreen(v: ScreenView?): String? {
+        if (v == null) return null
+        fun id(s: String?) = s?.trim()?.takeIf { it.isNotEmpty() }
+        fun st(s: String?) = id(s)?.let { x -> stations.resolve(x)?.let { "${it.name} ($x)" } ?: x }
+        return when (v.screen?.trim()) {
+            "train" -> id(v.trainId)?.let { t ->
+                "the live view of train ${trainText(t)}" + (st(v.fromStopId)?.let { f -> st(v.toStopId)?.let { " for a trip $f -> $it" } } ?: "")
+            }
+            "line" -> id(v.line)?.let { "the status page of line ${it.replace(" ", "").uppercase()} (its incidents and trains in service)" }
+            "station" -> st(v.stopId)?.let { "the departure board of $it" }
+            "destinations" -> st(v.stopId)?.let { "the list of destinations from $it (choosing where to go)" }
+            "connections" -> st(v.fromStopId)?.let { f -> st(v.toStopId)?.let { "the live trains from $f to $it" } }
+            else -> null
+        }
+    }
+
     /** Lines describing the app's context for the first message (names resolved). */
     fun describeContext(c: AskContext?): List<String> {
         if (c == null) return emptyList()
@@ -582,14 +618,15 @@ class AssistantTools(
         return buildList {
             st(c.fromStopId)?.let { add("Origin: $it") }
             st(c.toStopId)?.let { add("Destination: $it") }
-            c.trainId?.trim()?.takeIf { it.isNotEmpty() }?.let { id ->
-                val t = runCatching { queries.trainSummary(id) }.getOrNull()
-                add("The passenger's train: " + (t?.let { "${it.line ?: ""} ${it.number ?: ""} to ${it.destination?.name ?: it.headsign ?: "?"} ".replace(Regex("\\s+"), " ").trim() + " " } ?: "") + "(trainId $id)")
-            }
+            c.trainId?.trim()?.takeIf { it.isNotEmpty() }?.let { id -> add("The passenger's train: ${trainText(id)}") }
             if (c.lat != null && c.lon != null) {
                 val near = stations.nearest(c.lat, c.lon, 3.0)
                 add("Passenger location: %.5f, %.5f".format(java.util.Locale.ROOT, c.lat, c.lon) +
                     (near?.let { (s, km) -> ", about ${(km * 1000).roundToInt()} m from ${s.name} (${s.stopId})" } ?: ""))
+            }
+            describeScreen(c.onScreen)?.let {
+                add("Open on the passenger's screen right now: $it. Words like \"this train\", \"this line\", \"here\" or a " +
+                    "question without a subject refer to it; it is what they are looking at, not necessarily their own trip.")
             }
         }
     }

@@ -1,6 +1,7 @@
 import { ArrowRight, ArrowUp, ChevronDown, Clock3, Footprints, Keyboard, LocateFixed, Mic, Square } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import type { Option, SituationItem } from "./contract";
+import { Loki } from "./Loki";
 import { countdown, duration, greeting, hhmm, sbbText } from "./format";
 import type { Timer } from "./map/MapController";
 import type { VoiceStatus } from "./voice";
@@ -11,7 +12,13 @@ export type Item = { kind: "msg"; key: string; role: "passenger" | "assistant"; 
 export function Welcome({ suggestions, onPick, place, onLocate, locating }: { suggestions: string[]; onPick: (s: string) => void; place: string | null; onLocate: () => void; locating: boolean }) {
   return (
     <div className="welcome">
-      <h2>{greeting()}</h2>
+      <div className="welcome-hi">
+        <Loki className="welcome-loki" mood="hello" />
+        <h2>
+          {greeting()}, I'm Loki.
+          <span>Your travel assistant</span>
+        </h2>
+      </div>
       {place ? (
         <p>
           Near <b>{place}</b>. Ask me anything about your trip.
@@ -41,13 +48,25 @@ export function Welcome({ suggestions, onPick, place, onLocate, locating }: { su
   );
 }
 
-export function Transcript({ items, checking, renderCards }: { items: Item[]; checking: boolean; renderCards: () => ReactNode }) {
+/** The conversation. Loki speaks for the assistant: his face sits next to each run of assistant messages (on the
+ *  last one, like a messenger avatar); the newest one talks while the voice agent speaks. */
+export function Transcript({ items, checking, renderCards, speechLevel }: { items: Item[]; checking: boolean; renderCards: () => ReactNode; speechLevel?: () => number }) {
+  const isLoki = (i: Item | undefined) => i?.kind === "msg" && i.role === "assistant";
+  const lastLoki = checking ? -1 : items.findLastIndex(isLoki);
   return (
     <div className="transcript">
-      {items.map((i) =>
+      {items.map((i, k) =>
         i.kind === "cards" ? (
           <div key={i.key} className="cards">
             {renderCards()}
+          </div>
+        ) : i.role === "assistant" ? (
+          <div key={i.key} className="say">
+            {isLoki(items[k + 1]) || (checking && k === items.length - 1) ? <span className="avatar-gap" /> : <Loki className={k === lastLoki ? "avatar said" : "avatar"} voiceLevel={k === lastLoki ? speechLevel : undefined} />}
+            <div className="bubble bubble--assistant">
+              <p>{i.text}</p>
+              {i.extra && <p className="bubble-extra">{i.extra}</p>}
+            </div>
           </div>
         ) : (
           <div key={i.key} className={`bubble bubble--${i.role}`}>
@@ -57,12 +76,15 @@ export function Transcript({ items, checking, renderCards }: { items: Item[]; ch
         ),
       )}
       {checking && (
-        <div className="bubble bubble--assistant bubble--checking" role="status" aria-label="Checking the live timetable">
-          <span className="dots" aria-hidden="true">
-            <i />
-            <i />
-            <i />
-          </span>
+        <div className="say">
+          <Loki className="avatar" mood="think" />
+          <div className="bubble bubble--assistant bubble--checking" role="status" aria-label="Loki is checking the live timetable">
+            <span className="dots" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+            </span>
+          </div>
         </div>
       )}
     </div>

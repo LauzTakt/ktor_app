@@ -167,3 +167,25 @@ colour inside buttons). Do not mix icon families.
 - Text contrast at least 4.5 : 1 (the tokens above meet it on `white`).
 - Keyboard focus always visible (2 px `sky` outline). Every icon-only button has a `title` and an `aria-label`.
 - Respect `prefers-color-scheme` on first visit; remember the user's choice.
+
+## 9. Mascot
+
+"Loki" is the app's mascot: a small flat vector train. Drawing in `static/loki.js` (passenger view) and
+`client/src/Loki.tsx` (travel assistant), kept identical; shared styles in `static/loki.css` (served at `/loki.css`,
+linked by both apps). Where it appears:
+
+- **Loading**: the location step ("Finding where you are…") and the assistant panel while it opens show Loki rolling on
+  a moving track (`lokiLoading()`); lists that are loading show a small Loki above the skeleton rows.
+- **Travel assistant**: the assistant speaks as Loki. His face is the header mark and the avatar next to each run of
+  assistant messages; he "thinks" while the timetable is checked, talks briefly when a reply appears, and his mouth
+  follows the audio level while the voice agent speaks.
+- **First-run tour** of the passenger view (`static/onboarding.js`).
+
+It is the one place where the app is playful, so the rules are tighter, not looser:
+
+- Built from the palette only: `red` body, white windscreen and lamps, `#212121` eyes and wheels. No gradients, glow,
+  outlines or emoji; no SBB logo or pictogram on it.
+- Motion: a slow idle sway (3 px), blinking, the mouth moving while its text appears, a short nod when it arrives,
+  and driving along its rail between targets (≈ 500 ms ease). Nothing spins or bounces. `prefers-reduced-motion`
+  turns all of it off (and the text appears at once).
+- Never on top of live data or alerts, and never as the only sign of a state (loaders keep their caption). The tour dims the page and spotlights one control at a time; Escape or "Skip tour" closes it.

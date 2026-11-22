@@ -1,7 +1,20 @@
 // The assistant contract (ASSISTANT_CONTRACT.md, section 2): POST /api/v1/assistant/ask and the visual commands.
 import type { Geometry } from "geojson";
 
-export type AskContext = { fromStopId: string | null; toStopId: string | null; trainId: string | null; lat: number | null; lon: number | null };
+/** What the passenger has open in the passenger view behind the assistant (screenView.ts). */
+export type ScreenView = {
+  /** `train | line | station | destinations | connections` */
+  screen: string;
+  /** human text the page shows, e.g. "IC 1 to Genève-Aéroport", "Bern", "Bern to Thun" */
+  label: string | null;
+  trainId: string | null;
+  line: string | null;
+  stopId: string | null;
+  fromStopId: string | null;
+  toStopId: string | null;
+};
+
+export type AskContext = { fromStopId: string | null; toStopId: string | null; trainId: string | null; lat: number | null; lon: number | null; onScreen?: ScreenView | null };
 
 export type Severity = "info" | "minor" | "major" | "critical";
 export type SituationItem = { id: string; title: string; where?: string | null; severity: Severity; source?: "staff" | "auto" | "sbb" | string | null };

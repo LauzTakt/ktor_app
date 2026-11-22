@@ -36,7 +36,7 @@ import ch.lauzhack.twin.state.LiveState
 import ch.lauzhack.twin.wallet.TripWatchJourneys
 import ch.lauzhack.twin.wallet.TripWatchService
 import ch.lauzhack.twin.wallet.TripWatchStore
-import ch.lauzhack.twin.wallet.WalletConfig
+import ch.lauzhack.twin.wallet.TripWatchConfig
 import ch.lauzhack.twin.wallet.tripWatchRoutes
 import ch.lauzhack.twin.web.AppLinksConfig
 import ch.lauzhack.twin.web.FleetFeed
@@ -126,7 +126,7 @@ fun Application.module() {
     val pushCfg = PushConfig.from(conf)
     if (pushCfg.fcmServiceAccount == null) log.warn("FCM_SERVICE_ACCOUNT_JSON is not set: Android app push is disabled (Web Push still works)")
 
-    configureHttp(state, db, authConfig, assistant, passengerCfg, journeys, WalletConfig.fromEnvironment(dbPath), pushCfg) {
+    configureHttp(state, db, authConfig, assistant, passengerCfg, journeys, TripWatchConfig.fromEnvironment(dbPath), pushCfg) {
         ingestor?.isConnected ?: false
     }
 }
@@ -142,7 +142,7 @@ fun Application.configureHttp(
     assistant: ((TwinQueries) -> AssistantAgent)? = null,
     passenger: PassengerConfig = PassengerConfig(),
     journeys: JourneyCache = JourneyCache(),
-    wallet: WalletConfig = WalletConfig(),
+    tripWatchConfig: TripWatchConfig = TripWatchConfig(enabled = false),
     push: PushConfig = PushConfig(),
     pushSenders: Map<String, PushSender>? = null,
     appLinks: AppLinksConfig = AppLinksConfig.fromEnvironment(),
@@ -171,13 +171,13 @@ fun Application.configureHttp(
     val agent = assistant?.invoke(queries)
     val pushService = PushService(PushStore(db), queries, state, push, pushSenders).also { it.start(db::addIncidentListener) }
     monitor.subscribe(ApplicationStopped) { pushService.close() }
-    val tripWatch = if (wallet.enabled) {
-        val apple = wallet.apple()
-        val google = wallet.google()
-        val store = TripWatchStore(wallet.path)
+    val tripWatch = if (tripWatchConfig.enabled) {
+        val apple = tripWatchConfig.apple()
+        val google = tripWatchConfig.google()
+        val store = TripWatchStore(tripWatchConfig.path)
         TripWatchService(
             store, TripWatchJourneys(queries, journeys, SbbTwinClient(passenger.twinUrl)),
-            wallet.site.trimEnd('/'), apple, google,
+            tripWatchConfig.site.trimEnd('/'), apple, google,
             fresh = { mqttConnected() && queries.status(true).twin?.online == true },
         ).also { service ->
             val changes = Channel<Unit>(Channel.CONFLATED)

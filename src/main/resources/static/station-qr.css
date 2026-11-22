@@ -138,6 +138,10 @@
   font-size: 0.875rem;
 }
 
+.station-qr__sign .station-qr__note {
+  margin: 12px 0 0;
+}
+
 .station-qr__code svg {
   display: block;
   width: min(100%, 10rem);
@@ -183,7 +187,8 @@
 
 .station-qr :focus-visible,
 #stationQrToggle:focus-visible,
-[data-station-qr]:focus-visible {
+[data-station-qr]:focus-visible,
+[data-train-qr]:focus-visible {
   outline: 2px solid var(--blue);
   outline-offset: 2px;
 }
@@ -250,5 +255,10 @@
 
   .station-qr__sign h3 { font-size: 32pt; }
   .station-qr__sign p { font-size: 16pt; margin: 4mm 0 8mm; }
-  .station-qr__code svg { width: min(100%, 85mm); }
+  .station-qr__sign .station-qr__note { font-size: 12pt; margin: 6mm 0 0; }
+  .station-qr__sign .station-qr__note {
+  margin: 12px 0 0;
+}
+
+.station-qr__code svg { width: min(100%, 85mm); }
 }

@@ -24,8 +24,8 @@ import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 
-class WalletConfig(
-    val enabled: Boolean = false,
+class TripWatchConfig(
+    val enabled: Boolean,
     val path: String = "data/wallet.sqlite",
     val site: String = "",
     private val env: (String) -> String? = System::getenv,
@@ -55,12 +55,18 @@ class WalletConfig(
     }
 
     companion object {
-        fun fromEnvironment(mainDatabase: String): WalletConfig = WalletConfig(
-            enabled = System.getenv("WALLET_ENABLED").equals("true", ignoreCase = true),
-            path = System.getenv("WALLET_DB_PATH")?.takeIf(String::isNotBlank)
-                ?: if (mainDatabase == ":memory:") ":memory:" else "$mainDatabase.wallet.sqlite",
-            site = System.getenv("WALLET_PUBLIC_BASE_URL").orEmpty().trimEnd('/'),
-        )
+        fun fromEnvironment(mainDatabase: String, env: (String) -> String? = System::getenv): TripWatchConfig {
+            val enabled = env("TRIP_WATCH_ENABLED")?.takeIf(String::isNotBlank)
+                ?: env("WALLET_ENABLED")?.takeIf(String::isNotBlank)
+                ?: "true"
+            return TripWatchConfig(
+                enabled = enabled.equals("true", ignoreCase = true),
+                path = env("WALLET_DB_PATH")?.takeIf(String::isNotBlank)
+                    ?: if (mainDatabase == ":memory:") ":memory:" else "$mainDatabase.wallet.sqlite",
+                site = env("WALLET_PUBLIC_BASE_URL").orEmpty().trimEnd('/'),
+                env = env,
+            )
+        }
     }
 }
 

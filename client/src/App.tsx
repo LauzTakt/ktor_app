@@ -1,4 +1,4 @@
-import { RotateCcw, TramFront } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Arrival, AskContext, AskResponse, Brief, Option, SituationItem, VisualCommand } from "./contract";
 import { HoldMusic } from "./hold";
@@ -6,7 +6,9 @@ import { onlyUnavailable, unavailableAnswer, unavailableIn } from "./scope";
 import { hhmm } from "./format";
 import { MapController, type DrawnItem, type Pick as MapPick, type Timer } from "./map/MapController";
 import { MapLegend, PickCard, TrackChip, type PickInfo, type Tracking } from "./mapui";
+import { Loki } from "./Loki";
 import { CheckingPill, Dock, OptionsCard, SituationCard, TimerChip, Transcript, Welcome, type Item } from "./ui";
+import { describeScreen, onScreenView, screenView } from "./screenView";
 import { prefetchVoice, Voice, type AskBackendParams, type GetBriefParams, type VoiceStatus } from "./voice";
 import { findJourneyOption, refreshWalkingPlan, type WalkingPlan } from "./walking";
 
@@ -229,6 +231,7 @@ export function App() {
       trainId: extra.trainId || null,
       lat: here?.userLat ?? null,
       lon: here?.userLon ?? null,
+      onScreen: screenView(),
     };
     const history = itemsRef.current.flatMap((i) => (i.kind === "msg" ? [{ role: i.role, text: i.text }] : [])).slice(-8);
     try {
@@ -553,6 +556,8 @@ export function App() {
         if (s === "live") {
           const here = locatedRef.current;
           if (here) voice.current?.context(`[App] The passenger is at or near ${here.name} station (stop id ${here.id}).`);
+          const v = screenView();
+          if (v) voice.current?.context(`[App] Behind the assistant, the passenger has ${describeScreen(v)} open. "This train", "this line" or "here" may refer to it.`);
         }
       },
       mode: (m) => {
@@ -574,7 +579,15 @@ export function App() {
         return { active_disruptions: active.text, passenger_location: here ? `at or near ${here.name} station (stop id ${here.id})` : "unknown" };
       },
     });
+  // the passenger opened another screen behind the assistant: the voice agent hears about it (the text path reads
+  // screenView() on every question)
+  useEffect(() => onScreenView((v) => {
+    if (v) voice.current?.context(`[App] Behind the assistant, the passenger now has ${describeScreen(v)} open. "This train", "this line" or "here" may refer to it.`);
+  }), []);
   const levels = useCallback(() => voice.current?.levels() ?? { input: 0, output: 0 }, []);
+  // Loki speaks for the assistant: while the voice agent talks, his mouth follows the audio level.
+  const speechLevel = useCallback(() => levels().output, [levels]);
+  const speaking = voiceStatus === "live" && voiceMode === "speaking";
   const talk = () => {
     hold.unlock();
     const v = voice.current!;
@@ -713,11 +726,9 @@ export function App() {
 
       <header ref={topRef} className="topbar">
         <div className="brand">
-          <span className="mark" aria-hidden="true">
-            <TramFront size={20} strokeWidth={2.1} />
-          </span>
+          <Loki className="mark mark--loki" mood={checking ? "think" : undefined} voiceLevel={speaking ? speechLevel : undefined} />
           <div>
-            <h1>Travel assistant</h1>
+            <h1>Loki · Travel assistant</h1>
             <p className="status">
               <i className={`dot ${fleet ? "dot--live" : ""}`} />
               {fleet ? <>Live · <b>{fleet.count.toLocaleString("en")}</b> trains</> : "Connecting to the live network"}
@@ -767,6 +778,7 @@ export function App() {
             <Transcript
               items={items}
               checking={checking}
+              speechLevel={speaking ? speechLevel : undefined}
               renderCards={() =>
                 cards && (
                   <>

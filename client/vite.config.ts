@@ -5,7 +5,7 @@ import { defineConfig } from "vite";
 // Production: `npm run build` writes ../build/client/static/assistant/, which Gradle adds to the jar's resources.
 // Dev (`npm run dev`, hot reload on :5190): every server call goes to ktor_app (KTOR_URL, default :8080), which
 // owns them all: /api/v1 (assistant, situation, arrivals, geometry, trains), /api/brief*, /api/voice/session,
-// /api/fleet, /api/nearest, /ws/fleet, the static rail network /data/*.geojson and the shared /theme.css. Nothing talks to sbb-twin's HTTP API.
+// /api/fleet, /api/nearest, /ws/fleet, the static rail network /data/*.geojson and the shared /theme.css and /loki.css (the mascot). Nothing talks to sbb-twin's HTTP API.
 const ktor = process.env.KTOR_URL ?? "http://127.0.0.1:8080";
 const proxy = {
   "/api": { target: ktor, changeOrigin: true },
@@ -13,6 +13,7 @@ const proxy = {
   "/trip-watch": { target: ktor, changeOrigin: true },
   "/passenger.css": { target: ktor, changeOrigin: true },
   "/theme.css": { target: ktor, changeOrigin: true },
+  "/loki.css": { target: ktor, changeOrigin: true },
   "/ws": { target: ktor.replace(/^http/, "ws"), ws: true, changeOrigin: true },
 };
 

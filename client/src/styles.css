@@ -105,12 +105,22 @@ button:not(:disabled) { cursor: pointer; }
 .suggestions button:active { border-color: var(--cement); background: var(--milk); }
 .suggestions svg { flex: none; color: var(--granite); }
 
+/* Loki speaks for the assistant (mascot styles: /loki.css) */
+.mark--loki { width: 40px; height: 40px; background: none; border-radius: 0; display: block; }
+.welcome-hi { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.welcome-loki { width: 64px; flex: none; }
+.welcome-hi h2 { margin: 0; }
+.welcome-hi h2 span { display: block; margin-top: 2px; font-size: 13px; font-weight: 400; color: var(--metal); }
+.say { align-self: flex-start; display: flex; align-items: flex-end; gap: 8px; max-width: 92%; animation: rise 250ms ease; }
+.say .bubble { max-width: 100%; animation: none; }
+.say .avatar, .avatar-gap { width: 32px; flex: none; margin-bottom: 2px; }
+
 /* transcript */
 .transcript { display: flex; flex-direction: column; justify-content: flex-end; gap: 10px; min-height: 100%; padding-top: 2px; }
 .bubble { max-width: 86%; padding: 10px 14px; border-radius: 18px; font-size: 15px; line-height: 1.42; animation: rise 250ms ease; }
 .bubble p { margin: 0; }
 .bubble--passenger { align-self: flex-end; background: var(--charcoal); color: var(--white); border-bottom-right-radius: 6px; }
-.bubble--assistant { align-self: flex-start; background: var(--white); border: 1px solid var(--cloud); border-bottom-left-radius: 6px; }
+.bubble--assistant { align-self: flex-start; min-width: 0; background: var(--white); border: 1px solid var(--cloud); border-bottom-left-radius: 6px; }
 .bubble-extra { margin-top: 8px !important; font-weight: 700; }
 .bubble--checking { display: inline-flex; align-items: center; padding: 15px 16px; }
 .dots { display: inline-flex; gap: 4px; }
