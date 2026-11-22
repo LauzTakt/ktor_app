@@ -50,6 +50,8 @@ data class AskResponse(
     val unavailable: List<String> = emptyList(),
     /** true = add the visuals to the current map picture (pure follow-up); otherwise they replace it. */
     val append: Boolean? = null,
+    /** What the client should ask the passenger for, e.g. `train` = open the train picker. */
+    val needs: String? = null,
 )
 
 @Serializable

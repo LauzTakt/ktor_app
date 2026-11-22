@@ -148,6 +148,20 @@ class AssistantAgent(
             log.info("assistant: out of scope {}, no model call, q=\"{}\"", topics, request.question.take(120))
             return AskResponse(answer, null, emptyList(), emptyList(), emptyList(), null, System.currentTimeMillis() - started, topics)
         }
+        // "Where is my train?" with no train in the context and nothing that identifies one: ask, no model call.
+        val q = request.question
+        if (request.context?.trainId.isNullOrBlank() && Scope.isMyTrain(q) && tools.guessLine(q) == null && !Scope.namesTime(q) &&
+            tools.guessDestination(q) == null && tools.guessTrip(q) == null
+        ) {
+            val here = request.context?.fromStopId?.trim()?.takeIf { it.isNotEmpty() }?.let { tools.stations.resolve(it) }
+                ?.takeIf { it.lat != null && it.lon != null }
+            val visuals = here?.let { s ->
+                val st = StationVisual(s.stopId, s.name, s.lon, s.lat, "origin", null)
+                listOfNotNull(ClearVisual, st, tools.autoFocus(listOf(st)))
+            }.orEmpty()
+            log.info("assistant: my-train question without a train, asking (no model call), q=\"{}\"", q.take(120))
+            return AskResponse(Scope.whichTrain(q), null, emptyList(), emptyList(), visuals, null, System.currentTimeMillis() - started, needs = "train")
+        }
         val turn = TurnState(request, started)
         val visuals = ArrayList<VisualCommand>()
         val stats = Stats()

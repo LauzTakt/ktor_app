@@ -186,7 +186,8 @@ model needs another lookup); a question only about an out-of-scope topic is answ
   "followUp": null,
   "elapsedMs": 2310,
   "unavailable": [],
-  "append": null }                                                                // true = add to the current map picture                                                             // out-of-scope topics asked about
+  "append": null,
+  "needs": null }                                                                 // "train" = open the train picker                                                                // true = add to the current map picture                                                             // out-of-scope topics asked about
 ```
 
 - `options`: the recommended journey (first) and at most one alternative, each with its `journeyId` (the client can
@@ -210,6 +211,11 @@ model needs another lookup); a question only about an out-of-scope topic is answ
   (`id`) removes one item (client action, or the `remove` tool in a follow-up). Every answer replaces the map picture unless `append` is `true` (set by the model only for a
   pure follow-up; then `visuals` has no leading `clear`). Geometry is GeoJSON from sbb-twin, simplified
   to ~8 m.
+- `needs`: what the client should ask for. `"train"`: the question is about the passenger's own train ("where is my
+  train?", "ist mein Zug verspätet?", ...) but `context.trainId` is empty and the question names no line, time or
+  destination; the backend answers at once without a model call ("Which train are you on? Pick one on the screen, or
+  tell me the line and time.", EN/DE/FR/IT), marks `context.fromStopId` if given, and the client opens its train
+  picker. A question that names a line or time ("track the IC 8") runs the normal path.
 - `unavailable`: the topics the passenger asked about that the assistant has no data for, passed as is to the voice
   agent. Values: `platforms`, `accessibility`, `fares`, `tickets`, `refunds`, `occupancy`, `luggage`, `bikes`,
   `bus_stop_location`, `local_transport`. Filled by the model (`respond.unavailable`) and by a keyword check on the

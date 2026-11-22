@@ -62,6 +62,24 @@ object Scope {
         return TEMPLATE.getValue(lang).replace("{x}", list)
     }
 
+    /** "where is my train?", "is my train late?", "track my train", "my connection" (EN/DE/FR/IT). */
+    private val MY_TRAIN = rx(
+        "my train", "my connection", "track my", "my ride", "mein zug", "meinen zug", "meinem zug", "meine verbindung",
+        "mon train", "ma correspondance", "il mio treno", "mio treno", "la mia coincidenza",
+    )
+    private val TIME = Regex("(?<!\\d)([01]?\\d|2[0-3])[:.h]([0-5]\\d)(?!\\d)|(?i)\\b(?:at|um|à|alle)\\s+\\d{1,2}\\b")
+
+    fun isMyTrain(question: String): Boolean = MY_TRAIN.containsMatchIn(question)
+    fun namesTime(question: String): Boolean = TIME.containsMatchIn(question)
+
+    fun whichTrain(question: String): String = WHICH_TRAIN.getValue(language(question))
+    private val WHICH_TRAIN = mapOf(
+        "en" to "Which train are you on? Pick one on the screen, or tell me the line and time.",
+        "de" to "In welchem Zug sind Sie? Wählen Sie ihn auf dem Bildschirm, oder nennen Sie mir Linie und Zeit.",
+        "fr" to "Dans quel train êtes-vous ? Choisissez-le à l'écran, ou dites-moi la ligne et l'heure.",
+        "it" to "Su quale treno si trova? Lo scelga sullo schermo, oppure mi dica la linea e l'orario.",
+    )
+
     private fun language(q: String): String {
         val s = " " + q.lowercase() + " "
         fun score(vararg w: String) = w.count { s.contains(it) }
