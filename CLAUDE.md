@@ -37,7 +37,7 @@ The prediction model also reads "modified data" from the broker on its own; it i
 | WebSocket `/ws/fleet`: whole fleet every `fleet` tick (staff map) | **done** | `web/FleetFeed.kt` |
 | Static web UI: passenger view (`/`, mobile, public) + staff panel behind login (`/admin/` map, `/admin/report.html`), light/dark toggle | **done** (plain JS, no build; MapLibre from unpkg) | `resources/static/` |
 | Passenger voice assistant web app at `/assistant/` (React + Vite, migrated from `lauzhack2026/sbb-client`; ElevenLabs voice agent + map). Built by Gradle (`buildClient`: npm) into the jar; Docker builds it in a Node stage. `-PskipClient=true` skips npm | **done** — see `client/README.md` | `client/` |
-| Android app: Capacitor WebView loading the deployed web UI (`server.url`); APK built + GitHub Release on tag `v*` on main | **done** (iOS: not yet) | `mobile/`, `.github/workflows/android-release.yml` |
+| Mobile apps: Capacitor WebView loading the deployed web UI (`server.url`); on tag `v*` on main CI attaches the Android APK and the iOS .ipa (unsigned unless Apple signing secrets are set) to the GitHub Release | **done** | `mobile/`, `.github/workflows/android-release.yml`, `.github/workflows/ios-release.yml` |
 
 ## Data model (step 1: ingest)
 
