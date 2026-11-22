@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Train Twin</string>
+    <string name="title_activity_main">Train Twin</string>
+    <string name="package_name">ch.lauzhack.twin</string>
+    <string name="custom_url_scheme">ch.lauzhack.twin</string>
+</resources>

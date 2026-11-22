@@ -32,6 +32,13 @@
     </div>
 
     <noscript><p style="padding: 16px">This page needs JavaScript.</p></noscript>
+    <!-- Travel assistant (voice + chat, /assistant/): floating button, opens the chat in a panel over the page -->
+    <div class="assistant-panel" id="assistant-panel" role="dialog" aria-label="Travel assistant" hidden></div>
+    <button class="assistant-fab" id="assistant-fab" type="button" title="Travel assistant" aria-label="Open the travel assistant" aria-expanded="false" aria-controls="assistant-panel">
+      <svg class="icon open" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>
+      <svg class="icon close" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+    </button>
+    <script src="/assistant-launcher.js" defer></script>
     <script type="module" src="/passenger.js"></script>
   </body>
 </html>

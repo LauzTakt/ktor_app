@@ -310,3 +310,26 @@ button.stop:hover { background: var(--milk); }
   display: grid; place-items: center; transition: top 1s linear; }
 .route .pin-train .icon { width: 14px; height: 14px; }
 .route .pin-train::after { content: ""; position: absolute; inset: -5px; border-radius: 50%; border: 2px solid var(--sky); animation: pulse 1.8s var(--ease) infinite; }
+
+/* ---------- travel assistant: floating chat button + panel ---------- */
+.assistant-fab { position: fixed; right: 20px; bottom: calc(20px + env(safe-area-inset-bottom)); z-index: 60; width: 64px; height: 64px;
+  border-radius: 999px; border: 0; background: var(--red); color: #fff; display: grid; place-items: center; cursor: pointer;
+  box-shadow: var(--shadow); transition: background-color 200ms var(--ease), transform 200ms var(--ease); }
+.assistant-fab:hover { background: var(--red125); }
+.assistant-fab:active { transform: scale(0.96); }
+.assistant-fab:focus-visible { outline: 2px solid var(--sky); outline-offset: 3px; }
+.assistant-fab .icon { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.assistant-fab .close, .assistant-fab[aria-expanded="true"] .open { display: none; }
+.assistant-fab[aria-expanded="true"] .close { display: block; }
+.assistant-panel { position: fixed; z-index: 55; right: 20px; bottom: calc(96px + env(safe-area-inset-bottom)); width: min(420px, calc(100vw - 40px));
+  height: min(720px, calc(100dvh - 140px)); background: var(--white); border: 1px solid var(--cloud); border-radius: 16px;
+  box-shadow: var(--shadow); overflow: hidden; }
+.assistant-panel[hidden] { display: none; }
+.assistant-panel iframe { width: 100%; height: 100%; border: 0; display: block; }
+/* phones: the chat takes the whole screen, the button stays on top to close it */
+@media (max-width: 600px) {
+  .actions { padding-right: 80px; } /* room for the floating button next to the main action */
+  .assistant-panel { inset: 0; width: auto; height: auto; border: 0; border-radius: 0; box-shadow: none; }
+  .assistant-fab[aria-expanded="true"] { top: calc(12px + env(safe-area-inset-top)); bottom: auto; width: 44px; height: 44px; }
+  .assistant-fab[aria-expanded="true"] .icon { width: 22px; height: 22px; }
+}

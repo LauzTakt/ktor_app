@@ -1,0 +1,16 @@
+{
+  "name": "sbb-twin-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Android/iOS shell (Capacitor) that loads the twin web UI from the server",
+  "scripts": {
+    "sync": "cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/core": "^8.6.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.6.2"
+  }
+}

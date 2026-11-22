@@ -11,3 +11,6 @@ data
 docker/*.yml
 !docker/certs/
 docs
+mobile
+.github
+client/node_modules

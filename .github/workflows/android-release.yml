@@ -1,0 +1,106 @@
+# Builds the Android APK (Capacitor shell in mobile/) and publishes a GitHub Release
+# when a tag v* is pushed that points at a commit on main.
+#
+# Optional repo config:
+#   vars.MOBILE_SERVER_URL       - URL the app loads (default: the one in mobile/capacitor.config.json)
+#   secrets.ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+#                                - release signing key. Without them the APK is signed with a throwaway
+#                                  debug key (installs fine, but users must uninstall before each update).
+name: Android release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check tag is on main
+        if: startsWith(github.ref, 'refs/tags/')
+        working-directory: .
+        run: |
+          git fetch origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not point at a commit on main"
+            exit 1
+          fi
+
+      - name: Version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then NAME="${GITHUB_REF_NAME#v}"; else NAME="0.0.0-dev"; fi
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "code=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Install and sync Capacitor
+        env:
+          SERVER_URL: ${{ vars.MOBILE_SERVER_URL }}
+        run: |
+          npm ci
+          if [ -n "$SERVER_URL" ]; then
+            HOST=$(echo "$SERVER_URL" | sed -E 's#^[a-z]+://([^/:]+).*#\1#')
+            jq --arg u "$SERVER_URL" --arg h "$HOST" '.server.url=$u | .server.allowNavigation=[$h]' \
+              capacitor.config.json > c.tmp && mv c.tmp capacitor.config.json
+          fi
+          echo "App loads: $(jq -r .server.url capacitor.config.json)"
+          npx cap sync android
+
+      - name: Decode keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          else
+            echo "::warning::No ANDROID_KEYSTORE_BASE64 secret: APK signed with a temporary debug key"
+          fi
+
+      - name: Build APK
+        working-directory: mobile/android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease \
+            -PversionCode=${{ steps.version.outputs.code }} \
+            -PversionName=${{ steps.version.outputs.name }}
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/train-twin-${{ steps.version.outputs.name }}.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: train-twin-apk
+          path: train-twin-*.apk
+
+      - name: GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: train-twin-*.apk
+          generate_release_notes: true
