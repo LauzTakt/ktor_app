@@ -194,11 +194,12 @@ model needs another lookup); a question only about an out-of-scope topic is answ
 - `visuals` (`[]` = leave the map as it is, otherwise it starts with `clear`): `route` (`id`, `style`
   `recommended|alternative`, `label`, `legs[{line, trainId, fromName, toName, geometry}]`; the options' journeys are
   always drawn), `section` (`id`, `colour` `red|orange|green|blue`, `label`, `geometry`), `train` (`trainId`, `label`,
-  `follow`), `station` (`stopId`, `name`, `lon`, `lat`, `role` `origin|destination|transfer|incident`, `label`; the
+  `follow`), `station` (`stopId`, `name`, `lon`, `lat`, `role` `origin|destination|transfer|incident|info`, `label`; the
   recommended route adds its origin, transfers and destination), `timer` (`label`, `until`: only a departure the tools
   returned), `track_train` (`trainId`, `stopId`, `label`: live tracking of the train the passenger waits for at that
-  station), `line` (`line` e.g. `IC8`, `label`) and `focus` (`bbox` `[w, s, e, n]`, fits everything drawn). `remove`
-  (`id`) is client-only. Every answer replaces the map picture unless `append` is `true` (set by the model only for a
+  station), `line` (`line` e.g. `IC8`, `label`), `label` (`id`, `lon`, `lat`, `text`: a callout), `fit` (`trainIds`, `stopIds`,
+  `sectionIds`: the client fits them, with live train positions, above its sheet) and `focus` (`bbox` `[w, s, e, n]`, fits everything drawn). `remove`
+  (`id`) removes one item (client action, or the `remove` tool in a follow-up). Every answer replaces the map picture unless `append` is `true` (set by the model only for a
   pure follow-up; then `visuals` has no leading `clear`). Geometry is GeoJSON from sbb-twin, simplified
   to ~8 m.
 - `unavailable`: the topics the passenger asked about that the assistant has no data for, passed as is to the voice
@@ -223,8 +224,12 @@ model needs another lookup); a question only about an out-of-scope topic is answ
   expectedArr, etaMin, delayMin, stopsAway, status, trainId), `bulletins` (data: the twin's
   SBB/VIA bulletins, latest version each, joined with `/disruptions` for effect, cause, until, durationType, measures and
   bus stops; filters `stopId`, `line`; active first, ENDED ones older than 30 min skipped);
-  `show_route`, `show_section`, `highlight_train`, `track_train`, `highlight_line`, `mark_station`, `start_timer`, `focus_on` (drawing); `respond`
-  (final answer). Independent tool calls of one turn run in parallel; at most 6 model calls. A journey whose geometry
+  `show_route`, `show_section`, `show_path` (a `section` with id `path:A-B` over consecutive stations; twin
+  `/geometry/section` per pair), `highlight_trains`, `track_train`, `highlight_line` (`route=true` adds the line's path),
+  `mark_stations`, `label`, `fit`, `remove`, `start_timer` (drawing; the prompt maps question types to pictures and
+  every answer gets one); `respond`
+  (final answer). For trip questions, disruptions whose section is off the origin-destination corridor are removed
+  in code from `situation` and from the journeys' leg incidents and warnings. Independent tool calls of one turn run in parallel; at most 6 model calls. A journey whose geometry
   the twin no longer has (404) is planned again once. System prompt: `src/main/resources/assistant/system-prompt.md`, followed in the same
   cached system block (1 h TTL) by the knowledge pack `src/main/resources/assistant/knowledge.md` (~3k tokens: train
   categories, bulletin lifecycle and vocabulary, interrupted vs limited, short turns, holds, EV buses, prognosis types,
