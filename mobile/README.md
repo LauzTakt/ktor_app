@@ -81,6 +81,10 @@ The app uses `@capacitor/push-notifications` (FCM); the web UI asks for the toke
 2. Project settings -> Service accounts -> **Generate new private key**: put that JSON (raw or base64) in the server's
    `FCM_SERVICE_ACCOUNT_JSON` env var (Coolify). Without it the server refuses app tokens (`503 fcm_disabled`).
 
+The web UI asks `TwinApp.info()` (local plugin, `TwinAppPlugin.java`) whether the APK has the Firebase config before
+calling `register()`: without it Firebase throws and the app would crash, so the user gets "install the latest version"
+instead. Check after deploying: `GET /api/v1/push/config` must say `"fcm": true`.
+
 iPhone app: push needs APNs, i.e. a paid Apple Developer account (and Firebase's APNs key). Until then the app tells
 iPhone users to add the site to the Home Screen, where Web Push works (iOS 16.4+).
 
