@@ -32,7 +32,7 @@ export function followCard(el, ctx) {
       ? `<span class="fic on">${ic("bell")}</span><div class="main"><div class="t">Alerts on</div><div class="m">${esc(subText(sub))}</div></div>
          <button class="btn" type="button" data-edit>Change</button>`
       : `<span class="fic">${ic("bell")}</span><div class="main"><div class="t">Get alerts</div><div class="m">Before your stop, and when an incident starts or ends.</div></div>
-         <button class="btn primary" type="button" data-edit>Notify me</button>`;
+         <button class="btn btn-primary" type="button" data-edit>Notify me</button>`;
     $("[data-edit]", el).onclick = () => { buzz(); followSheet(c, refresh); };
   };
   const refresh = () => alerts.load(true).then(draw);
@@ -49,7 +49,7 @@ export function followSheet({ trainId, train, stops }, done) {
   const ahead = stops.filter((x) => (x.state === "next" || x.state === "upcoming") && !x.skipped);
   const chosen = current ? (current.stopId || "") : (ahead.at(-1)?.stopId || "");
   const opt = (value, title, meta) => `<label class="row tap${value === chosen ? " selected" : ""}">
-      <input class="vh" type="radio" name="stop" value="${esc(value)}"${value === chosen ? " checked" : ""}><span class="radio"></span>
+      <input class="radio radio-sm" type="radio" name="stop" value="${esc(value)}"${value === chosen ? " checked" : ""}>
       <span class="main"><span class="t">${esc(title)}</span><span class="m">${meta}</span></span></label>`;
 
   const back = document.createElement("div");
@@ -62,10 +62,10 @@ export function followSheet({ trainId, train, stops }, done) {
         ${ahead.map((x) => opt(x.stopId, x.name, `Arrival ${timeHtml(x.plannedArr ?? x.plannedDep, x.expectedArr ?? x.expectedDep)}`)).join("")}
         ${opt("", "Incidents only", "No arrival alert")}
       </div>
-      ${line && !lineSub ? `<label class="check"><input type="checkbox" id="sheet-line"> Also follow line ${esc(line)} (incidents only)</label>` : ""}
-      <div class="pair"><button class="btn" type="button" data-close>Cancel</button><button class="btn primary" type="button" id="sheet-ok">${current ? "Save" : "Turn on"}</button></div>
-      ${current ? '<button class="btn block" type="button" id="sheet-off">Turn off alerts for this train</button>' : ""}`
-    : `<p class="lead">${esc(sup.reason)}</p><div class="actions"><button class="btn block" type="button" data-close>Close</button></div>`}
+      ${line && !lineSub ? `<label class="check"><input class="checkbox checkbox-sm" type="checkbox" id="sheet-line"> Also follow line ${esc(line)} (incidents only)</label>` : ""}
+      <div class="pair"><button class="btn" type="button" data-close>Cancel</button><button class="btn btn-primary" type="button" id="sheet-ok">${current ? "Save" : "Turn on"}</button></div>
+      ${current ? '<button class="btn btn-block" type="button" id="sheet-off">Turn off alerts for this train</button>' : ""}`
+    : `<p class="lead">${esc(sup.reason)}</p><div class="actions"><button class="btn btn-block" type="button" data-close>Close</button></div>`}
   </div>`;
   document.body.append(back);
   const close = () => { back.classList.add("leave"); setTimeout(() => back.remove(), 200); document.removeEventListener("keydown", onKey); };
@@ -117,9 +117,9 @@ export function alertsScreen(onBack) {
       <div class="list" id="subs">${placeholders(2, null)}</div>
       <h2>Follow a line</h2>
       <p class="note">Get an alert when an incident starts or ends anywhere on a line.</p>
-      <label class="search">${ic("search")}<input id="lq" type="search" placeholder="Line, e.g. IC 1 or S3" autocomplete="off" enterkeyhint="search" aria-label="Search a line"></label>
+      <label class="input search">${ic("search")}<input id="lq" type="search" placeholder="Line, e.g. IC 1 or S3" autocomplete="off" enterkeyhint="search" aria-label="Search a line"></label>
       <div class="list" id="lines">${placeholders(3, "Loading the lines…")}</div>
-      <div class="actions" id="test-box" hidden><button class="btn block" type="button" id="test">Send a test alert</button></div>`;
+      <div class="actions" id="test-box" hidden><button class="btn btn-block" type="button" id="test">Send a test alert</button></div>`;
     $("[data-back]", s).onclick = () => onBack();
     const self = () => alertsScreen(onBack);
 
@@ -128,7 +128,7 @@ export function alertsScreen(onBack) {
       $("#subs", s).innerHTML = subs.length ? subs.map((x) => `
         <div class="row">
           <button class="main linkish" type="button" data-open="${esc(x.id)}"><span class="t">${esc(x.label)}</span><span class="m">${esc(subText(x))}</span></button>
-          <button class="icon-btn" type="button" data-off="${esc(x.id)}" title="Stop following" aria-label="Stop following ${esc(x.label)}">${ic("x")}</button>
+          <button class="btn btn-ghost btn-circle icon-btn" type="button" data-off="${esc(x.id)}" title="Stop following" aria-label="Stop following ${esc(x.label)}">${ic("x")}</button>
         </div>`).join("")
         : `<p class="empty">You follow nothing yet. Open your train and tap Notify me, or follow a line below.</p>`;
       $("#subs", s).querySelectorAll("[data-off]").forEach((b) => (b.onclick = async () => {
@@ -193,7 +193,7 @@ export function lineScreen(line, onBack) {
         ? `<span class="fic on">${ic("bell")}</span><div class="main"><div class="t">Following this line</div><div class="m">Alerts when an incident starts or ends.</div></div>
            <button class="btn" type="button" id="lf">Stop</button>`
         : `<span class="fic">${ic("bell")}</span><div class="main"><div class="t">Follow this line</div><div class="m">Alerts when an incident starts or ends.</div></div>
-           <button class="btn primary" type="button" id="lf">Follow</button>`;
+           <button class="btn btn-primary" type="button" id="lf">Follow</button>`;
       $("#lf", el).onclick = async (e) => {
         e.target.disabled = true;
         try {

@@ -2,7 +2,7 @@
 .watch-layout { display: grid; gap: 16px; }
 .watch-layout h1 { font-size: clamp(1.5rem, 5vw, 2rem); overflow-wrap: anywhere; }
 .watch-brand, .watch-nav { display: inline-flex; align-items: center; min-height: 44px; color: var(--charcoal); }
-.watch-brand { font-size: 19px; font-weight: 700; text-decoration: none; }
+.watch-brand { gap: 8px; font-size: 19px; font-weight: 700; text-decoration: none; }
 .watch-nav { font-size: 14px; text-underline-offset: 3px; }
 .watch-panel { display: grid; gap: 8px; padding: 16px; }
 .watch-panel h2, .watch-panel p { margin: 0; }
@@ -12,12 +12,7 @@
 .watch-panel[data-state="check"] .state .dot { background: var(--orange); }
 .watch-panel[data-state="ended"] .state .dot { background: var(--cement); }
 .watch-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.watch-page .btn { min-height: 44px; height: auto; padding-block: 8px; text-decoration: none; touch-action: manipulation; }
-.watch-page a.btn { color: var(--charcoal); }
-.watch-page a.btn.primary { color: #fff; }
-.watch-page .btn:active { transform: scale(.985); }
-.watch-page .btn.primary:active { background: var(--red125); }
-.watch-page .btn.primary:disabled { background: var(--cement); border-color: var(--cement); }
+.watch-page .btn { min-height: 44px; height: auto; padding-block: 8px; }
 .watch-page .note { margin: 0; }
 .watch-feedback:empty { display: none; }
 .watch-feedback { color: var(--charcoal); margin: 12px 0; }
@@ -26,7 +21,6 @@
 .watch-list-item strong { overflow-wrap: anywhere; font-size: 16px; }
 .watch-list-item span { color: var(--iron); }
 .watch-option { display: flex; align-items: center; gap: 12px; min-height: 44px; font-size: 15px; }
-.watch-option input { width: 20px; height: 20px; accent-color: var(--red); }
 @media (max-width: 480px) {
   .watch-actions .btn { width: 100%; }
 }

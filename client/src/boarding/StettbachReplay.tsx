@@ -134,7 +134,7 @@ export function StettbachReplay() {
             <p className="status">Disruption replay · 25 Sep 2026</p>
           </div>
         </div>
-        <a className="icon-btn boarding-exit" href={import.meta.env.BASE_URL} aria-label="Exit replay" title="Exit replay">
+        <a className="btn btn-ghost btn-circle icon-btn boarding-exit" href={import.meta.env.BASE_URL} aria-label="Exit replay" title="Exit replay">
           <X size={19} aria-hidden="true" />
         </a>
       </header>
@@ -157,22 +157,22 @@ export function StettbachReplay() {
               <p className="replay-bulletin">{step === 0 ? "Trip alert" : "SBB bulletin"} · {update.time}</p>
               <p className="replay-notice-copy" role="status">{update.notice}</p>
               {choice === "train" ? (
-                <button type="button" className="boarding-action" onClick={nextUpdate}>
+                <button type="button" className="btn btn-primary boarding-action" onClick={nextUpdate}>
                   Next SBB update <ArrowRight size={18} aria-hidden="true" />
                 </button>
               ) : (
                 <div className="boarding-choices">
-                  <button type="button" className="boarding-action" onClick={() => choose("tram")}>Take tram 7 <ArrowRight size={18} aria-hidden="true" /></button>
-                  <button type="button" className="boarding-action" data-secondary="true" onClick={() => choose("train")}>Wait for the S 9</button>
+                  <button type="button" className="btn btn-primary boarding-action" onClick={() => choose("tram")}>Take tram 7 <ArrowRight size={18} aria-hidden="true" /></button>
+                  <button type="button" className="btn btn-outline boarding-action" onClick={() => choose("train")}>Wait for the S 9</button>
                 </div>
               )}
             </article>
           )}
           {(choice || step > 0) && (
             <div className="boarding-replay-controls">
-              <button type="button" onClick={restart}><RotateCcw size={15} aria-hidden="true" /> Restart replay</button>
-              {choice === "tram" && step < timeline.length - 1 && <button type="button" onClick={nextUpdate}>Next SBB update</button>}
-              {confirmed && focused && track === "published" && <button type="button" onClick={changeTrack}>Simulate track change</button>}
+              <button className="btn btn-ghost btn-sm" type="button" onClick={restart}><RotateCcw size={15} aria-hidden="true" /> Restart replay</button>
+              {choice === "tram" && step < timeline.length - 1 && <button className="btn btn-ghost btn-sm" type="button" onClick={nextUpdate}>Next SBB update</button>}
+              {confirmed && focused && track === "published" && <button className="btn btn-ghost btn-sm" type="button" onClick={changeTrack}>Simulate track change</button>}
               {track === "queued" && <p role="status">Simulated update queued for reconnect</p>}
             </div>
           )}

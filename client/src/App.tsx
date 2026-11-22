@@ -737,7 +737,7 @@ export function App() {
           </div>
         </div>
         {!empty && (
-          <button type="button" className="icon-btn" onClick={restart} title="New conversation" aria-label="New conversation">
+          <button type="button" className="btn btn-ghost btn-circle icon-btn" onClick={restart} title="New conversation" aria-label="New conversation">
             <RotateCcw size={18} />
           </button>
         )}
@@ -753,6 +753,9 @@ export function App() {
           type="button"
           className="handle"
           aria-label={sheet === "peek" ? "Show the conversation" : "Hide the conversation"}
+          onClick={(event) => {
+            if (event.detail === 0) setSheet((s) => s === "peek" ? "half" : "peek");
+          }}
           onPointerDown={(e) => {
             drag.current = { y: e.clientY, moved: false };
             e.currentTarget.setPointerCapture(e.pointerId);

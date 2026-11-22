@@ -6,7 +6,7 @@ import { THREE_URL, clamp, cssVar, restartBtn, setUrl } from "./ui.js";
 export function trainGone(s) {
   setUrl({});
   s.innerHTML = `<div class="finish"><h1>This train has ended its run</h1><p class="lead">It is no longer in service.</p></div>
-    <div class="actions"><button class="btn primary block" id="again">Start again</button></div>`;
+    <div class="actions"><button class="btn btn-primary btn-block" id="again">Start again</button></div>`;
   $("#again", s).onclick = () => restartBtn.click();
 }
 

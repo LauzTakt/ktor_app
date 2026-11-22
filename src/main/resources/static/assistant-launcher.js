@@ -4,7 +4,9 @@
   const fab = document.getElementById("assistant-fab");
   const panel = document.getElementById("assistant-panel");
   if (!fab || !panel) return;
+  let opener;
   const setOpen = (open) => {
+    if (open) opener = document.activeElement;
     if (open && !panel.firstChild) {
       // Loki waits behind the frame while the assistant loads (map + voice), then the frame covers him.
       const wait = document.createElement("div");
@@ -24,6 +26,8 @@
     fab.setAttribute("aria-expanded", String(open));
     fab.setAttribute("aria-label", open ? "Close the travel assistant" : "Open the travel assistant");
     fab.title = open ? "Close" : "Travel assistant";
+    if (open) panel.focus({ preventScroll: true });
+    else (opener?.isConnected && opener !== document.body ? opener : fab).focus({ preventScroll: true });
   };
   // What the passenger has open (passenger/ui.js setView): the assistant sends it with every question.
   const post = () => panel.querySelector("iframe")?.contentWindow?.postMessage({ type: "twin-view", view: window.twinView ?? null }, location.origin);

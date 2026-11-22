@@ -18,10 +18,5 @@ export function countdown(ms: number) {
   return h ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
 }
 
-export function greeting(now = Date.now()) {
-  const h = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Zurich", hour: "2-digit", hourCycle: "h23" }).format(now));
-  return h < 5 ? "Good evening" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
-}
-
 /** SBB writes lines with a space: "S12" -> "S 12", "IC8" -> "IC 8" (inside any label). */
 export const sbbText = (s: string | null | undefined) => (s ?? "").replace(/\b(IC|IR|ICE|EC|EN|NJ|TGV|RJX?|RE|PE|IRE|SN|S|R)(\d{1,3})\b/g, "$1 $2");

@@ -164,7 +164,7 @@ function render(next, focus = false) {
   for (const action of watch.actions.filter((item) => item !== "stop")) {
     controls.append(button(actions[action], async () => {
       render(await json(`/${watchId}`, { method: "PATCH", body: JSON.stringify({ action }) }), true);
-    }, "btn primary"));
+    }, "btn btn-primary"));
   }
   if (watch.kind === "check") controls.append(link("Find a connection", watch.alternativesUrl));
   if (watch.actions.includes("stop")) {
@@ -215,6 +215,7 @@ async function boot() {
         { trainId, fromStopId: params.get("fromStopId"), toStopId: params.get("toStopId") };
       const aboard = document.createElement("input");
       aboard.type = "checkbox";
+      aboard.className = "checkbox checkbox-sm";
       const option = node("label", "", "watch-option");
       option.append(aboard, node("span", "I’m already on board"));
       root.replaceChildren(
@@ -224,7 +225,7 @@ async function boot() {
         button("Watch this trip", async () => {
           const saved = await json("", { method: "POST", body: JSON.stringify({ ...selection, onBoard: aboard.checked }) });
           location.replace(`/trip-watch.html?id=${encodeURIComponent(saved.id)}`);
-        }, "btn primary block"),
+        }, "btn btn-primary btn-block"),
       );
       return;
     }
@@ -237,9 +238,9 @@ async function boot() {
     }
     root.replaceChildren(heading("Watched trips"));
     root.append(watches.length ? list : node("p", "Choose a connection to start watching a trip.", "lead"));
-    root.append(link("Find a trip", "/", "btn primary block"));
+    root.append(link("Find a trip", "/", "btn btn-primary btn-block"));
   } catch (error) {
-    root.replaceChildren(heading("Trip Watch"), node("p", error.message, "lead"), link("Find a trip", "/", "btn primary block"));
+    root.replaceChildren(heading("Trip Watch"), node("p", error.message, "lead"), link("Find a trip", "/", "btn btn-primary btn-block"));
   } finally {
     root.setAttribute("aria-busy", "false");
   }

@@ -14,11 +14,11 @@ const markSeen = () => { try { localStorage.setItem(SEEN_KEY, "done"); } catch {
 
 // Mood per step: "hello" (waves the pantograph), "point" (looks at the target), "cheer" (brows up, big smile).
 const STEPS = [
-  { mood: "hello", title: "Hi, I'm Loki", text: "I'll show you around this app. It takes 30 seconds and you can skip me any time." },
+  { mood: "hello", title: "Hi, I'm Loki", text: "I'll show you around this app. Skip the tour any time." },
   { mood: "point", title: "I find your train for you", text: "When we start, your phone asks for your location. I use it only to spot a train or a station close to you. Say no and you can still pick your stations by hand." },
-  { target: "#assistant-fab", mood: "point", title: "Talk to me", text: "Not sure which train to take? Tap here and ask me, by voice or by chat. I am also your travel assistant." },
+  { target: "#assistant-fab", mood: "point", title: "Talk to me", text: "Not sure which train to take? Tap here and ask me, by voice or by chat." },
   { target: "#alerts-btn", mood: "point", title: "Your alerts", text: "Follow a train or a line and I let you know about delays, incidents and when you reach your stop." },
-  { target: ".watched-trips-nav a", mood: "point", title: "Watched trips", text: "Trips you save show up here, so you can check them again later." },
+  { target: ".watched-trips-link", mood: "point", title: "Watched trips", text: "Trips you save show up here, so you can check them again later." },
   { target: "#theme", mood: "point", title: "Light or dark", text: "Switch the colours here, whatever is easier on your eyes." },
   { target: "#tour-btn", mood: "point", title: "Need me again?", text: "Tap the question mark and I come back for another round." },
   { mood: "cheer", title: "All aboard!", text: "Let's find your train.", last: true },
@@ -46,9 +46,8 @@ export function startTour({ onDone = () => {} } = {}) {
         <h2 id="tour-title"></h2>
         <p id="tour-text" aria-live="polite"></p>
         <div class="tour-foot">
-          <span class="tour-dots" aria-hidden="true"></span>
           <button class="btn tour-back" type="button">Back</button>
-          <button class="btn primary tour-next" type="button">Next</button>
+          <button class="btn btn-primary tour-next" type="button">Next</button>
         </div>
       </div>
     </div>`;
@@ -69,7 +68,6 @@ export function startTour({ onDone = () => {} } = {}) {
     q(".tour-back").hidden = i === 0;
     q(".tour-next").textContent = s.last ? "Find my train" : i === 0 ? "Show me" : "Next";
     q(".tour-skip").hidden = !!s.last;
-    q(".tour-dots").innerHTML = steps.map((_, k) => `<i${k === i ? ' class="on"' : ""}></i>`).join("");
     loki.dataset.mood = s.mood;
     loki.classList.remove("hop");
     void loki.offsetWidth; // restart the small "arrived" nod

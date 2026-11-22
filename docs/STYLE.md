@@ -45,8 +45,8 @@ body { font-family: "SBB Web", "Helvetica Neue", Helvetica, Arial, sans-serif; -
 ## 3. Colours
 
 SBB palette names. Light values are SBB's; dark values are ours (same roles, readable on dark surfaces).
-For the passenger view and the travel assistant they live in one file, `src/main/resources/static/theme.css`
-(fonts + light / dark tokens, served at `/theme.css`): change colours there, not in the page CSS.
+The passenger view, Trip Watch, staff pages and React assistant share `src/main/resources/static/theme.css`.
+It maps the SBB colours to daisyUI's semantic tokens and follows the saved light or dark preference.
 
 | Token | Light | Dark | Role |
 |---|---|---|---|
@@ -138,15 +138,27 @@ reason texts ("Overhead line fault", "Track damage", "Person accident") with the
 
 ## 6. Components
 
+Train twin uses daisyUI 5 for buttons, fields, checkboxes, radios and station-picker tabs. The Ktor pages
+and the React assistant both load the compiled controls through `/theme.css`. To add a daisyUI component
+or variant, update `client/rail-ui.css`, run `npm ci && npm run build:ui` from `client/`, and include the
+resulting `src/main/resources/static/vendor/daisyui.css` in the change. Ktor serves this local asset even
+when the assistant build is skipped.
+
+Use SBB Web and the railway palette across these controls. Give the next passenger action the strongest
+contrast. For example, once both stations are selected, “Show trains” takes the red emphasis and the
+assistant uses an outline. Keep departures in timetable rows so the eye can follow the same time column.
+[Anthropic on recurring AI design defaults](https://claude.com/resources/articles/improving-frontend-design-through-skills)
+and [Nielsen Norman Group on visual hierarchy](https://www.nngroup.com/articles/visual-hierarchy-ux-definition/).
+
 | Component | Spec |
 |---|---|
-| Primary button | pill (radius 999 px), 40 px high, `red` background, white bold text, `red125` on hover; one per view |
-| Secondary button | pill, 1 px `charcoal` border, transparent; destructive variant with `red` border and text |
+| Primary button | `btn btn-primary`, red with white text and a darker red hover. Use for the next action. |
+| Secondary button | `btn` for a regular action, `btn-outline` for an outlined action and `btn-ghost` for toolbar controls. |
 | "Back to reality" (Sync all) | pill, `green` background, white bold text |
 | Chips (presets) | pill, 1 px `cloud` border; selected = `charcoal` fill, white text |
 | Inputs and selects | 40 px high, radius 8 px, 1 px `cloud` border, 15 px text; focus = 2 px `sky` outline |
 | Cards and panels | `white`, radius 10 px (lists) to 16 px (floating panels), 1 px `cloud` border; floating panels add `0 8px 24px rgba(0,0,0,.14)` |
-| List rows | radius 10 px, 1 px `cloud` border, 10 × 12 px padding; an 8 px status dot before the title (red interrupted, orange limited, sky information, cement ended); the selected row gets a `sky` border |
+| Timetables and station lists | Align times in a fixed column with tabular figures. Separate options with horizontal rules. Pair colour signals with a written status. |
 | Switch | 44 × 26 px track, white 18 px knob; on = `green`, off = `cement` |
 | Tabs | icon + label, `metal`; active = `charcoal` with a 2 px `red` underline |
 | Header | white bar; brand mark = white train on a red square (radius 8 px); live stats in `metal` with bold numbers; a green dot for "Live" |

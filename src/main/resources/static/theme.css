@@ -1,7 +1,6 @@
-/* Shared theme of the passenger-facing pages: SBB type and palette, light and dark (docs/STYLE.md).
-   Loaded by the passenger view (`/`, passenger.css) and the travel assistant (`/assistant/`, client/index.html).
-   The theme is <html data-theme="light|dark">, saved in localStorage "twin-theme" (else the system preference).
-   Page-specific variables stay in each page's own CSS. */
+/* Shared by Ktor pages and the React assistant, including its embedded view. */
+@layer base, components;
+@import url("./vendor/daisyui.css") layer(components);
 
 @font-face { font-family: "SBB Web"; font-weight: 300; font-display: swap;
   src: url("https://cdn.app.sbb.ch/fonts/v1_6_subset/SBBWeb-Light.woff2") format("woff2"); }
@@ -16,6 +15,24 @@
   --blue: #2d327d; --sky: #0079c7; --green: #00973b; --orange: #f27e00;
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
   --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --rail-font: "SBB Web", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --color-base-100: var(--white);
+  --color-base-200: var(--milk);
+  --color-base-300: var(--silver);
+  --color-base-content: var(--charcoal);
+  --color-primary: var(--red);
+  --color-primary-content: #fff;
+  --color-neutral: var(--charcoal);
+  --color-neutral-content: var(--white);
+  --radius-field: .5rem;
+  --radius-selector: .25rem;
+  --radius-box: .75rem;
+  --size-field: .275rem;
+  --size-selector: .25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+  --fx-noise: none;
   color: var(--charcoal); background: var(--white); color-scheme: light;
 }
 /* Dark: the neutrals flip (--white is the page background, --charcoal the text); red, sky, green and orange stay. */
@@ -24,6 +41,20 @@
   --metal: #a3a9b1; --granite: #b9bec5; --iron: #d2d6db; --charcoal: #f1f2f4; --blue: #8f95e8;
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   color-scheme: dark;
+}
+
+/* Native forms also appear inside map popups and in the print view. */
+@layer base {
+  button, input, select, textarea { font: inherit; color: inherit; }
+}
+.btn { font-family: inherit; font-weight: 700; text-decoration: none; }
+.btn-primary:not(:disabled):hover { --btn-bg: var(--red125); --btn-border: var(--red125); }
+.btn:disabled { background-color: var(--milk); border-color: var(--cloud); color: var(--granite); }
+.input, .select, .textarea { font-family: inherit; --input-color: var(--cement); }
+:is(.btn, .input, .select, .textarea, .tab, .radio, .checkbox):focus-visible,
+.input:focus-within { outline: 2px solid var(--sky); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .btn, .tab, .radio, .checkbox { transition: none; }
 }
 
 /* MapLibre attribution chip */

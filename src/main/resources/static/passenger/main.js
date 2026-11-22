@@ -27,7 +27,7 @@ push.init({ onForeground: (n) => { buzz([20, 40, 20]); toast(n.body ? `${n.title
 $("#alerts-btn").innerHTML = ic("bell");
 $("#alerts-btn").addEventListener("click", () => { buzz(); const back = location.search; alertsScreen(() => routeFromUrl(back, { back: true })); });
 tripWatchAvailable.then((available) => {
-  $(".watched-trips-nav").hidden = !available;
+  $(".watched-trips-link").hidden = !available;
 });
 $("#tour-btn").innerHTML = ic("help");
 $("#tour-btn").addEventListener("click", () => { buzz(); startTour(); });
@@ -62,7 +62,7 @@ if (qrTrain) {
 else if (qrStop) {
   api(`/stations/${encodeURIComponent(qrStop)}`)
     .then((d) => stationScreen({ stopId: d.station.stopId, name: d.station.name }))
-    .catch(() => browseScreen({ note: "This station code is not known. Choose where you start and where you go." }));
+    .catch(() => browseScreen({ note: "Station code not recognised. Search by station name." }));
 }
 else if (qrLine) lineScreen(qrLine, () => alertsScreen(() => detectScreen({ back: true })));
 else if (qrStation) {
@@ -71,6 +71,6 @@ else if (qrStation) {
     const to = params.get("to");
     if (to) api(`/stations/${encodeURIComponent(to)}`).then((x) => connectionsScreen(from, { stopId: x.station.stopId, name: x.station.name })).catch(() => destinationScreen(from));
     else destinationScreen(from);
-  }).catch(() => browseScreen({ note: "This station code is not known. Choose where you start and where you go." }));
+  }).catch(() => browseScreen({ note: "Station code not recognised. Search by station name." }));
 } else detectScreen(opts);
 }

@@ -57,12 +57,6 @@ export const ILLUSTRATION = {
     <rect x="0" y="136" width="320" height="4" fill="var(--iron)"/>
     <g class="illus-person"><circle cx="232" cy="88" r="7" fill="var(--granite)"/><rect x="225" y="97" width="14" height="19" rx="6" fill="var(--granite)"/></g>
   </svg>`,
-  search: `<svg class="illus" viewBox="0 0 320 150" aria-hidden="true">
-    <path d="M30 120 C 90 120, 110 40, 170 50 S 260 110, 290 40" fill="none" stroke="var(--silver)" stroke-width="10" stroke-linecap="round"/>
-    <path class="illus-route" d="M30 120 C 90 120, 110 40, 170 50 S 260 110, 290 40" fill="none" stroke="var(--charcoal)" stroke-width="4" stroke-linecap="round" stroke-dasharray="6 10"/>
-    <circle cx="30" cy="120" r="10" fill="var(--white)" stroke="var(--charcoal)" stroke-width="4"/>
-    <circle cx="290" cy="40" r="10" fill="var(--red)"/>
-  </svg>`,
 };
 
 export const lineLabel = (t, lg = false) => `<span class="line${lg ? " lg" : ""}">${esc(t?.line || t?.category || "Train")}</span>`;
@@ -132,7 +126,9 @@ export function show(build, { back = false, restart = true } = {}) {
   cleanups.forEach((fn) => { try { fn(); } catch { /* ignore */ } });
   cleanups = [];
   const old = stage.querySelector(".screen:not(.leave)");
-  if (old) {
+  if (old && reducedMotion()) old.remove();
+  else if (old) {
+    old.inert = true;
     old.classList.remove("enter", "back");
     old.classList.add("leave");
     setTimeout(() => old.remove(), 220);
@@ -141,6 +137,7 @@ export function show(build, { back = false, restart = true } = {}) {
   s.className = `screen enter${back ? " back" : ""}`;
   stage.append(s);
   restartBtn.hidden = !restart;
+  restartBtn.textContent = "Change trip";
   build(s);
   window.scrollTo({ top: 0, behavior: reducedMotion() ? "auto" : "smooth" });
   return s;

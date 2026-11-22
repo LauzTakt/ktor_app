@@ -77,7 +77,7 @@ export function bearing(lat1, lon1, lat2, lon2) {
   return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
 }
 export const geoText = () => ({
-  denied: "Location is blocked.",
+  denied: "Location access is off. Choose a starting station.",
   insecure: "Location needs a secure connection (HTTPS).",
   off: "Location is not available.",
 }[geo.status] || "We could not find you.");
