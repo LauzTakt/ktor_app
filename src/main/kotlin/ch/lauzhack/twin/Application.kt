@@ -22,6 +22,11 @@ import ch.lauzhack.twin.mqtt.MqttIngestor
 import ch.lauzhack.twin.passenger.PassengerConfig
 import ch.lauzhack.twin.passenger.PassengerService
 import ch.lauzhack.twin.passenger.passengerApi
+import ch.lauzhack.twin.push.PushConfig
+import ch.lauzhack.twin.push.PushSender
+import ch.lauzhack.twin.push.PushService
+import ch.lauzhack.twin.push.PushStore
+import ch.lauzhack.twin.push.pushV1
 import ch.lauzhack.twin.state.LiveState
 import ch.lauzhack.twin.web.FleetFeed
 import ch.lauzhack.twin.web.fleetSocket
@@ -93,7 +98,11 @@ fun Application.module() {
     val passengerCfg = PassengerConfig.from(conf)
     if (!passengerCfg.voiceEnabled) log.warn("ELEVENLABS_API_KEY or PASSENGER_AGENT_ID is not set: /api/voice/session will answer 503")
 
-    configureHttp(state, db, authConfig, assistant, passengerCfg) { ingestor?.isConnected ?: false }
+    // Push notifications (web + Android app): VAPID keys from env or generated; FCM from FCM_SERVICE_ACCOUNT_JSON.
+    val pushCfg = PushConfig.from(conf)
+    if (pushCfg.fcmServiceAccount == null) log.warn("FCM_SERVICE_ACCOUNT_JSON is not set: Android app push is disabled (Web Push still works)")
+
+    configureHttp(state, db, authConfig, assistant, passengerCfg, pushCfg) { ingestor?.isConnected ?: false }
 }
 
 /**
@@ -106,8 +115,10 @@ fun Application.configureHttp(
     authConfig: AuthConfig = AuthConfig(),
     assistant: ((TwinQueries) -> AssistantAgent)? = null,
     passenger: PassengerConfig = PassengerConfig(),
+    push: PushConfig = PushConfig(),
+    pushSenders: Map<String, PushSender>? = null,
     mqttConnected: () -> Boolean,
-) {
+): PushService {
     install(CallLogging)
     install(Compression) // gzip/deflate: the rail network GeoJSON (~3 MB) and API lists shrink ~5x
     install(ContentNegotiation) { json(Json { explicitNulls = true; encodeDefaults = true }) }
@@ -123,6 +134,8 @@ fun Application.configureHttp(
     val live = LiveUpdates(queries, db)
     val fleet = FleetFeed(state)
     val agent = assistant?.invoke(queries)
+    val pushService = PushService(PushStore(db), queries, state, push, pushSenders).also { it.start(db::addIncidentListener) }
+    monitor.subscribe(ApplicationStopped) { pushService.close() }
     routing {
         get("/health") { call.respond(Health("ok")) }
         // Swagger UI at /swagger, spec at /swagger/documentation.yaml (keep in sync with docs/API.md and api/v1/).
@@ -134,6 +147,7 @@ fun Application.configureHttp(
         passengerApi(PassengerService(passenger, fleet) { localStations(state) })
         liveUpdatesWs(live)
         fleetSocket(fleet)
+        pushV1(pushService)
         // Staff panel (staff only, else -> /login.html): `/admin/` = live map, `/admin/report.html` = report an incident.
         staffPages(
             auth,
@@ -146,6 +160,7 @@ fun Application.configureHttp(
         // `/` = public passenger view (index.html); login.html, JS, CSS, GeoJSON: public (no data in them).
         staticResources("/", "static")
     }
+    return pushService
 }
 
 /**

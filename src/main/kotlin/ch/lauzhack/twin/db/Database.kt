@@ -287,6 +287,12 @@ class Database(path: String) : AutoCloseable {
         )
     }
 
+    /**
+     * Synchronous access to the connection under the lock, for other stores sharing this database file
+     * (e.g. push/PushStore.kt, which creates its own tables). Keep [block] short: it holds the lock.
+     */
+    fun <T> withConnection(block: (Connection) -> T): T = synchronized(lock) { block(conn) }
+
     private fun <T> query(sql: String, vararg args: String, map: (ResultSet) -> T): List<T> = synchronized(lock) {
         conn.prepareStatement(sql).use { ps ->
             args.forEachIndexed { i, a -> ps.setString(i + 1, a) }

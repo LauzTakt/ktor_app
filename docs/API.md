@@ -39,6 +39,9 @@ written by hand: keep it in sync with this file). Tests: `src/test/kotlin/ch/lau
 | `GET /stations/{stopId}/destinations` | `Destination[]`: stations reachable from here with a train in service, most served first |
 | `GET /stations/{stopId}/connections` | `Connections`: trains in service going from this station to `?to=`, by departure |
 | `GET /stations/{stopId}/screen` | `Screen`: compact view for small displays (next departures + related incidents) |
+| `GET /lines` | `Line[]`: lines of the trains in service (`?q=` filters by name), with trains and incidents counts |
+| `GET /lines/{line}` | `LineDetail`: its trains in service + the incidents concerning it (`match` as for line alerts) |
+| `GET /push/config`, `POST /push/devices`, ... | Push notifications (web + Android app), see [Push notifications](#push-notifications) |
 | `GET /incidents` | `Incident[]` |
 | `GET /incidents/{id}` | `Incident` with `geometry` (GeoJSON) |
 | `GET /incidents/{id}/history` | `IncidentEvent[]` |
@@ -326,6 +329,52 @@ Related incidents (same rules as the table above):
   "incident": { "id": "i-4d5811f3", ..., "match": "endpoint" },
   "trains": [ { "trainId": "20261121_...", "match": "route" } ] }
 ```
+
+## Push notifications
+
+Alerts on the phone or desktop, even with the page closed. Public (passengers have no account): a device registers
+once and gets a random `deviceId`, which is the only handle to its subscriptions (keep it like a secret).
+Implementation: `push/` (Web Push encryption + VAPID with the JDK, FCM HTTP v1); client: `static/push.js`, `static/sw.js`.
+
+| Platform | Channel | Needs |
+|---|---|---|
+| Browser (Chrome, Edge, Firefox, Safari on macOS) | Web Push (`kind: web`) | nothing: VAPID keys are generated on first start (or `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY`) |
+| iPhone / iPad | Web Push from the **Home Screen** web app (iOS 16.4+, Share > Add to Home Screen) | same as browsers |
+| Android app (`mobile/`) | FCM (`kind: fcm`) | Firebase project: `FCM_SERVICE_ACCOUNT_JSON` on the server, `google-services.json` in the APK |
+| iPhone app (`mobile/ios`) | not yet (APNs needs a paid Apple Developer account); the app points users to the Home Screen web app | |
+
+**What you can follow** (`POST /push/devices/{deviceId}/subscriptions`):
+
+- **A train** `{ "trainId", "stopId"? }`. With `stopId` (where you get off; must still be ahead): `"<Station> in N min"`
+  once the expected arrival is ≤ `arrivalLeadSec` (120 s) away, then `"Now at <Station>"` when the train stands there.
+  Always: every incident concerning the train (same matching as `/trains/{id}/incidents`) when it starts, and
+  `"Resolved: …"` when it is removed. The subscription ends by itself once the train has left that station or has
+  left service.
+- **A line** `{ "line": "IC 1" }` (case-insensitive; must have a train in service): incidents only. An incident concerns
+  the line if its scope is the line or the network, or if it concerns any train in service on the line.
+
+Each incident is announced once per subscription (updates do not repeat it); incidents already active when you
+subscribe are not announced, but their resolution is. Notifications carry `{ title, body, url, tag }`; `url` opens
+`/?train=<trainId>` or `/?line=<line>`.
+
+| Call | Body → result |
+|---|---|
+| `GET /push/config` | `{ webPushPublicKey, fcm, arrivalLeadSec }`: `webPushPublicKey` is the `applicationServerKey` |
+| `POST /push/devices` | web: `{ "kind": "web", "endpoint", "keys": { "p256dh", "auth" }, "platform"? }` (= `PushSubscription.toJSON()`); app: `{ "kind": "fcm", "token", "platform": "android" }` → `201 Device { deviceId, kind, platform, createdAt }`. The same endpoint / token returns the same `deviceId`. `503 fcm_disabled` if FCM is not configured |
+| `GET /push/devices/{deviceId}` | `Device` |
+| `DELETE /push/devices/{deviceId}` | `204`; deletes its subscriptions |
+| `POST /push/devices/{deviceId}/test` | sends a test notification now → `{ "result": "ok" \| "gone" \| "failed" }` (`gone`: the browser/app dropped it, the device is deleted) |
+| `GET /push/devices/{deviceId}/subscriptions` | `PushSubscription[]` |
+| `POST /push/devices/{deviceId}/subscriptions` | `{ "trainId", "stopId"? }` or `{ "line" }` → `201 PushSubscription`; replaces the device's previous one for the same train / line. Errors: `train_not_found`, `line_not_found`, `bad_stopId` (not ahead) |
+| `DELETE /push/devices/{deviceId}/subscriptions/{id}` | `204` |
+
+```jsonc
+// PushSubscription
+{ "id": "s-…", "kind": "train", "trainId": "20261122_…", "line": null, "stopId": "8507000", "stopName": "Bern",
+  "label": "IC 1 to Genève-Aéroport", "alerts": ["arrival", "incidents"], "createdAt": 1795300000000 }
+```
+
+Devices whose endpoint / token is rejected by the push service (`404`/`410`, FCM `UNREGISTERED`) are deleted.
 
 ## Examples
 

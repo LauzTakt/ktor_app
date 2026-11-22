@@ -32,6 +32,7 @@ The prediction model also reads "modified data" from the broker on its own; it i
 | Passenger voice app server side (port of sbb-client `server/`): `/api/voice/session` (ElevenLabs credentials), `/api/brief*` (place brief from sbb-twin), `/api/nearest`, `/api/fleet`, `/twin/*` read-only proxy. Public; errors `{"error": msg}` | **done** — see docs/API.md | `passenger/` |
 | Swagger UI (`/swagger`) | **done** — OpenAPI spec, hand-written: update it with every API change | `resources/openapi/documentation.yaml` |
 | Staff auth: bearer tokens (`POST /api/v1/auth/login`), SQLite `app_user` + `auth_token`, default `admin`/`admin`. Read API/WebSockets/Swagger public; **staff only: web UI pages (`staffPages`, redirect to `/login.html`, session cookie `twin_staff`) and `POST /api/v1/reports`**; new staff-only calls go inside `staffOnly { }` | **done** — first staff calls: `/auth/me`, `/auth/logout`, `/staff/users` | `auth/Auth.kt` |
+| Push notifications (web + Android app): follow a train (arrival at your stop + its incidents) or a line (incidents only). Web Push (VAPID + RFC 8291 with the JDK, keys auto-generated in SQLite `push_setting`) for browsers and the iPhone Home Screen web app; FCM HTTP v1 for the Android app (`FCM_SERVICE_ACCOUNT_JSON`). Tables `push_device`, `push_subscription`, `push_notified`. Lines: `GET /lines`, `/lines/{line}` | **done** — see docs/API.md "Push notifications" (iOS native app: needs a paid Apple account) | `push/`, `static/push.js`, `static/sw.js`, `static/manifest.json` |
 | REST API for predictions (model pushes to us) | todo | |
 | WebSocket `/api/v1/ws`: subscribe to trains/stations (`frequencySec` updates + immediate incident pushes) | **done** — see docs/API.md | `api/v1/LiveUpdates.kt` (incident events via `Database.addIncidentListener`) |
 | WebSocket `/ws/fleet`: whole fleet every `fleet` tick (staff map) | **done** | `web/FleetFeed.kt` |
@@ -111,7 +112,9 @@ validation, `StatusPages` errors) -> `TwinQueries.kt` (joins LiveState + active 
   first user), `AUTH_TOKEN_TTL_HOURS` (12). `./gradlew run` loads `.env` automatically.
   Assistant: `ANTHROPIC_API_KEY` (env only), `SBB_TWIN_URL` (`http://127.0.0.1:8787`), `ASSISTANT_MODEL`,
   `ASSISTANT_FAST_MODE`, `ASSISTANT_EFFORT`, `ASSISTANT_MAX_MODEL_CALLS`. Passenger voice app: `ELEVENLABS_API_KEY`
-  (env only), `PASSENGER_AGENT_ID`, `ELEVENLABS_API_URL` (`https://api.elevenlabs.io`).
+  (env only), `PASSENGER_AGENT_ID`, `ELEVENLABS_API_URL` (`https://api.elevenlabs.io`). Push: `VAPID_PUBLIC_KEY` /
+  `VAPID_PRIVATE_KEY` (optional, generated otherwise), `VAPID_SUBJECT`, `PUSH_ARRIVAL_LEAD_SEC` (120),
+  `FCM_SERVICE_ACCOUNT_JSON` (env only; raw JSON or base64; Android app push).
 - **Never commit `.env`** or any broker credential.
 - Tests (`src/test`) run with `mqtt.enabled=false` and a temp SQLite file.
 

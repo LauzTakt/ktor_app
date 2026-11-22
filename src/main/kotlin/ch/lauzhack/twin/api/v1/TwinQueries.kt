@@ -300,6 +300,50 @@ class TwinQueries(
             else -> null
         }
     }
+
+    // ------------------------------------------------------------------ lines
+
+    /** Lines of the trains in service (e.g. `IC 1`, `S3`), with how many trains run and the incidents touching them. */
+    fun lines(q: String? = null): List<LineDto> {
+        val incidents = activeIncidents()
+        val key = q?.trim()?.takeIf { it.isNotEmpty() }?.let(::searchKey)
+        return state.trains().filter { it.line != null }.groupBy { it.line!!.uppercase() }
+            .map { (_, trains) ->
+                val line = trains.first().line!!
+                LineDto(
+                    line = line,
+                    category = trains.firstNotNullOfOrNull { it.category },
+                    trains = trains.size,
+                    incidents = incidents.count { lineIncidentMatch(it, line, trains) != null },
+                )
+            }
+            .filter { key == null || searchKey(it.line).replace(" ", "").contains(key.replace(" ", "")) }
+            .sortedWith(compareBy({ it.category ?: "~" }, { it.line.length }, { it.line }))
+    }
+
+    fun line(line: String): LineDetailDto {
+        val trains = trainsOnLine(line.trim())
+        if (trains.isEmpty()) throw notFound("line", line)
+        val name = trains.first().line!!
+        val incidents = activeIncidents().mapNotNull { inc -> lineIncidentMatch(inc, name, trains)?.let { inc.toDto(it) } }
+            .sortedWith(compareBy({ severityRank(it.severity) }, { -it.updatedAt }))
+        return LineDetailDto(name, trains.firstNotNullOfOrNull { it.category }, trains.sortedBy { it.trainId }.map { summary(it) }, incidents)
+    }
+
+    /** Trains in service on [line] (case-insensitive). */
+    fun trainsOnLine(line: String): List<TrainState> = state.trains().filter { it.line.equals(line, ignoreCase = true) }
+
+    /**
+     * Why [inc] concerns line [line] (for line subscriptions, docs/API.md "Push notifications"): `line` (scope is the
+     * line), `network`, or the match of the first train in service on the line it concerns (`train`, `route`,
+     * `endpoint`, `station`). Null if it concerns no train of the line.
+     */
+    fun lineIncidentMatch(inc: IncidentRow, line: String, trains: List<TrainState> = trainsOnLine(line)): String? {
+        val sc = inc.scope ?: return null
+        if (sc.kind == "line") return "line".takeIf { sc.line.equals(line, ignoreCase = true) }
+        if (sc.kind == "network") return "network"
+        return trains.firstNotNullOfOrNull { trainIncidentMatch(inc, it) }
+    }
 }
 
 private val DIACRITICS = Regex("\\p{Mn}+")

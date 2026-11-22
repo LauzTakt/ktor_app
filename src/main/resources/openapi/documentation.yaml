@@ -17,7 +17,11 @@ tags:
   - name: status
   - name: trains
   - name: stations
+  - name: lines
+    description: Lines of the trains in service and their incidents
   - name: incidents
+  - name: push
+    description: "Push notifications (web + Android app): register a device, follow a train or a line. See docs/API.md, Push notifications"
   - name: reports
     description: Incidents reported by staff through the web UI (stored locally, not published to the twin)
   - name: auth
@@ -512,6 +516,107 @@ paths:
         "405": { description: "not GET/HEAD", content: { application/json: { schema: { type: object, properties: { error: { type: string } } } } } }
         "502": { description: "sbb-twin unreachable", content: { application/json: { schema: { type: object, properties: { error: { type: string } } } } } }
 
+  /lines:
+    get:
+      tags: [lines]
+      summary: Lines of the trains in service
+      operationId: listLines
+      parameters:
+        - { name: q, in: query, schema: { type: string }, description: "Filter by line name (spaces and case ignored)", example: "IC 1" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Line" } } } } }
+  /lines/{line}:
+    get:
+      tags: [lines]
+      summary: "Line status: trains in service + incidents concerning it"
+      operationId: getLine
+      parameters:
+        - { name: line, in: path, required: true, schema: { type: string }, example: "IC 1" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/LineDetail" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /push/config:
+    get:
+      tags: [push]
+      summary: Web Push public key and enabled channels
+      operationId: pushConfig
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PushConfig" } } } }
+  /push/devices:
+    post:
+      tags: [push]
+      summary: Register a browser (Web Push) or app (FCM token); the same endpoint/token returns the same deviceId
+      operationId: registerPushDevice
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/RegisterDevice" } } }
+      responses:
+        "201": { description: Registered, content: { application/json: { schema: { $ref: "#/components/schemas/PushDevice" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "503": { description: "`fcm_disabled`: native push not configured", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /push/devices/{deviceId}:
+    parameters:
+      - $ref: "#/components/parameters/deviceId"
+    get:
+      tags: [push]
+      summary: The device
+      operationId: getPushDevice
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PushDevice" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [push]
+      summary: Unregister the device and its subscriptions
+      operationId: deletePushDevice
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /push/devices/{deviceId}/test:
+    post:
+      tags: [push]
+      summary: Send a test notification now
+      operationId: testPush
+      parameters:
+        - $ref: "#/components/parameters/deviceId"
+      responses:
+        "200":
+          description: "`gone` = the push service dropped the device (it is deleted)"
+          content: { application/json: { schema: { type: object, properties: { result: { type: string, enum: [ok, gone, failed] } } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /push/devices/{deviceId}/subscriptions:
+    parameters:
+      - $ref: "#/components/parameters/deviceId"
+    get:
+      tags: [push]
+      summary: Trains and lines this device follows
+      operationId: listPushSubscriptions
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/PushSubscription" } } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [push]
+      summary: Follow a train (arrival at stopId + incidents) or a line (incidents only)
+      operationId: followForPush
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/Follow" } } }
+      responses:
+        "201": { description: Following, content: { application/json: { schema: { $ref: "#/components/schemas/PushSubscription" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /push/devices/{deviceId}/subscriptions/{subscriptionId}:
+    delete:
+      tags: [push]
+      summary: Stop following
+      operationId: unfollowForPush
+      parameters:
+        - $ref: "#/components/parameters/deviceId"
+        - { name: subscriptionId, in: path, required: true, schema: { type: string } }
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -525,6 +630,8 @@ components:
       { name: stopId, in: path, required: true, schema: { type: string }, example: "8507000" }
     incidentId:
       { name: id, in: path, required: true, schema: { type: string }, example: i-4d5811f3 }
+    deviceId:
+      { name: deviceId, in: path, required: true, schema: { type: string }, description: "From POST /push/devices; keep it secret" }
     reportId:
       { name: id, in: path, required: true, schema: { type: string }, example: r-0dfc887a }
     bbox:
@@ -546,6 +653,71 @@ components:
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
 
   schemas:
+    Line:
+      type: object
+      required: [line, category, trains, incidents]
+      properties:
+        line: { type: string, example: "IC 1" }
+        category: { type: string, nullable: true, example: IC }
+        trains: { type: integer, description: Trains in service on the line }
+        incidents: { type: integer, description: Active incidents concerning the line }
+    LineDetail:
+      type: object
+      required: [line, category, trains, incidents]
+      properties:
+        line: { type: string }
+        category: { type: string, nullable: true }
+        trains: { type: array, items: { $ref: "#/components/schemas/TrainSummary" } }
+        incidents: { type: array, items: { $ref: "#/components/schemas/Incident" }, description: "`match`: line | network | train | route | endpoint | station" }
+    PushConfig:
+      type: object
+      required: [webPushPublicKey, fcm, arrivalLeadSec]
+      properties:
+        webPushPublicKey: { type: string, description: "VAPID public key (base64url) = applicationServerKey" }
+        fcm: { type: boolean, description: Native app tokens accepted }
+        arrivalLeadSec: { type: integer, example: 120 }
+    RegisterDevice:
+      type: object
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [web, fcm] }
+        endpoint: { type: string, description: "web: PushSubscription.endpoint (https)" }
+        keys:
+          type: object
+          description: "web: PushSubscription keys"
+          properties:
+            p256dh: { type: string }
+            auth: { type: string }
+        token: { type: string, description: "fcm: registration token" }
+        platform: { type: string, example: android }
+    PushDevice:
+      type: object
+      required: [deviceId, kind, platform, createdAt]
+      properties:
+        deviceId: { type: string, example: d-3q2aZ1xY0b8 }
+        kind: { type: string, enum: [web, fcm] }
+        platform: { type: string, nullable: true }
+        createdAt: { type: integer, format: int64 }
+    Follow:
+      type: object
+      description: Either trainId (+ optional stopId) or line
+      properties:
+        trainId: { type: string }
+        stopId: { type: string, description: "Where you get off: arrival alerts (must still be ahead)" }
+        line: { type: string, example: "IC 1" }
+    PushSubscription:
+      type: object
+      required: [id, kind, trainId, line, stopId, stopName, label, alerts, createdAt]
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [train, line] }
+        trainId: { type: string, nullable: true }
+        line: { type: string, nullable: true }
+        stopId: { type: string, nullable: true }
+        stopName: { type: string, nullable: true }
+        label: { type: string, example: "IC 1 to Genève-Aéroport" }
+        alerts: { type: array, items: { type: string, enum: [arrival, incidents] } }
+        createdAt: { type: integer, format: int64 }
     Login:
       type: object
       required: [username, password]
